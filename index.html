@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Offres Forem — Électromécanicien industriel</title>
+
+<link rel="stylesheet" href="style.css?v=10">
+
+</head>
+<body>
+
+<header class="entete">
+
+    <h1>Offres Forem — Électromécanicien industriel</h1>
+
+    <nav class="onglets" role="tablist">
+
+        <button class="onglet-btn actif" type="button" data-cible="actuelles" role="tab" aria-selected="true">
+            Annonces actuelles
+        </button>
+
+        <button class="onglet-btn" type="button" data-cible="supprimees" role="tab" aria-selected="false">
+            Annonces supprimées
+        </button>
+
+    </nav>
+
+</header>
+
+<!-- ============================================================
+     ONGLET : ANNONCES ACTUELLES
+     ============================================================ -->
+
+<section id="onglet-actuelles" class="onglet-contenu">
+
+    <div class="barre-outils">
+
+        <div class="stats">
+
+            <div class="stat">
+                <strong id="statTotal">0</strong> annonce(s)
+            </div>
+
+            <div class="stat stat-nouvelle">
+                <strong id="statNouvelles">0</strong> nouvelle(s)
+            </div>
+
+            <div class="stat">
+                <strong id="statAnciennes">0</strong> ancienne(s)
+            </div>
+
+            <div class="stat stat-date">
+                Dernier scraping : <span id="statDate">—</span>
+            </div>
+
+        </div>
+
+        <div class="outils">
+
+            <label class="filtre" for="filtreStatut">
+                <span>Statut :</span>
+                <select id="filtreStatut">
+                    <option value="">Tous les statuts</option>
+                    <option value="non_trie">Non trié</option>
+                    <option value="interesse">Intéressé</option>
+                    <option value="pas_interesse">Pas intéressé</option>
+                    <option value="postule">Postulé</option>
+                    <option value="contacte">Contacté</option>
+                    <option value="refuse">Refusé</option>
+                    <option value="rdv">RDV prévu</option>
+                </select>
+            </label>
+
+            <label class="recherche" for="rechercheActuelles">
+                <span>🔎</span>
+                <input type="search" id="rechercheActuelles" placeholder="Rechercher… (mots clés)">
+            </label>
+
+        </div>
+
+    </div>
+
+    <div class="table-container">
+
+        <table>
+
+            <thead>
+            <tr>
+                <th class="col-star" title="Favori">★</th>
+                <th class="col-statut">Statut</th>
+                <th class="col-publication">Publication</th>
+                <th class="col-id-forem">ID Forem</th>
+                <th class="col-offre">Offre</th>
+                <th class="col-societe">Société</th>
+                <th class="col-details">Contrat · Horaire · Rémunération</th>
+                <th class="col-lieu">Lieu</th>
+                <th class="col-remarque">Remarque</th>
+            </tr>
+            </thead>
+
+            <tbody id="corpsActuelles">
+                <tr class="ligne-info">
+                    <td colspan="9">Chargement des annonces...</td>
+                </tr>
+            </tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+<!-- ============================================================
+     ONGLET : ANNONCES SUPPRIMÉES
+     ============================================================ -->
+
+<section id="onglet-supprimees" class="onglet-contenu cache">
+
+    <div class="barre-outils">
+
+        <div class="stats">
+
+            <div class="stat">
+                <strong id="statSupprimees">0</strong> annonce(s) supprimée(s)
+            </div>
+
+        </div>
+
+        <div class="outils">
+
+            <label class="recherche" for="rechercheSupprimees">
+                <span>🔎</span>
+                <input type="search" id="rechercheSupprimees" placeholder="Rechercher… (mots clés)">
+            </label>
+
+        </div>
+
+    </div>
+
+    <div class="table-container">
+
+        <table>
+
+            <thead>
+            <tr>
+                <th class="col-star" title="Favori">★</th>
+                <th class="col-id-forem">ID Forem</th>
+                <th class="col-offre">Offre</th>
+                <th class="col-societe">Société</th>
+                <th class="col-details">Contrat · Horaire · Rémunération</th>
+                <th class="col-lieu">Lieu</th>
+                <th class="col-date-suppression">Supprimée le</th>
+                <th class="col-remarque">Remarque</th>
+            </tr>
+            </thead>
+
+            <tbody id="corpsSupprimees">
+                <tr class="ligne-info">
+                    <td colspan="8">Chargement des annonces supprimées...</td>
+                </tr>
+            </tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+<script src="script.js?v=12"></script>
+
+</body>
+</html>

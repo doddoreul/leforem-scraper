@@ -1,0 +1,10 @@
+# Donnees generees par le scraper
+data.json
+historique_supprimees.json
+
+# Fichiers temporaires d'ecriture atomique
+*.tmp
+
+# Python
+__pycache__/
+*.pyc
