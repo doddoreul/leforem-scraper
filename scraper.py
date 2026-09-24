@@ -248,16 +248,16 @@ def transformer_offre(detail, publication=""):
 # RECHERCHE DES OFFRES
 # ============================================================
 
-def rechercher_offres(session, limite=None):
+def rechercher_offres(session, limite=None, metier_guid=METIER_GUID, lieu_guid=LIEU_GUID):
     payload = {
         "filtres": [],
         "filtresCodifies": [],
         "metier": [],
         "secteur": [],
         "lieuxTravail": [
-            {"nom": "Nomenclatures/CodeInsBelge", "guid": LIEU_GUID}
+            {"nom": "Nomenclatures/CodeInsBelge", "guid": lieu_guid}
         ],
-        "locutionsGufids": [METIER_GUID],
+        "locutionsGufids": [metier_guid],
         "priority": 1,
     }
 
@@ -448,6 +448,21 @@ def main():
         default=None,
         help="Nombre maximum d'annonces a recuperer.",
     )
+    parser.add_argument(
+        "--fresh",
+        action="store_true",
+        help="Force le re-scraping des details de toutes les annonces.",
+    )
+    parser.add_argument(
+        "--metier-guid",
+        default=METIER_GUID,
+        help="GUID du metier (defaut : electromecanicien industriel).",
+    )
+    parser.add_argument(
+        "--lieu-guid",
+        default=LIEU_GUID,
+        help="GUID du lieu de travail (defaut : Liege).",
+    )
     args = parser.parse_args()
 
     if args.limit is not None and args.limit <= 0:
@@ -456,6 +471,11 @@ def main():
     maintenant = horodatage_maintenant()
 
     anciennes_offres, numeros_anciens = lire_offres_precedentes()
+    anciennes_par_numero = {
+        texte_propre(o.get("numero")): o
+        for o in anciennes_offres
+        if isinstance(o, dict) and texte_propre(o.get("numero"))
+    }
     historique = lire_historique(horodatage=maintenant)
 
     if args.limit is not None:
@@ -464,12 +484,22 @@ def main():
         print("Aucune limite : recuperation de toutes les annonces.")
     print()
 
+    if args.fresh:
+        print("Mode --fresh : re-scraping des details de toutes les annonces.")
+    print()
+
     session = requests.Session()
     session.headers.update(HEADERS)
 
-    resultats_recherche = rechercher_offres(session, limite=args.limit)
+    resultats_recherche = rechercher_offres(
+        session,
+        limite=args.limit,
+        metier_guid=args.metier_guid,
+        lieu_guid=args.lieu_guid,
+    )
 
     nouvelles_offres = []
+    nb_reutilisees = 0
 
     if resultats_recherche:
         total = len(resultats_recherche)
@@ -477,12 +507,30 @@ def main():
 
         for index, entree in enumerate(resultats_recherche, start=1):
             numero = entree["numero"]
+            publication = entree.get("publication", "")
+
+            precedente = anciennes_par_numero.get(numero)
+
+            if (
+                not args.fresh
+                and precedente
+                and texte_propre(precedente.get("publication"))
+                and texte_propre(precedente.get("publication")) == publication
+            ):
+                offre = dict(precedente)
+                offre["nouvelle"] = False
+                nouvelles_offres.append(offre)
+                nb_reutilisees += 1
+                print(f"  [{index}/{total}] Offre {numero} (reutilisee)")
+                time.sleep(PAUSE)
+                continue
+
             print(f"  [{index}/{total}] Offre {numero}")
 
             try:
                 detail = recuperer_detail(session, numero)
                 offre = transformer_offre(
-                    detail, publication=entree.get("publication", "")
+                    detail, publication=publication
                 )
                 offre["nouvelle"] = numero not in numeros_anciens
                 nouvelles_offres.append(offre)
@@ -510,7 +558,8 @@ def main():
     ecrire_json_atomique(DATA_FILE, data)
 
     print()
-    print(f"Termine : {len(nouvelles_offres)} annonce(s)")
+    print(f"Termine : {len(nouvelles_offres)} annonce(s) "
+          f"({nb_reutilisees} reutilisee(s), {len(nouvelles_offres) - nb_reutilisees} obtenue(s))")
     print(f"Fichiers ecrits : {DATA_FILE}, {HISTORY_FILE}")
 
 
