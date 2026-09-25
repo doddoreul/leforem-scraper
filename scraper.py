@@ -21,8 +21,8 @@ DETAIL_URL = (
     "api/Diffusion/DetailOffre/{}"
 )
 
-METIER_GUID = "fb3c1045-2adc-49ea-85d1-b5678c7bcd1f"
-LIEU_GUID = "38215355-5f89-48ea-a728-14cfbc9a4b82"
+OCCUPATION_GUID = "fb3c1045-2adc-49ea-85d1-b5678c7bcd1f"
+LOCATION_GUID = "38215355-5f89-48ea-a728-14cfbc9a4b82"
 
 ROW = 50
 PAUSE = 0.2
@@ -46,7 +46,7 @@ VERSION = 1
 
 
 # ============================================================
-# OUTILS
+# HELPERS
 # ============================================================
 
 class HTMLToTextParser(HTMLParser):
@@ -66,128 +66,130 @@ def html_to_text(value):
         return ""
     parser = HTMLToTextParser()
     parser.feed(value)
-    texte = parser.get_text()
-    texte = re.sub(r"\s+", " ", texte)
-    return texte.strip()
+    text = parser.get_text()
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
 
 
-def texte_propre(value):
+def clean_text(value):
     if value is None:
         return ""
     return " ".join(str(value).split()).strip()
 
 
-def creer_resume(description, max_chars=300):
-    texte = html_to_text(description)
-    if not texte:
+def build_summary(description, max_chars=300):
+    text = html_to_text(description)
+    if not text:
         return ""
-    phrases = re.split(r"(?<=[.!?])\s+", texte)
-    resume = " ".join(phrases[:2]).strip()
-    if len(resume) > max_chars:
-        resume = resume[:max_chars].rstrip() + "..."
-    return resume
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    summary = " ".join(sentences[:2]).strip()
+    if len(summary) > max_chars:
+        summary = summary[:max_chars].rstrip() + "..."
+    return summary
 
 
 # ============================================================
-# EXTRACTION DES CHAMPS DU DÉTAIL
+# DETAIL FIELD EXTRACTION
 # ============================================================
 
-def format_type_contrat(value):
+def format_contract_type(value):
     if not value:
         return ""
     if isinstance(value, dict):
-        for cle in ("libelle", "label", "nom", "value"):
-            v = value.get(cle)
+        for key in ("libelle", "label", "nom", "value"):
+            v = value.get(key)
             if v:
-                return texte_propre(v)
+                return clean_text(v)
         return ""
-    return texte_propre(value)
+    return clean_text(value)
 
 
-def extraire_horaire(detail):
-    regime = texte_propre(detail.get("regimeTravail"))
-    periode = ""
+def extract_schedule(detail):
+    regime = clean_text(detail.get("regimeTravail"))
+    period = ""
     shift = detail.get("shift")
     if isinstance(shift, dict):
-        periode = texte_propre(shift.get("shiftPeriod"))
-    return " — ".join(partie for partie in (regime, periode) if partie)
+        period = clean_text(shift.get("shiftPeriod"))
+    return " — ".join(part for part in (regime, period) if part)
 
 
-def extraire_remuneration(benefits, max_chars=25):
+def extract_pay(benefits, max_chars=25):
     if not isinstance(benefits, dict):
         return ""
-    valeur = benefits.get("basePay")
-    if valeur is None:
+    value = benefits.get("basePay")
+    if value is None:
         return ""
-    texte = " ".join(str(valeur).split()).strip()
-    if len(texte) > max_chars:
-        texte = texte[:max_chars].rstrip()
-    return texte
+    text = " ".join(str(value).split()).strip()
+    if len(text) > max_chars:
+        text = text[:max_chars].rstrip()
+    return text
 
 
-MOT_CLE_SALAIRE = re.compile(
+# The source text (benefitsComments, etc.) is written in French by
+# employers, so the patterns below intentionally match French wording.
+SALARY_KEYWORDS = re.compile(
     r"salaire|salarial(e|es)?|r[eéè]mun[eéé]r|r[eéè]tribution|paye\b", re.I
 )
-MONTANT_EUR = re.compile(r"\d[\d\s.,]*\s*€", re.I)
-MONTANT_PERIODIQUE = re.compile(
+AMOUNT_EUR = re.compile(r"\d[\d\s.,]*\s*€", re.I)
+PERIODIC_AMOUNT = re.compile(
     r"€\s*/?\s*(?:h\b|heure|mois|an|semaine|jour)", re.I
 )
-AVANTAGES_PARASITAUX = re.compile(
+FRINGE_BENEFITS = re.compile(
     r"ch[eè]ques?-repas|ticket|bon repas|frais de", re.I
 )
 
 
-def extraire_salaire(detail, max_chars=75):
+def extract_salary(detail, max_chars=75):
     sources = (
         detail.get("benefitsComments")
         or detail.get("commentaireGeneral")
         or detail.get("descriptionComment")
         or ""
     )
-    texte = html_to_text(sources)
-    if not texte:
+    text = html_to_text(sources)
+    if not text:
         return ""
 
-    phrases = re.split(r"(?<=[.!?])\s+", texte)
-    phrase_choisie = ""
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    chosen = ""
 
-    for phrase in phrases:
-        if MONTANT_EUR.search(phrase) and MOT_CLE_SALAIRE.search(phrase):
-            phrase_choisie = phrase
+    for sentence in sentences:
+        if AMOUNT_EUR.search(sentence) and SALARY_KEYWORDS.search(sentence):
+            chosen = sentence
             break
 
-    if not phrase_choisie:
-        for phrase in phrases:
-            if not MONTANT_EUR.search(phrase):
+    if not chosen:
+        for sentence in sentences:
+            if not AMOUNT_EUR.search(sentence):
                 continue
-            if not MONTANT_PERIODIQUE.search(phrase):
+            if not PERIODIC_AMOUNT.search(sentence):
                 continue
-            if AVANTAGES_PARASITAUX.search(phrase):
+            if FRINGE_BENEFITS.search(sentence):
                 continue
-            phrase_choisie = phrase
+            chosen = sentence
             break
 
-    if not phrase_choisie:
+    if not chosen:
         return ""
 
-    mot_cle = MOT_CLE_SALAIRE.search(phrase_choisie)
-    if mot_cle:
-        phrase_choisie = phrase_choisie[mot_cle.start():]
+    keyword = SALARY_KEYWORDS.search(chosen)
+    if keyword:
+        chosen = chosen[keyword.start():]
 
-    phrase_choisie = re.sub(r"\s+", " ", phrase_choisie).strip()
-    if len(phrase_choisie) > max_chars:
-        phrase_choisie = phrase_choisie[:max_chars].rstrip() + "…"
-    return phrase_choisie
+    chosen = re.sub(r"\s+", " ", chosen).strip()
+    if len(chosen) > max_chars:
+        chosen = chosen[:max_chars].rstrip() + "…"
+    return chosen
 
 
-def extraire_lieu(lieux):
-    if not lieux:
+def extract_location(workplaces):
+    if not workplaces:
         return ""
 
-    valeurs = []
+    values = []
 
-    if isinstance(lieux, list):
-        for item in lieux:
+    if isinstance(workplaces, list):
+        for item in workplaces:
             if isinstance(item, dict):
                 v = (
                     item.get("nom")
@@ -198,30 +200,30 @@ def extraire_lieu(lieux):
                 )
             else:
                 v = str(item)
-            v = texte_propre(v)
-            if v and v not in valeurs:
-                valeurs.append(v)
-    elif isinstance(lieux, dict):
+            v = clean_text(v)
+            if v and v not in values:
+                values.append(v)
+    elif isinstance(workplaces, dict):
         v = (
-            lieux.get("nom")
-            or lieux.get("libelle")
-            or lieux.get("ville")
+            workplaces.get("nom")
+            or workplaces.get("libelle")
+            or workplaces.get("ville")
             or ""
         )
-        v = texte_propre(v)
+        v = clean_text(v)
         if v:
-            valeurs.append(v)
+            values.append(v)
 
-    return ", ".join(valeurs)
+    return ", ".join(values)
 
 
-def transformer_offre(detail, publication=""):
-    numero = texte_propre(detail.get("numero"))
+def build_offer(detail, published_on=""):
+    number = clean_text(detail.get("numero"))
 
-    if numero:
+    if number:
         url = (
             "https://www.leforem.be/recherche-offres/"
-            f"offre-detail/{numero}?originPostuler=RECHOFFRE"
+            f"offre-detail/{number}?originPostuler=RECHOFFRE"
         )
     else:
         url = ""
@@ -229,40 +231,40 @@ def transformer_offre(detail, publication=""):
     description = html_to_text(detail.get("descriptionJob"))
 
     return {
-        "numero": numero,
-        "nom_offre": texte_propre(detail.get("titreOffre")),
+        "number": number,
+        "offer_title": clean_text(detail.get("titreOffre")),
         "description": description,
-        "societe": texte_propre(detail.get("nomEmployeur")),
+        "company": clean_text(detail.get("nomEmployeur")),
         "url": url,
-        "type_contrat": format_type_contrat(detail.get("typeContrat")),
-        "horaire": extraire_horaire(detail),
-        "remuneration": extraire_remuneration(detail.get("benefits")),
-        "salaire": extraire_salaire(detail),
-        "lieu": extraire_lieu(detail.get("lieuxTravail")),
-        "publication": texte_propre(publication),
-        "resume": creer_resume(description),
+        "contract_type": format_contract_type(detail.get("typeContrat")),
+        "schedule": extract_schedule(detail),
+        "pay": extract_pay(detail.get("benefits")),
+        "salary": extract_salary(detail),
+        "location": extract_location(detail.get("lieuxTravail")),
+        "published_on": clean_text(published_on),
+        "summary": build_summary(description),
     }
 
 
 # ============================================================
-# RECHERCHE DES OFFRES
+# OFFER SEARCH
 # ============================================================
 
-def rechercher_offres(session, limite=None, metier_guid=METIER_GUID, lieu_guid=LIEU_GUID):
+def search_offers(session, limit=None, occupation_guid=OCCUPATION_GUID, location_guid=LOCATION_GUID):
     payload = {
         "filtres": [],
         "filtresCodifies": [],
         "metier": [],
         "secteur": [],
         "lieuxTravail": [
-            {"nom": "Nomenclatures/CodeInsBelge", "guid": lieu_guid}
+            {"nom": "Nomenclatures/CodeInsBelge", "guid": location_guid}
         ],
-        "locutionsGufids": [metier_guid],
+        "locutionsGufids": [occupation_guid],
         "priority": 1,
     }
 
-    numeros_vus = set()
-    offres = []
+    seen_numbers = set()
+    offers = []
     page = 1
 
     while True:
@@ -273,28 +275,28 @@ def rechercher_offres(session, limite=None, metier_guid=METIER_GUID, lieu_guid=L
         response.raise_for_status()
         data = response.json()
 
-        resultats = data.get("offreEmploiResumees") or []
+        results = data.get("offreEmploiResumees") or []
         total = data.get("total", 0)
         page_count = data.get("pageCount") or 1
 
-        print(f"  -> {len(resultats)} result(s) (total: {total})")
+        print(f"  -> {len(results)} result(s) (total: {total})")
 
-        for offre in resultats:
-            if not isinstance(offre, dict):
+        for offer in results:
+            if not isinstance(offer, dict):
                 continue
-            numero = texte_propre(offre.get("numero"))
-            if not numero or numero in numeros_vus:
+            number = clean_text(offer.get("numero"))
+            if not number or number in seen_numbers:
                 continue
-            numeros_vus.add(numero)
-            offres.append({
-                "numero": numero,
-                "publication": texte_propre(offre.get("publication")),
+            seen_numbers.add(number)
+            offers.append({
+                "number": number,
+                "published_on": clean_text(offer.get("publication")),
             })
 
-            if limite is not None and len(offres) >= limite:
+            if limit is not None and len(offers) >= limit:
                 break
 
-        if limite is not None and len(offres) >= limite:
+        if limit is not None and len(offers) >= limit:
             break
 
         if page >= page_count:
@@ -303,134 +305,134 @@ def rechercher_offres(session, limite=None, metier_guid=METIER_GUID, lieu_guid=L
         page += 1
         time.sleep(PAUSE)
 
-    print(f"\nOffers retained: {len(offres)}")
-    return offres
+    print(f"\nOffers retained: {len(offers)}")
+    return offers
 
 
 # ============================================================
-# DÉTAIL D'UNE OFFRE
+# OFFER DETAIL
 # ============================================================
 
-def recuperer_detail(session, numero):
-    url = DETAIL_URL.format(numero)
+def fetch_detail(session, number):
+    url = DETAIL_URL.format(number)
     response = session.get(url, timeout=30)
     response.raise_for_status()
     return response.json()
 
 
 # ============================================================
-# LECTURE / ÉCRITURE DES FICHIERS JSON
+# JSON FILE READING / WRITING
 # ============================================================
 
-def lire_json(fichier, modele_par_defaut):
+def read_json(path, default_model):
     try:
-        with open(fichier, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        if modele_par_defaut is not None and not isinstance(data, dict):
-            return modele_par_defaut
+        if default_model is not None and not isinstance(data, dict):
+            return default_model
         return data
     except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return modele_par_defaut
+        return default_model
 
 
-def lire_offres_precedentes(fichier=DATA_FILE):
-    data = lire_json(fichier, None)
+def read_previous_offers(path=DATA_FILE):
+    data = read_json(path, None)
     if isinstance(data, dict):
-        offres = data.get("offres", [])
+        offers = data.get("offers", [])
     elif isinstance(data, list):
-        offres = data
+        offers = data
     else:
-        offres = []
+        offers = []
 
-    numeros = {
-        texte_propre(o.get("numero"))
-        for o in offres
-        if isinstance(o, dict) and texte_propre(o.get("numero"))
+    numbers = {
+        clean_text(o.get("number"))
+        for o in offers
+        if isinstance(o, dict) and clean_text(o.get("number"))
     }
-    return offres, numeros
+    return offers, numbers
 
 
-def retour_vide_historique(horodatage):
+def empty_history(timestamp):
     return {
         "version": VERSION,
-        "updated_timestamp": horodatage,
-        "offres": [],
+        "updated_timestamp": timestamp,
+        "offers": [],
     }
 
 
-def lire_historique(fichier=HISTORY_FILE, horodatage=""):
-    data = lire_json(fichier, None)
-    if isinstance(data, dict) and isinstance(data.get("offres"), list):
+def read_history(path=HISTORY_FILE, timestamp=""):
+    data = read_json(path, None)
+    if isinstance(data, dict) and isinstance(data.get("offers"), list):
         data.setdefault("version", VERSION)
-        data.setdefault("updated_timestamp", horodatage)
+        data.setdefault("updated_timestamp", timestamp)
         return data
-    return retour_vide_historique(horodatage)
+    return empty_history(timestamp)
 
 
-def ecrire_json_atomique(fichier, contenu):
-    fichier_tmp = f"{fichier}.tmp"
-    with open(fichier_tmp, "w", encoding="utf-8") as f:
-        json.dump(contenu, f, ensure_ascii=False, indent=2)
+def write_json_atomically(path, content):
+    tmp_path = f"{path}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(content, f, ensure_ascii=False, indent=2)
         f.write("\n")
         f.flush()
         os.fsync(f.fileno())
-    os.replace(fichier_tmp, fichier)
+    os.replace(tmp_path, path)
 
 
 # ============================================================
-# HISTORIQUE DES OFFRES SUPPRIMÉES
+# REMOVED-OFFERS HISTORY
 # ============================================================
 
-def mettre_a_jour_historique(anciennes_offres, nouvelles_offres, historique, horodatage):
-    numeros_anciens = {
-        texte_propre(o.get("numero"))
-        for o in anciennes_offres
+def update_history(previous_offers, new_offers, history, timestamp):
+    previous_numbers = {
+        clean_text(o.get("number"))
+        for o in previous_offers
         if isinstance(o, dict)
     }
-    numeros_nouveaux = {
-        texte_propre(o.get("numero"))
-        for o in nouvelles_offres
-        if isinstance(o, dict)
-    }
-
-    anciennes_par_numero = {
-        texte_propre(o.get("numero")): o
-        for o in anciennes_offres
+    new_numbers = {
+        clean_text(o.get("number"))
+        for o in new_offers
         if isinstance(o, dict)
     }
 
-    # Une annonce réapparue est retirée de l'historique.
-    historiques = []
-    deja_presents = set()
-    for entree in historique.get("offres", []):
-        if not isinstance(entree, dict):
+    previous_by_number = {
+        clean_text(o.get("number")): o
+        for o in previous_offers
+        if isinstance(o, dict)
+    }
+
+    # An offer that reappears is removed from the history.
+    entries = []
+    already_present = set()
+    for entry in history.get("offers", []):
+        if not isinstance(entry, dict):
             continue
-        numero = texte_propre(entree.get("numero"))
-        if not numero or numero in numeros_nouveaux or numero in deja_presents:
+        number = clean_text(entry.get("number"))
+        if not number or number in new_numbers or number in already_present:
             continue
-        deja_presents.add(numero)
-        historiques.append(entree)
+        already_present.add(number)
+        entries.append(entry)
 
-    # Les annonces disparues sont ajoutées (une seule entrée chacune).
-    pour_deleted = numeros_anciens - numeros_nouveaux
-    for numero in sorted(pour_deleted):
-        if numero in deja_presents:
+    # Disappeared offers are added (one entry each).
+    removed_numbers = previous_numbers - new_numbers
+    for number in sorted(removed_numbers):
+        if number in already_present:
             continue
-        ancienne = anciennes_par_numero.get(numero, {})
-        entree = dict(ancienne)
-        entree["nouvelle"] = False
-        entree["supprimee"] = True
-        entree["date_suppression"] = horodatage
-        historiques.append(entree)
-        deja_presents.add(numero)
+        previous = previous_by_number.get(number, {})
+        entry = dict(previous)
+        entry["is_new"] = False
+        entry["removed"] = True
+        entry["removed_on"] = timestamp
+        entries.append(entry)
+        already_present.add(number)
 
-    historique["version"] = VERSION
-    historique["updated_timestamp"] = horodatage
-    historique["offres"] = historiques
-    return historique
+    history["version"] = VERSION
+    history["updated_timestamp"] = timestamp
+    history["offers"] = entries
+    return history
 
 
-def horodatage_maintenant():
+def now_iso_timestamp():
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
@@ -440,127 +442,161 @@ def horodatage_maintenant():
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Scraper Forem - Electromecanicien industriel (Liege)"
+        description="Forem offers scraper"
     )
     parser.add_argument(
         "--limit",
         type=int,
         default=None,
-        help="Nombre maximum d'annonces a recuperer.",
+        help="Maximum number of offers to fetch.",
     )
     parser.add_argument(
         "--fresh",
         action="store_true",
-        help="Force le re-scraping des details de toutes les annonces.",
+        help="Force re-scraping of every offer detail.",
     )
     parser.add_argument(
-        "--metier-guid",
-        default=METIER_GUID,
-        help="GUID du metier (defaut : electromecanicien industriel).",
+        "--occupation-guid",
+        default=OCCUPATION_GUID,
+        help="Occupation GUID (default: industrial electromechanic).",
     )
     parser.add_argument(
-        "--lieu-guid",
-        default=LIEU_GUID,
-        help="GUID du lieu de travail (defaut : Liege).",
+        "--location-guid",
+        default=LOCATION_GUID,
+        help="Work location GUID (default: Liege).",
+    )
+    parser.add_argument(
+        "--base",
+        default="",
+        help="Scrape name base: writes data_<base>.json and "
+             "historique_<base>.json (default: data.json / "
+             "historique_supprimees.json).",
+    )
+    parser.add_argument(
+        "--label",
+        default="",
+        help="Human-readable label for this search (shown in the web UI).",
     )
     args = parser.parse_args()
 
     if args.limit is not None and args.limit <= 0:
-        parser.error("--limit doit etre un entier positif")
+        parser.error("--limit must be a positive integer")
 
-    maintenant = horodatage_maintenant()
+    base_name = re.sub(r"[^A-Za-z0-9_-]+", "-", args.base).strip("-")
+    if base_name:
+        data_file = f"data_{base_name}.json"
+        history_file = f"historique_{base_name}.json"
+    else:
+        data_file = DATA_FILE
+        history_file = HISTORY_FILE
 
-    anciennes_offres, numeros_anciens = lire_offres_precedentes()
-    anciennes_par_numero = {
-        texte_propre(o.get("numero")): o
-        for o in anciennes_offres
-        if isinstance(o, dict) and texte_propre(o.get("numero"))
+    now = now_iso_timestamp()
+
+    previous_offers, previous_numbers = read_previous_offers(
+        path=data_file
+    )
+    previous_by_number = {
+        clean_text(o.get("number")): o
+        for o in previous_offers
+        if isinstance(o, dict) and clean_text(o.get("number"))
     }
-    historique = lire_historique(horodatage=maintenant)
+    history = read_history(
+        path=history_file, timestamp=now
+    )
+
+    if base_name:
+        print(f"Scrape: {base_name}")
+    if args.label:
+        print(f"Label: {args.label}")
+    print(f"Files: {data_file}, {history_file}")
 
     if args.limit is not None:
-        print(f"Limite demandee : {args.limit} annonce(s)")
+        print(f"Limit requested: {args.limit} offer(s)")
     else:
-        print("Aucune limite : recuperation de toutes les annonces.")
+        print("No limit: fetching every offer.")
     print()
 
     if args.fresh:
-        print("Mode --fresh : re-scraping des details de toutes les annonces.")
+        print("--fresh mode: re-scraping every offer detail.")
     print()
 
     session = requests.Session()
     session.headers.update(HEADERS)
 
-    resultats_recherche = rechercher_offres(
+    search_results = search_offers(
         session,
-        limite=args.limit,
-        metier_guid=args.metier_guid,
-        lieu_guid=args.lieu_guid,
+        limit=args.limit,
+        occupation_guid=args.occupation_guid,
+        location_guid=args.location_guid,
     )
 
-    nouvelles_offres = []
-    nb_reutilisees = 0
+    new_offers = []
+    reused_count = 0
 
-    if resultats_recherche:
-        total = len(resultats_recherche)
-        print(f"\nRecuperation des details ({total} annonce(s))...")
+    if search_results:
+        total = len(search_results)
+        print(f"\nFetching details ({total} offer(s))...")
 
-        for index, entree in enumerate(resultats_recherche, start=1):
-            numero = entree["numero"]
-            publication = entree.get("publication", "")
+        for index, entry in enumerate(search_results, start=1):
+            number = entry["number"]
+            published_on = entry.get("published_on", "")
 
-            precedente = anciennes_par_numero.get(numero)
+            previous = previous_by_number.get(number)
 
             if (
                 not args.fresh
-                and precedente
-                and texte_propre(precedente.get("publication"))
-                and texte_propre(precedente.get("publication")) == publication
+                and previous
+                and clean_text(previous.get("published_on"))
+                and clean_text(previous.get("published_on")) == published_on
             ):
-                offre = dict(precedente)
-                offre["nouvelle"] = False
-                nouvelles_offres.append(offre)
-                nb_reutilisees += 1
-                print(f"  [{index}/{total}] Offre {numero} (reutilisee)")
+                offer = dict(previous)
+                offer["is_new"] = False
+                new_offers.append(offer)
+                reused_count += 1
+                print(f"  [{index}/{total}] Offer {number} (reused)")
                 time.sleep(PAUSE)
                 continue
 
-            print(f"  [{index}/{total}] Offre {numero}")
+            print(f"  [{index}/{total}] Offer {number}")
 
             try:
-                detail = recuperer_detail(session, numero)
-                offre = transformer_offre(
-                    detail, publication=publication
+                detail = fetch_detail(session, number)
+                offer = build_offer(
+                    detail, published_on=published_on
                 )
-                offre["nouvelle"] = numero not in numeros_anciens
-                nouvelles_offres.append(offre)
+                offer["is_new"] = number not in previous_numbers
+                new_offers.append(offer)
             except requests.RequestException as e:
-                print(f"    Erreur reseau : {e}")
+                print(f"    Network error: {e}")
             except Exception as e:
-                print(f"    Erreur : {e}")
+                print(f"    Error: {e}")
 
             time.sleep(PAUSE)
 
-    if not nouvelles_offres and not resultats_recherche:
-        print("\nAucune annonce trouvee.")
+    if not new_offers and not search_results:
+        print("\nNo offer found.")
 
-    mettre_a_jour_historique(
-        anciennes_offres, nouvelles_offres, historique, maintenant
+    update_history(
+        previous_offers, new_offers, history, now
     )
 
     data = {
         "version": VERSION,
-        "scrape_timestamp": maintenant,
-        "offres": nouvelles_offres,
+        "scrape_timestamp": now,
+        "name": base_name,
+        "label": args.label,
+        "occupation_guid": args.occupation_guid,
+        "location_guid": args.location_guid,
+        "offers": new_offers,
     }
 
-    ecrire_json_atomique(HISTORY_FILE, historique)
-    ecrire_json_atomique(DATA_FILE, data)
+    write_json_atomically(history_file, history)
+    write_json_atomically(data_file, data)
 
     print()
-    print(f"Termine : {len(nouvelles_offres)} annonce(s) "
-          f"({nb_reutilisees} reutilisee(s), {len(nouvelles_offres) - nb_reutilisees} obtenue(s))")
-    print(f"Fichiers ecrits : {DATA_FILE}, {HISTORY_FILE}")
+    print(f"Done: {len(new_offers)} offer(s) "
+          f"({reused_count} reused, {len(new_offers) - reused_count} fetched)")
+    print(f"Files written: {data_file}, {history_file}")
 
 
 if __name__ == "__main__":

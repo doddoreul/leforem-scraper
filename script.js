@@ -4,310 +4,319 @@
 
 const DATA_URL = "data.json";
 const HISTORY_URL = "historique_supprimees.json";
+const API_SCRAPINGS = "/api/scrapings";
 
-const STORAGE_KEY_STATUTS = "forem_electromecanicien_statuts";
+const DEFAULT_STORAGE_PREFIX = "forem_electromecanicien_";
 
-const OPTIONS_STATUT = [
+let storagePrefix = DEFAULT_STORAGE_PREFIX;
+
+function getStorageKey(suffix) {
+    return storagePrefix + suffix;
+}
+
+function setActiveScraping(baseName) {
+    storagePrefix = baseName
+        ? "forem_" + baseName + "_"
+        : DEFAULT_STORAGE_PREFIX;
+}
+
+const STATUS_OPTIONS = [
     { value: "", label: "—" },
-    { value: "interesse", label: "Intéressé" },
-    { value: "pas_interesse", label: "Pas intéressé" },
-    { value: "postule", label: "Postulé" },
-    { value: "contacte", label: "Contacté" },
-    { value: "refuse", label: "Refusé" },
-    { value: "rdv", label: "RDV prévu" },
+    { value: "interesse", label: "Interested" },
+    { value: "pas_interesse", label: "Not interested" },
+    { value: "postule", label: "Applied" },
+    { value: "contacte", label: "Contacted" },
+    { value: "refuse", label: "Rejected" },
+    { value: "rdv", label: "Interview planned" },
 ];
 
 
 // ============================================================
-// STOCKAGE LOCAL (statuts uniquement)
+// LOCAL STORAGE (statuses)
 // ============================================================
 
-function chargerStatuts() {
+function loadStatuses() {
     try {
-        const valeur = localStorage.getItem(STORAGE_KEY_STATUTS);
-        if (!valeur) return {};
-        const parse = JSON.parse(valeur);
-        return parse && typeof parse === "object" ? parse : {};
+        const value = localStorage.getItem(getStorageKey("statuts"));
+        if (!value) return {};
+        const parsed = JSON.parse(value);
+        return parsed && typeof parsed === "object" ? parsed : {};
     } catch (e) {
-        console.error("Impossible de charger les statuts", e);
+        console.error("Unable to load statuses", e);
         return {};
     }
 }
 
-function sauvegarderStatuts() {
+function saveStatuses() {
     try {
-        localStorage.setItem(STORAGE_KEY_STATUTS, JSON.stringify(statuts));
+        localStorage.setItem(getStorageKey("statuts"), JSON.stringify(statuses));
     } catch (e) {
-        console.error("Impossible de sauvegarder les statuts", e);
+        console.error("Unable to save statuses", e);
     }
 }
 
-function obtenirStatut(numero) {
-    return statuts[numero] || "";
+function getStatus(number) {
+    return statuses[number] || "";
 }
 
-function definirStatut(numero, valeur) {
-    if (valeur) {
-        statuts[numero] = valeur;
+function setStatus(number, value) {
+    if (value) {
+        statuses[number] = value;
     } else {
-        delete statuts[numero];
+        delete statuses[number];
     }
-    sauvegarderStatuts();
+    saveStatuses();
 }
 
-function nettoyerStatuts(numerosActuels) {
-    let modifie = false;
-    Object.keys(statuts).forEach(numero => {
-        if (!numerosActuels.has(numero)) {
-            delete statuts[numero];
-            modifie = true;
+function cleanStatuses(currentNumbers) {
+    let changed = false;
+    Object.keys(statuses).forEach(number => {
+        if (!currentNumbers.has(number)) {
+            delete statuses[number];
+            changed = true;
         }
     });
-    if (modifie) {
-        sauvegarderStatuts();
+    if (changed) {
+        saveStatuses();
     }
 }
 
-let statuts = chargerStatuts();
+let statuses = loadStatuses();
 
 
 // ============================================================
-// STOCKAGE LOCAL (remarques)
+// LOCAL STORAGE (remarks)
 // ============================================================
 
-const STORAGE_KEY_REMARQUES = "forem_electromecanicien_remarques";
-
-function chargerRemarques() {
+function loadRemarks() {
     try {
-        const valeur = localStorage.getItem(STORAGE_KEY_REMARQUES);
-        if (!valeur) return {};
-        const parse = JSON.parse(valeur);
-        return parse && typeof parse === "object" ? parse : {};
+        const value = localStorage.getItem(getStorageKey("remarques"));
+        if (!value) return {};
+        const parsed = JSON.parse(value);
+        return parsed && typeof parsed === "object" ? parsed : {};
     } catch (e) {
-        console.error("Impossible de charger les remarques", e);
+        console.error("Unable to load remarks", e);
         return {};
     }
 }
 
-function sauvegarderRemarques() {
+function saveRemarks() {
     try {
-        localStorage.setItem(STORAGE_KEY_REMARQUES, JSON.stringify(remarques));
+        localStorage.setItem(getStorageKey("remarques"), JSON.stringify(remarks));
     } catch (e) {
-        console.error("Impossible de sauvegarder les remarques", e);
+        console.error("Unable to save remarks", e);
     }
 }
 
-function obtenirRemarque(numero) {
-    return remarques[numero] || "";
+function getRemark(number) {
+    return remarks[number] || "";
 }
 
-function definirRemarque(numero, valeur) {
-    if (valeur) {
-        remarques[numero] = valeur;
+function setRemark(number, value) {
+    if (value) {
+        remarks[number] = value;
     } else {
-        delete remarques[numero];
+        delete remarks[number];
     }
-    sauvegarderRemarques();
+    saveRemarks();
 }
 
-function nettoyerRemarques(numerosActuels) {
-    let modifie = false;
-    Object.keys(remarques).forEach(numero => {
-        if (!numerosActuels.has(numero)) {
-            delete remarques[numero];
-            modifie = true;
+function cleanRemarks(currentNumbers) {
+    let changed = false;
+    Object.keys(remarks).forEach(number => {
+        if (!currentNumbers.has(number)) {
+            delete remarks[number];
+            changed = true;
         }
     });
-    if (modifie) {
-        sauvegarderRemarques();
+    if (changed) {
+        saveRemarks();
     }
 }
 
-let remarques = chargerRemarques();
+let remarks = loadRemarks();
 
 
 // ============================================================
-// STOCKAGE LOCAL (favoris)
+// LOCAL STORAGE (favorites)
 // ============================================================
 
-const STORAGE_KEY_FAVORIS = "forem_electromecanicien_favoris";
-
-function chargerFavoris() {
+function loadFavorites() {
     try {
-        const valeur = localStorage.getItem(STORAGE_KEY_FAVORIS);
-        if (!valeur) return {};
-        const parse = JSON.parse(valeur);
-        return parse && typeof parse === "object" ? parse : {};
+        const value = localStorage.getItem(getStorageKey("favoris"));
+        if (!value) return {};
+        const parsed = JSON.parse(value);
+        return parsed && typeof parsed === "object" ? parsed : {};
     } catch (e) {
-        console.error("Impossible de charger les favoris", e);
+        console.error("Unable to load favorites", e);
         return {};
     }
 }
 
-function sauvegarderFavoris() {
+function saveFavorites() {
     try {
-        localStorage.setItem(STORAGE_KEY_FAVORIS, JSON.stringify(favoris));
+        localStorage.setItem(getStorageKey("favoris"), JSON.stringify(favorites));
     } catch (e) {
-        console.error("Impossible de sauvegarder les favoris", e);
+        console.error("Unable to save favorites", e);
     }
 }
 
-function obtenirFavori(numero) {
-    return favoris[numero] === true;
+function isFavorite(number) {
+    return favorites[number] === true;
 }
 
-function definirFavori(numero, actif) {
-    if (actif) {
-        favoris[numero] = true;
+function setFavorite(number, active) {
+    if (active) {
+        favorites[number] = true;
     } else {
-        delete favoris[numero];
+        delete favorites[number];
     }
-    sauvegarderFavoris();
+    saveFavorites();
 }
 
-function nettoyerFavoris(numerosActuels) {
-    let modifie = false;
-    Object.keys(favoris).forEach(numero => {
-        if (!numerosActuels.has(numero)) {
-            delete favoris[numero];
-            modifie = true;
+function cleanFavorites(currentNumbers) {
+    let changed = false;
+    Object.keys(favorites).forEach(number => {
+        if (!currentNumbers.has(number)) {
+            delete favorites[number];
+            changed = true;
         }
     });
-    if (modifie) {
-        sauvegarderFavoris();
+    if (changed) {
+        saveFavorites();
     }
 }
 
-let favoris = chargerFavoris();
+let favorites = loadFavorites();
 
 
 // ============================================================
-// AFFICHAGE
+// RENDERING
 // ============================================================
 
-function creerSelectStatut(numero) {
+function createStatusSelect(number) {
     const select = document.createElement("select");
-    select.className = "select-statut";
-    select.dataset.numero = numero;
-    select.title = "Statut de la candidature";
+    select.className = "status-select";
+    select.dataset.number = number;
+    select.title = "Application status";
 
-    OPTIONS_STATUT.forEach(({ value, label }) => {
+    STATUS_OPTIONS.forEach(({ value, label }) => {
         const option = document.createElement("option");
         option.value = value;
         option.textContent = label;
         select.appendChild(option);
     });
 
-    select.value = obtenirStatut(numero);
+    select.value = getStatus(number);
 
     select.addEventListener("change", function () {
-        definirStatut(this.dataset.numero, this.value);
-        appliquerFiltres();
+        setStatus(this.dataset.number, this.value);
+        applyFilters();
     });
 
     return select;
 }
 
-function creerLienOffre(offre) {
-    const lien = document.createElement("a");
-    lien.href = offre.url || "#";
-    lien.target = "_blank";
-    lien.rel = "noopener noreferrer";
-    lien.textContent = offre.nom_offre || "(Sans titre)";
-    lien.addEventListener("click", function () {
-        marquerLigneCliquee(lien);
+function createOfferLink(offer) {
+    const link = document.createElement("a");
+    link.href = offer.url || "#";
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = offer.offer_title || "(No title)";
+    link.addEventListener("click", function () {
+        markClickedRow(link);
     });
-    return lien;
+    return link;
 }
 
-let numeroLigneCliquee = null;
+let clickedRowNumber = null;
 
-function marquerLigneCliquee(lien) {
-    const tr = lien.closest("tr");
+function markClickedRow(link) {
+    const tr = link.closest("tr");
     if (!tr) return;
 
-    const numero = tr.dataset.numero || null;
+    const number = tr.dataset.number || null;
 
-    if (numeroLigneCliquee !== null && numeroLigneCliquee !== numero) {
-        const precedente = document.querySelector(
-            `tr[data-numero="${numeroLigneCliquee}"]`
+    if (clickedRowNumber !== null && clickedRowNumber !== number) {
+        const previous = document.querySelector(
+            `tr[data-number="${clickedRowNumber}"]`
         );
-        if (precedente) {
-            precedente.classList.remove("ligne-cliquee");
+        if (previous) {
+            previous.classList.remove("clicked-row");
         }
     }
 
-    if (numeroLigneCliquee === numero) {
-        numeroLigneCliquee = null;
-        tr.classList.remove("ligne-cliquee");
+    if (clickedRowNumber === number) {
+        clickedRowNumber = null;
+        tr.classList.remove("clicked-row");
         return;
     }
 
-    numeroLigneCliquee = numero;
-    tr.classList.add("ligne-cliquee");
+    clickedRowNumber = number;
+    tr.classList.add("clicked-row");
 }
 
-function creerBlocDescription(offre) {
-    const conteneur = document.createElement("div");
+function createDescriptionBlock(offer) {
+    const container = document.createElement("div");
 
-    const titre = creerLienOffre(offre);
-    conteneur.appendChild(titre);
+    const title = createOfferLink(offer);
+    container.appendChild(title);
 
-    if (offre.description) {
+    if (offer.description) {
         const description = document.createElement("div");
-        description.className = "description-offre";
-        description.textContent = offre.description;
-        conteneur.appendChild(description);
+        description.className = "offer-description";
+        description.textContent = offer.description;
+        container.appendChild(description);
 
-        const bouton = document.createElement("button");
-        bouton.type = "button";
-        bouton.className = "desc-toggle";
-        bouton.textContent = "Afficher plus";
-        bouton.addEventListener("click", function () {
-            const etendue = description.classList.toggle("etendue");
-            this.textContent = etendue ? "Afficher moins" : "Afficher plus";
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "desc-toggle";
+        button.textContent = "Show more";
+        button.addEventListener("click", function () {
+            const expanded = description.classList.toggle("expanded");
+            this.textContent = expanded ? "Show less" : "Show more";
         });
-        conteneur.appendChild(bouton);
+        container.appendChild(button);
     }
 
-    return conteneur;
+    return container;
 }
 
-function creerCelluleStar(numero) {
-    const numeroStr = String(numero);
+function createStarCell(number) {
+    const numberStr = String(number);
     const td = document.createElement("td");
     td.className = "col-star";
 
-    const bouton = document.createElement("button");
-    bouton.type = "button";
-    bouton.className = "bouton-star";
-    bouton.title = "Marquer comme favori";
-    bouton.setAttribute("aria-pressed", obtenirFavori(numeroStr) ? "true" : "false");
-    bouton.textContent = obtenirFavori(numeroStr) ? "★" : "☆";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "star-button";
+    button.title = "Mark as favorite";
+    button.setAttribute("aria-pressed", isFavorite(numberStr) ? "true" : "false");
+    button.textContent = isFavorite(numberStr) ? "★" : "☆";
 
-    bouton.addEventListener("click", function () {
-        const actif = !obtenirFavori(numeroStr);
-        definirFavori(numeroStr, actif);
-        this.textContent = actif ? "★" : "☆";
-        this.setAttribute("aria-pressed", actif ? "true" : "false");
-        this.classList.toggle("actif", actif);
+    button.addEventListener("click", function () {
+        const active = !isFavorite(numberStr);
+        setFavorite(numberStr, active);
+        this.textContent = active ? "★" : "☆";
+        this.setAttribute("aria-pressed", active ? "true" : "false");
+        this.classList.toggle("active", active);
     });
 
-    td.appendChild(bouton);
+    td.appendChild(button);
     return td;
 }
 
-function creerCelluleRemarque(numero) {
+function createNotesCell(number) {
     const td = document.createElement("td");
-    td.className = "cellule-remarque";
+    td.className = "notes-cell";
 
     const textarea = document.createElement("textarea");
     textarea.rows = 1;
     textarea.placeholder = "…";
-    textarea.value = obtenirRemarque(String(numero));
-    textarea.title = "Remarque personnelle";
+    textarea.value = getRemark(String(number));
+    textarea.title = "Personal remark";
     textarea.addEventListener("input", function () {
-        definirRemarque(String(numero), this.value);
+        setRemark(String(number), this.value);
         this.style.height = "auto";
         this.style.height = this.scrollHeight + "px";
     });
@@ -316,271 +325,271 @@ function creerCelluleRemarque(numero) {
     return td;
 }
 
-function creerCelluleDetails(valeurs) {
+function createDetailsCell(values) {
     const td = document.createElement("td");
     td.className = "col-details";
 
     [
-        ["Contrat", valeurs.type_contrat],
-        ["Horaire", valeurs.horaire],
-        ["Rémunération", valeurs.remuneration],
-        ["Salaire", valeurs.salaire],
-    ].forEach(([etiquette, valeur]) => {
-        if (!valeur) return;
-        const ligne = document.createElement("div");
-        ligne.className = "detail-ligne";
+        ["Contract", values.contract_type],
+        ["Schedule", values.schedule],
+        ["Pay", values.pay],
+        ["Salary", values.salary],
+    ].forEach(([labelText, value]) => {
+        if (!value) return;
+        const line = document.createElement("div");
+        line.className = "detail-line";
 
         const label = document.createElement("span");
-        label.className = "detail-etiquette";
-        label.textContent = etiquette + " : ";
-        ligne.appendChild(label);
+        label.className = "detail-label";
+        label.textContent = labelText + ": ";
+        line.appendChild(label);
 
-        ligne.appendChild(document.createTextNode(valeur));
-        td.appendChild(ligne);
+        line.appendChild(document.createTextNode(value));
+        td.appendChild(line);
     });
 
     return td;
 }
 
-function creerLigneActuelle(offre) {
-    const numero = String(offre.numero);
+function createCurrentRow(offer) {
+    const number = String(offer.number);
     const tr = document.createElement("tr");
-    tr.dataset.numero = numero;
+    tr.dataset.number = number;
 
-    const celluleTextes = (infos, className) => {
+    const textCell = (nodes, className) => {
         const td = document.createElement("td");
         td.className = className;
-        infos.forEach(info => td.appendChild(info));
+        nodes.forEach(node => td.appendChild(node));
         return td;
     };
 
-    tr.appendChild(creerCelluleStar(numero));
+    tr.appendChild(createStarCell(number));
 
-    const tdStatut = document.createElement("td");
-    tdStatut.className = "col-statut";
-    tdStatut.appendChild(creerSelectStatut(numero));
-    tr.appendChild(tdStatut);
+    const tdStatus = document.createElement("td");
+    tdStatus.className = "col-status";
+    tdStatus.appendChild(createStatusSelect(number));
+    tr.appendChild(tdStatus);
 
-    tr.appendChild(celluleTextes([document.createTextNode(offre.publication || "")], "col-publication"));
-    tr.appendChild(celluleTextes([document.createTextNode(numero)], "col-id-forem"));
-    tr.appendChild(celluleTextes([creerBlocDescription(offre)], "col-offre"));
-    tr.appendChild(celluleTextes([document.createTextNode(offre.societe || "")], "col-societe"));
-    tr.appendChild(creerCelluleDetails(offre));
-    tr.appendChild(celluleTextes([document.createTextNode(offre.lieu || "")], "col-lieu"));
-    tr.appendChild(creerCelluleRemarque(numero));
+    tr.appendChild(textCell([document.createTextNode(offer.published_on || "")], "col-published"));
+    tr.appendChild(textCell([document.createTextNode(number)], "col-forem-id"));
+    tr.appendChild(textCell([createDescriptionBlock(offer)], "col-offer"));
+    tr.appendChild(textCell([document.createTextNode(offer.company || "")], "col-company"));
+    tr.appendChild(createDetailsCell(offer));
+    tr.appendChild(textCell([document.createTextNode(offer.location || "")], "col-location"));
+    tr.appendChild(createNotesCell(number));
 
     return tr;
 }
 
-function creerLigneSeparation(texte) {
-    const ligne = document.createElement("tr");
-    ligne.className = "ligne-separation";
-    ligne.dataset.separation = "true";
+function createSeparationRow(text) {
+    const row = document.createElement("tr");
+    row.className = "separation-row";
+    row.dataset.separation = "true";
 
-    const cellule = document.createElement("td");
-    cellule.colSpan = 9;
-    cellule.textContent = texte;
+    const cell = document.createElement("td");
+    cell.colSpan = 9;
+    cell.textContent = text;
 
-    ligne.appendChild(cellule);
-    return ligne;
+    row.appendChild(cell);
+    return row;
 }
 
-function creerLigneSupprimee(offre) {
+function createDeletedRow(offer) {
     const tr = document.createElement("tr");
-    tr.dataset.numero = String(offre.numero);
+    tr.dataset.number = String(offer.number);
 
-    const celluleTextes = (infos, className) => {
+    const textCell = (nodes, className) => {
         const td = document.createElement("td");
         td.className = className;
-        infos.forEach(info => td.appendChild(info));
+        nodes.forEach(node => td.appendChild(node));
         return td;
     };
 
-    tr.appendChild(creerCelluleStar(String(offre.numero)));
-    tr.appendChild(celluleTextes([document.createTextNode(String(offre.numero))], "col-id-forem"));
-    tr.appendChild(celluleTextes([creerLienOffre(offre)], "col-offre"));
-    tr.appendChild(celluleTextes([document.createTextNode(offre.societe || "")], "col-societe"));
-    tr.appendChild(creerCelluleDetails(offre));
-    tr.appendChild(celluleTextes([document.createTextNode(offre.lieu || "")], "col-lieu"));
-    tr.appendChild(celluleTextes([document.createTextNode(formaterDate(offre.date_suppression))], "col-date-suppression"));
-    tr.appendChild(creerCelluleRemarque(String(offre.numero)));
+    tr.appendChild(createStarCell(String(offer.number)));
+    tr.appendChild(textCell([document.createTextNode(String(offer.number))], "col-forem-id"));
+    tr.appendChild(textCell([createOfferLink(offer)], "col-offer"));
+    tr.appendChild(textCell([document.createTextNode(offer.company || "")], "col-company"));
+    tr.appendChild(createDetailsCell(offer));
+    tr.appendChild(textCell([document.createTextNode(offer.location || "")], "col-location"));
+    tr.appendChild(textCell([document.createTextNode(formatDate(offer.removed_on))], "col-removed-on"));
+    tr.appendChild(createNotesCell(String(offer.number)));
 
     return tr;
 }
 
-function afficherActuelles(offres, dateScrape) {
-    const nouvelles = offres.filter(o => o.nouvelle === true);
-    const anciennes = offres.filter(o => o.nouvelle !== true);
+function renderCurrent(offers, scrapeDate) {
+    const newOffers = offers.filter(o => o.is_new === true);
+    const olderOffers = offers.filter(o => o.is_new !== true);
 
-    document.getElementById("statTotal").textContent = offres.length;
-    document.getElementById("statNouvelles").textContent = nouvelles.length;
-    document.getElementById("statAnciennes").textContent = anciennes.length;
-    document.getElementById("statDate").textContent = dateScrape ? formaterDate(dateScrape) : "—";
+    document.getElementById("statTotal").textContent = offers.length;
+    document.getElementById("statNew").textContent = newOffers.length;
+    document.getElementById("statOld").textContent = olderOffers.length;
+    document.getElementById("statDate").textContent = scrapeDate ? formatDate(scrapeDate) : "—";
 
-    const tbody = document.getElementById("corpsActuelles");
+    const tbody = document.getElementById("currentRows");
     tbody.innerHTML = "";
 
-    if (offres.length === 0) {
-        tbody.appendChild(creerLigneInfo("Aucune annonce trouvée."));
+    if (offers.length === 0) {
+        tbody.appendChild(createInfoRow("No offer found."));
         return;
     }
 
-    if (nouvelles.length > 0) {
-        tbody.appendChild(creerLigneSeparation(`Nouvelles annonces (${nouvelles.length})`));
-        nouvelles.forEach(offre => tbody.appendChild(creerLigneActuelle(offre)));
+    if (newOffers.length > 0) {
+        tbody.appendChild(createSeparationRow(`New offers (${newOffers.length})`));
+        newOffers.forEach(offer => tbody.appendChild(createCurrentRow(offer)));
     }
 
-    if (anciennes.length > 0) {
-        tbody.appendChild(creerLigneSeparation(`Anciennes annonces (${anciennes.length})`));
-        anciennes.forEach(offre => tbody.appendChild(creerLigneActuelle(offre)));
+    if (olderOffers.length > 0) {
+        tbody.appendChild(createSeparationRow(`Older offers (${olderOffers.length})`));
+        olderOffers.forEach(offer => tbody.appendChild(createCurrentRow(offer)));
     }
 }
 
-function afficherSupprimees(offres) {
-    const tbody = document.getElementById("corpsSupprimees");
+function renderDeleted(offers) {
+    const tbody = document.getElementById("deletedRows");
     tbody.innerHTML = "";
 
-    const statutCount = document.getElementById("statSupprimees");
-    if (statutCount) {
-        statutCount.textContent = String(offres.length);
+    const counter = document.getElementById("statDeleted");
+    if (counter) {
+        counter.textContent = String(offers.length);
     }
 
-    const triees = offres.slice().sort((a, b) => {
-        const da = new Date(a.date_suppression || "1970-01-01T00:00:00").getTime();
-        const db = new Date(b.date_suppression || "1970-01-01T00:00:00").getTime();
-        return db - da;
+    const sorted = offers.slice().sort((a, b) => {
+        const aTime = new Date(a.removed_on || "1970-01-01T00:00:00").getTime();
+        const bTime = new Date(b.removed_on || "1970-01-01T00:00:00").getTime();
+        return bTime - aTime;
     });
 
-    if (triees.length === 0) {
-        tbody.appendChild(creerLigneInfo("Aucune annonce supprimée.", 8));
+    if (sorted.length === 0) {
+        tbody.appendChild(createInfoRow("No removed offer.", 8));
         return;
     }
 
-    triees.forEach(offre => tbody.appendChild(creerLigneSupprimee(offre)));
+    sorted.forEach(offer => tbody.appendChild(createDeletedRow(offer)));
 }
 
 
 // ============================================================
-// OUTILS D'AFFICHAGE
+// DISPLAY HELPERS
 // ============================================================
 
-function formaterDate(valeur) {
-    if (!valeur) return "—";
-    const d = new Date(valeur);
-    if (isNaN(d.getTime())) return valeur;
+function formatDate(value) {
+    if (!value) return "—";
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return value;
     const p = n => String(n).padStart(2, "0");
     return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 
 // ============================================================
-// FILTRES (STATUT + RECHERCHE)
+// FILTERS (STATUS + SEARCH)
 // ============================================================
 
-function normaliserTexte(texte) {
-    return (texte || "")
+function normalizeText(text) {
+    return (text || "")
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
         .toLowerCase();
 }
 
-function obtenirMotsCles(valeur) {
-    return normaliserTexte(valeur).split(/\s+/).filter(Boolean);
+function getKeywords(value) {
+    return normalizeText(value).split(/\s+/).filter(Boolean);
 }
 
-function appliquerFiltres() {
-    const filtre = document.getElementById("filtreStatut");
-    const valeurStatut = filtre ? filtre.value : "";
+function applyFilters() {
+    const filter = document.getElementById("statusFilter");
+    const statusValue = filter ? filter.value : "";
 
-    appliquerFiltresTable(
-        "corpsActuelles",
-        "rechercheActuelles",
-        function (ligne) {
-            if (valeurStatut === "") return true;
-            const statut = obtenirStatut(String(ligne.dataset.numero));
-            if (valeurStatut === "non_trie") return statut === "";
-            return statut === valeurStatut;
+    applyFiltersToTable(
+        "currentRows",
+        "currentSearch",
+        function (row) {
+            if (statusValue === "") return true;
+            const status = getStatus(String(row.dataset.number));
+            if (statusValue === "unsorted") return status === "";
+            return status === statusValue;
         }
     );
 
-    appliquerFiltresTable("corpsSupprimees", "rechercheSupprimees", function () {
+    applyFiltersToTable("deletedRows", "deletedSearch", function () {
         return true;
     });
 }
 
-function appliquerFiltresTable(corpsId, rechercheId, passeAutresFiltres) {
-    const tbody = document.getElementById(corpsId);
-    const entree = document.getElementById(rechercheId);
-    const motsCles = entree ? obtenirMotsCles(entree.value) : [];
+function applyFiltersToTable(tbodyId, searchId, otherFiltersPass) {
+    const tbody = document.getElementById(tbodyId);
+    const input = document.getElementById(searchId);
+    const keywords = input ? getKeywords(input.value) : [];
 
-    const lignes = Array.from(tbody.children);
+    const rows = Array.from(tbody.children);
 
-    // On découpe le tbody en groupes délimités par les lignes de séparation.
-    let groupeActuel = [];
-    const groupes = [];
+    // Split the tbody into groups delimited by separation rows.
+    let currentGroup = [];
+    const groups = [];
 
-    lignes.forEach(ligne => {
-        if (ligne.dataset && ligne.dataset.separation === "true") {
-            groupes.push({ separation: ligne, lignes: groupeActuel });
-            groupeActuel = [];
+    rows.forEach(row => {
+        if (row.dataset && row.dataset.separation === "true") {
+            groups.push({ separation: row, rows: currentGroup });
+            currentGroup = [];
         } else {
-            groupeActuel.push(ligne);
+            currentGroup.push(row);
         }
     });
-    groupes.push({ separation: null, lignes: groupeActuel });
+    groups.push({ separation: null, rows: currentGroup });
 
-    groupes.forEach(groupe => {
-        let visibles = 0;
+    groups.forEach(group => {
+        let visible = 0;
 
-        groupe.lignes.forEach(ligne => {
-            const numero = ligne.dataset && ligne.dataset.numero;
+        group.rows.forEach(row => {
+            const number = row.dataset && row.dataset.number;
 
-            if (!numero) {
-                ligne.style.display = "";
+            if (!number) {
+                row.style.display = "";
                 return;
             }
 
-            let affiche = passeAutresFiltres(ligne);
+            let shown = otherFiltersPass(row);
 
-            if (affiche && motsCles.length > 0) {
-                const texte = normaliserTexte(ligne.textContent);
-                affiche = motsCles.every(mot => texte.includes(mot));
+            if (shown && keywords.length > 0) {
+                const text = normalizeText(row.textContent);
+                shown = keywords.every(word => text.includes(word));
             }
 
-            ligne.style.display = affiche ? "" : "none";
-            if (affiche) visibles++;
+            row.style.display = shown ? "" : "none";
+            if (shown) visible++;
         });
 
-        // On masque une ligne de séparation si aucun de ses éléments n'est visible.
-        if (groupe.separation) {
-            groupe.separation.style.display = visibles > 0 ? "" : "none";
+        // Hide a separation row when none of its items is visible.
+        if (group.separation) {
+            group.separation.style.display = visible > 0 ? "" : "none";
         }
     });
 }
 
 
 // ============================================================
-// ONGLETS
+// TABS
 // ============================================================
 
-function configurerOnglets() {
-    const boutons = Array.from(document.querySelectorAll(".onglet-btn"));
+function setupTabs() {
+    const buttons = Array.from(document.querySelectorAll(".tab-btn"));
 
-    boutons.forEach(bouton => {
-        bouton.addEventListener("click", function () {
-            const cible = this.dataset.cible;
+    buttons.forEach(button => {
+        button.addEventListener("click", function () {
+            const target = this.dataset.target;
 
-            boutons.forEach(b => {
-                const actif = b === this;
-                b.classList.toggle("actif", actif);
-                b.setAttribute("aria-selected", actif ? "true" : "false");
+            buttons.forEach(b => {
+                const active = b === this;
+                b.classList.toggle("active", active);
+                b.setAttribute("aria-selected", active ? "true" : "false");
             });
 
-            document.getElementById("onglet-actuelles").classList.toggle(
-                "cache", cible !== "actuelles"
+            document.getElementById("tab-current").classList.toggle(
+                "hidden", target !== "current"
             );
-            document.getElementById("onglet-supprimees").classList.toggle(
-                "cache", cible !== "supprimees"
+            document.getElementById("tab-deleted").classList.toggle(
+                "hidden", target !== "deleted"
             );
         });
     });
@@ -588,117 +597,443 @@ function configurerOnglets() {
 
 
 // ============================================================
-// INITIALISATION
+// NEW SEARCH
 // ============================================================
 
-function creerLigneInfo(texte, colSpan) {
+const API_OCCUPATIONS = "/api/nomenclature/occupations?q=";
+const API_LOCATIONS = "/api/nomenclature/locations";
+
+const SUGGESTION_LIMIT = 12;
+
+let selectedOccupation = null;
+let selectedLocation = null;
+let locationsCache = null;
+let occupationTimer = null;
+
+function setupNewSearch() {
+    const modal = document.getElementById("searchModal");
+    if (!modal) return;
+
+    document.getElementById("newSearchBtn").addEventListener(
+        "click", openModal
+    );
+    document.getElementById("closeModalBtn").addEventListener(
+        "click", closeModal
+    );
+    document.getElementById("cancelModalBtn").addEventListener(
+        "click", closeModal
+    );
+    modal.querySelector(".modal-backdrop").addEventListener("click", closeModal);
+    document.getElementById("copyCommandBtn").addEventListener(
+        "click", copyCommand
+    );
+
+    modal.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") closeModal();
+    });
+
+    document.getElementById("occupationInput").addEventListener(
+        "input", function () {
+            clearTimeout(occupationTimer);
+            const term = this.value.trim();
+            occupationTimer = setTimeout(
+                () => searchOccupations(term), 250
+            );
+        }
+    );
+
+    document.getElementById("locationInput").addEventListener(
+        "input", function () {
+            loadLocations().then(
+                list => filterLocations(this.value, list)
+            );
+        }
+    );
+
+    document.getElementById("occupationSuggestions").addEventListener(
+        "click", function (e) {
+            const item = e.target.closest("li[data-key]");
+            if (!item) return;
+            pickOccupation(item.dataset.key, item.dataset.label);
+        }
+    );
+
+    document.getElementById("locationSuggestions").addEventListener(
+        "click", function (e) {
+            const item = e.target.closest("li[data-key]");
+            if (!item) return;
+            pickLocation(item.dataset.key, item.dataset.label);
+        }
+    );
+}
+
+function openModal() {
+    selectedOccupation = null;
+    selectedLocation = null;
+    clearSuggestions("occupationSuggestions");
+    clearSuggestions("locationSuggestions");
+    document.getElementById("occupationInput").value = "";
+    document.getElementById("locationInput").value = "";
+    document.getElementById("scrapeStatus").textContent = "";
+    document.getElementById("commandBox").value = "";
+    document.getElementById("copyCommandBtn").disabled = true;
+    updateConfirmation();
+    const modal = document.getElementById("searchModal");
+    modal.classList.add("visible");
+    document.getElementById("occupationInput").focus();
+}
+
+function closeModal() {
+    document.getElementById("searchModal").classList.remove("visible");
+}
+
+function clearSuggestions(id) {
+    document.getElementById(id).innerHTML = "";
+}
+
+function showSuggestionError(id, message) {
+    const ul = document.getElementById(id);
+    ul.innerHTML = "";
+    const li = document.createElement("li");
+    li.className = "suggestion-empty";
+    li.textContent = message;
+    ul.appendChild(li);
+}
+
+function searchOccupations(term) {
+    if (!term) {
+        clearSuggestions("occupationSuggestions");
+        return;
+    }
+    fetch(API_OCCUPATIONS + encodeURIComponent(term), { cache: "no-store" })
+        .then(response => {
+            if (!response.ok) throw new Error("HTTP " + response.status);
+            return response.json();
+        })
+        .then(list => renderOccupationSuggestions(list, term))
+        .catch(e => {
+            console.error(e);
+            showSuggestionError(
+                "occupationSuggestions", "Network error: " + e.message
+            );
+        });
+}
+
+function renderOccupationSuggestions(list, term) {
+    const ul = document.getElementById("occupationSuggestions");
+    ul.innerHTML = "";
+    const normalizedTerm = normalizeText(term);
+    let filtered = list.filter(item => item && item.value && normalizeText(
+        item.value
+    ).includes(normalizedTerm));
+    if (!filtered.length) {
+        filtered = list;
+    }
+    filtered.slice(0, SUGGESTION_LIMIT).forEach(item => {
+        const li = document.createElement("li");
+        li.dataset.key = item.key;
+        li.dataset.label = item.value;
+        li.textContent = item.value;
+        li.tabIndex = 0;
+        ul.appendChild(li);
+    });
+    if (!filtered.length) {
+        showSuggestionError(
+            "occupationSuggestions", `No occupation found for "${term}".`
+        );
+    }
+}
+
+function loadLocations() {
+    if (locationsCache) {
+        return Promise.resolve(locationsCache);
+    }
+    return fetch(API_LOCATIONS, { cache: "no-store" })
+        .then(response => {
+            if (!response.ok) throw new Error("HTTP " + response.status);
+            return response.json();
+        })
+        .then(list => {
+            locationsCache = list;
+            return list;
+        })
+        .catch(e => {
+            console.error(e);
+            return [];
+        });
+}
+
+function filterLocations(term, list) {
+    const ul = document.getElementById("locationSuggestions");
+    ul.innerHTML = "";
+    const normalizedTerm = normalizeText(term);
+    const filtered = list.filter(item => item && item.label && (
+        !normalizedTerm ||
+        normalizeText(item.label).includes(normalizedTerm) ||
+        normalizeText(String(item.code)).includes(normalizedTerm)
+    ));
+    if (!filtered.length) {
+        showSuggestionError(
+            "locationSuggestions",
+            term ? "No location found." : "Type to filter locations."
+        );
+        return;
+    }
+    filtered.slice(0, SUGGESTION_LIMIT).forEach(item => {
+        const li = document.createElement("li");
+        li.dataset.key = item.gufid;
+        li.dataset.label = item.label;
+        li.textContent = item.label;
+        li.tabIndex = 0;
+        ul.appendChild(li);
+    });
+}
+
+function pickOccupation(key, label) {
+    selectedOccupation = { key: key, value: label };
+    document.getElementById("occupationInput").value = label;
+    clearSuggestions("occupationSuggestions");
+    updateConfirmation();
+}
+
+function pickLocation(key, label) {
+    selectedLocation = { key: key, label: label };
+    document.getElementById("locationInput").value = label;
+    clearSuggestions("locationSuggestions");
+    updateConfirmation();
+}
+
+function updateConfirmation() {
+    document.getElementById("confirmationOccupation").textContent = selectedOccupation
+        ? selectedOccupation.value : "—";
+    document.getElementById("confirmationOccupationGuid").textContent = selectedOccupation
+        ? selectedOccupation.key : "—";
+    document.getElementById("confirmationLocation").textContent = selectedLocation
+        ? selectedLocation.label : "—";
+    document.getElementById("confirmationLocationGuid").textContent = selectedLocation
+        ? selectedLocation.key : "—";
+    const ready = selectedOccupation && selectedLocation;
+    document.getElementById("commandBox").value = ready
+        ? buildCommand() : "";
+    document.getElementById("copyCommandBtn").disabled = !ready;
+}
+
+function buildCommand() {
+    if (!selectedOccupation || !selectedLocation) return "";
+    const slug = slugify(selectedOccupation.value + " " + selectedLocation.label);
+    const label = selectedOccupation.value + " / " + selectedLocation.label;
+    return "python scraper.py --fresh --occupation-guid " + selectedOccupation.key +
+        " --location-guid " + selectedLocation.key +
+        " --base " + slug +
+        " --label \"" + label + "\"";
+}
+
+function slugify(text) {
+    return normalizeText(text)
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+}
+
+async function copyCommand() {
+    const command = document.getElementById("commandBox").value;
+    const status = document.getElementById("scrapeStatus");
+    if (!command) return;
+    try {
+        await navigator.clipboard.writeText(command);
+        status.textContent = "Command copied. Paste it in the terminal, " +
+            "inside the leforem-scraper folder.";
+    } catch (e) {
+        const box = document.getElementById("commandBox");
+        box.select();
+        document.execCommand("copy");
+        status.textContent = "Command copied.";
+    }
+}
+
+
+// ============================================================
+// SCRAPING SELECTOR
+// ============================================================
+
+let dataUrl = DATA_URL;
+let historyUrl = HISTORY_URL;
+
+function setupScrapingSelector() {
+    const select = document.getElementById("scrapingSelect");
+    if (!select) return Promise.resolve();
+    return fetch(API_SCRAPINGS, { cache: "no-store" })
+        .then(response => {
+            if (!response.ok) throw new Error("HTTP " + response.status);
+            return response.json();
+        })
+        .then(list => {
+            const stored = localStorage.getItem("forem_scraping_select");
+            list.forEach(item => {
+                const option = document.createElement("option");
+                option.value = item.file;
+                option.dataset.history = item.history;
+                option.dataset.base = item.name;
+                option.textContent = item.name !== ""
+                    ? (item.label || item.name)
+                    : (item.label || "Default (" + item.file + ")");
+                option.selected =
+                    item.file === stored || item.file === dataUrl;
+                select.appendChild(option);
+            });
+            const active = list.find(item => item.file === stored);
+            if (active) {
+                dataUrl = active.file;
+                historyUrl = active.history;
+                setActiveScraping(active.name || "");
+            }
+            select.addEventListener("change", switchScraping);
+        })
+        .catch(e => {
+            console.error("Unable to list scrapings", e);
+        });
+}
+
+function switchScraping(e) {
+    const option = e.target.selectedOptions[0];
+    if (!option || !option.value) return;
+    dataUrl = option.value;
+    historyUrl = option.dataset.history || HISTORY_URL;
+    setActiveScraping(option.dataset.base || "");
+    localStorage.setItem("forem_scraping_select", option.value);
+    reloadTables();
+}
+
+function updateTitle(data) {
+    const label = data && typeof data.label === "string"
+        ? data.label.trim() : "";
+    const title = label
+        ? "Forem offers — " + label
+        : "Forem offers — Industrial electromechanic";
+    document.getElementById("mainTitle").textContent = title;
+    document.title = title;
+}
+
+
+// ============================================================
+// INITIALIZATION
+// ============================================================
+
+function createInfoRow(text, colSpan) {
     const tr = document.createElement("tr");
-    tr.className = "ligne-info";
+    tr.className = "info-row";
     const td = document.createElement("td");
     td.colSpan = colSpan || 9;
-    td.textContent = texte;
+    td.textContent = text;
     tr.appendChild(td);
     return tr;
 }
 
-async function chargerJson(url) {
-    const reponse = await fetch(url, { cache: "no-store" });
-    if (!reponse.ok) {
-        throw new Error(`HTTP ${reponse.status} : ${url}`);
+async function loadJson(url) {
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${url}`);
     }
-    return reponse.json();
+    return response.json();
 }
 
-function extraireOffres(donnees) {
-    if (Array.isArray(donnees)) return donnees;
-    if (donnees && Array.isArray(donnees.offres)) return donnees.offres;
+function extractOffers(data) {
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.offers)) return data.offers;
     return [];
 }
 
-function afficherErreur(tbody, message, colSpan) {
+function showError(tbody, message, colSpan) {
     if (!tbody) {
         console.error(message);
         return;
     }
     tbody.innerHTML = "";
-    tbody.appendChild(creerLigneInfo(message, colSpan));
+    tbody.appendChild(createInfoRow(message, colSpan));
 }
 
-async function chargerJsonAvecRetour(url, tbody, messageEchec, colSpan) {
+async function loadJsonWithFallback(url, tbody, failureMessage, colSpan) {
     try {
-        return await chargerJson(url);
+        return await loadJson(url);
     } catch (e) {
         console.error(e);
-        afficherErreur(tbody, `${messageEchec} (${e.message})`, colSpan);
+        showError(tbody, `${failureMessage} (${e.message})`, colSpan);
         return null;
     }
 }
 
-async function initialiser() {
-    // Sous file://, fetch() est bloqué par le navigateur.
-    if (window.location.protocol === "file:") {
-        afficherErreur(
-            document.getElementById("corpsActuelles"),
-            "Page ouverte directement depuis le disque. Lancez un serveur HTTP local " +
-            "(python -m http.server 8000) et ouvrez http://localhost:8000/."
-        );
-        return;
-    }
+async function reloadTables() {
+    const tbodyCurrent = document.getElementById("currentRows");
+    const tbodyDeleted = document.getElementById("deletedRows");
 
-    const tbodyActuelles = document.getElementById("corpsActuelles");
-    const tbodySupprimees = document.getElementById("corpsSupprimees");
-
-    const donnees = await chargerJsonAvecRetour(
-        DATA_URL,
-        tbodyActuelles,
-        "Impossible de charger data.json"
+    const data = await loadJsonWithFallback(
+        dataUrl,
+        tbodyCurrent,
+        "Unable to load " + dataUrl
     );
 
-    const historique = await chargerJsonAvecRetour(
-        HISTORY_URL,
-        tbodySupprimees,
-        "Impossible de charger historique_supprimees.json",
+    const history = await loadJsonWithFallback(
+        historyUrl,
+        tbodyDeleted,
+        "Unable to load " + historyUrl,
         7
     );
 
-    if (!donnees) {
+    if (!data) {
         return;
     }
 
-    const offres = extraireOffres(donnees);
-    const supprimees = historique ? extraireOffres(historique) : [];
-    const dateScrape = donnees && donnees.scrape_timestamp ? donnees.scrape_timestamp : "";
+    const offers = extractOffers(data);
+    const deleted = history ? extractOffers(history) : [];
+    const scrapeDate = data && data.scrape_timestamp
+        ? data.scrape_timestamp : "";
 
-    const numerosActuels = new Set(offres.map(o => String(o.numero)));
-    nettoyerStatuts(numerosActuels);
-    nettoyerRemarques(numerosActuels);
-    nettoyerFavoris(numerosActuels);
+    const currentNumbers = new Set(offers.map(o => String(o.number)));
+    cleanStatuses(currentNumbers);
+    cleanRemarks(currentNumbers);
+    cleanFavorites(currentNumbers);
 
     try {
-        afficherActuelles(offres, dateScrape);
-        afficherSupprimees(supprimees);
-        configurerOnglets();
-
-        const filtre = document.getElementById("filtreStatut");
-        if (filtre) {
-            filtre.addEventListener("change", appliquerFiltres);
-        }
-
-        ["rechercheActuelles", "rechercheSupprimees"].forEach(id => {
-            const entree = document.getElementById(id);
-            if (entree) {
-                entree.addEventListener("input", appliquerFiltres);
-            }
-        });
-
-        appliquerFiltres();
+        renderCurrent(offers, scrapeDate);
+        renderDeleted(deleted);
+        applyFilters();
+        updateTitle(data);
     } catch (e) {
-        console.error("Erreur lors de l'affichage", e);
-        afficherErreur(
-            tbodyActuelles,
-            "Erreur lors de l'affichage des annonces : " + e.message
+        console.error("Rendering error", e);
+        showError(
+            tbodyCurrent,
+            "Error while rendering offers: " + e.message
         );
     }
 }
 
-document.addEventListener("DOMContentLoaded", initialiser);
+async function init() {
+    // Under file://, fetch() is blocked by the browser.
+    if (window.location.protocol === "file:") {
+        showError(
+            document.getElementById("currentRows"),
+            "Page opened directly from disk. Run: " +
+            "python serveur.py, then open http://localhost:8123/."
+        );
+        return;
+    }
+
+    setupTabs();
+    setupNewSearch();
+    await setupScrapingSelector();
+
+    const filter = document.getElementById("statusFilter");
+    if (filter) {
+        filter.addEventListener("change", applyFilters);
+    }
+
+    ["currentSearch", "deletedSearch"].forEach(id => {
+        const input = document.getElementById(id);
+        if (input) {
+            input.addEventListener("input", applyFilters);
+        }
+    });
+
+    await reloadTables();
+}
+
+document.addEventListener("DOMContentLoaded", init);
