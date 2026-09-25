@@ -1,8 +1,11 @@
 import argparse
+import concurrent.futures
 import json
 import os
+import random
 import re
 import sys
+import threading
 import time
 from datetime import datetime
 from html.parser import HTMLParser
@@ -25,7 +28,13 @@ OCCUPATION_GUID = "fb3c1045-2adc-49ea-85d1-b5678c7bcd1f"
 LOCATION_GUID = "38215355-5f89-48ea-a728-14cfbc9a4b82"
 
 ROW = 50
-PAUSE = 0.2
+
+# Polite scraping: bounded parallelism + global rate limit.
+MAX_WORKERS = 4
+REQUEST_INTERVAL = 0.35
+JITTER = 0.1
+MAX_ATTEMPTS = 3
+RETRY_BACKOFF = 2.0
 
 HEADERS = {
     "User-Agent": (
@@ -44,6 +53,69 @@ DATA_FILE = "data.json"
 HISTORY_FILE = "historique_supprimees.json"
 BLACKLIST_FILE = "blacklist.json"
 VERSION = 1
+
+
+# ============================================================
+# POLITE REQUEST HELPERS
+# ============================================================
+
+_throttle_lock = threading.Lock()
+_next_request_at = 0.0
+_blacklist_lock = threading.Lock()
+_thread_local = threading.local()
+
+
+def throttle():
+    global _next_request_at
+    with _throttle_lock:
+        now = time.monotonic()
+        delay = _next_request_at - now
+        if delay > 0:
+            time.sleep(delay)
+            now = time.monotonic()
+        _next_request_at = (
+            now + REQUEST_INTERVAL + random.uniform(0, JITTER)
+        )
+
+
+def request_json_with_retry(session, url):
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        throttle()
+        try:
+            response = session.get(url, timeout=30)
+        except requests.RequestException:
+            if attempt == MAX_ATTEMPTS:
+                raise
+            time.sleep(RETRY_BACKOFF * attempt)
+            continue
+
+        status = response.status_code
+        retryable = status == 429 or status >= 500
+        if not retryable or attempt == MAX_ATTEMPTS:
+            response.raise_for_status()
+            return response.json()
+        time.sleep(RETRY_BACKOFF * attempt)
+    raise requests.RequestException(
+        f"Failed after {MAX_ATTEMPTS} attempts"
+    )
+
+
+def get_session():
+    session = getattr(_thread_local, "session", None)
+    if session is None:
+        session = requests.Session()
+        session.headers.update(HEADERS)
+        _thread_local.session = session
+    return session
+
+
+def draw_progress(done, total, width=40):
+    if total <= 0:
+        return ""
+    filled = int(round(width * done / total))
+    bar = "=" * filled + "-" * (width - filled)
+    pct = 100.0 * done / total
+    return f"[{bar}] {pct:6.1f}% ({done}/{total})"
 
 
 # ============================================================
@@ -272,6 +344,7 @@ def search_offers(session, limit=None, occupation_guid=OCCUPATION_GUID, location
         url = f"{SEARCH_URL_BASE}?page={page}&row={ROW}"
         print(f"Search page {page}...")
 
+        throttle()
         response = session.post(url, json=payload, timeout=30)
         response.raise_for_status()
         data = response.json()
@@ -304,7 +377,6 @@ def search_offers(session, limit=None, occupation_guid=OCCUPATION_GUID, location
             break
 
         page += 1
-        time.sleep(PAUSE)
 
     print(f"\nOffers retained: {len(offers)}")
     return offers
@@ -316,9 +388,7 @@ def search_offers(session, limit=None, occupation_guid=OCCUPATION_GUID, location
 
 def fetch_detail(session, number):
     url = DETAIL_URL.format(number)
-    response = session.get(url, timeout=30)
-    response.raise_for_status()
-    return response.json()
+    return request_json_with_retry(session, url)
 
 
 # ============================================================
@@ -570,15 +640,23 @@ def main():
 
     if search_results:
         total = len(search_results)
-        print(f"\nFetching details ({total} offer(s))...")
+        tasks = [
+            (index, entry)
+            for index, entry in enumerate(search_results, start=1)
+            if entry["number"] not in blacklist
+        ]
+        skipped = total - len(tasks)
+        print(
+            f"\nFetching details ({len(tasks)} offer(s)) "
+            f"with {MAX_WORKERS} parallel workers..."
+        )
+        if skipped:
+            print(f"  ({skipped} blacklisted, skipped)")
 
-        for index, entry in enumerate(search_results, start=1):
+        def process_entry(task):
+            index, entry = task
             number = entry["number"]
             published_on = entry.get("published_on", "")
-
-            if number in blacklist:
-                continue
-
             previous = previous_by_number.get(number)
 
             if (
@@ -589,35 +667,64 @@ def main():
             ):
                 offer = dict(previous)
                 offer["is_new"] = False
-                new_offers.append(offer)
-                reused_count += 1
-                print(f"  [{index}/{total}] Offer {number} (reused)")
-                time.sleep(PAUSE)
-                continue
-
-            print(f"  [{index}/{total}] Offer {number}")
+                return task, offer, "reused"
 
             try:
-                detail = fetch_detail(session, number)
+                detail = fetch_detail(get_session(), number)
                 offer = build_offer(
                     detail, published_on=published_on
                 )
                 offer["is_new"] = number not in previous_numbers
-                new_offers.append(offer)
-            except requests.RequestException as e:
+                return task, offer, "fetched"
+            except requests.HTTPError as e:
                 if (
                     getattr(e, "response", None) is not None
                     and e.response.status_code == 404
                 ):
-                    blacklist.add(number)
-                    write_blacklist(blacklist)
-                    print(f"    Offer {number} not found (404): blacklisted")
-                else:
-                    print(f"    Network error: {e}")
+                    return task, None, "404"
+                return task, None, f"HTTP error: {e}"
+            except requests.RequestException as e:
+                return task, None, f"Network error: {e}"
             except Exception as e:
-                print(f"    Error: {e}")
+                return task, None, f"Error: {e}"
 
-            time.sleep(PAUSE)
+        done = 0
+        fetched_count = 0
+        issue_lines = []
+
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=MAX_WORKERS
+        ) as executor:
+            for (index, entry), offer, outcome in executor.map(
+                process_entry, tasks
+            ):
+                number = entry["number"]
+                if outcome == "reused":
+                    new_offers.append(offer)
+                    reused_count += 1
+                elif outcome == "fetched":
+                    new_offers.append(offer)
+                    fetched_count += 1
+                elif outcome == "404":
+                    blacklist.add(number)
+                    with _blacklist_lock:
+                        write_blacklist(blacklist)
+                    issue_lines.append(
+                        f"  Offer {number} missing (404): blacklisted"
+                    )
+                else:
+                    issue_lines.append(f"  Offer {number}: {outcome}")
+                done += 1
+                sys.stdout.write(
+                    "\rFetching details: "
+                    + draw_progress(done, len(tasks))
+                )
+                sys.stdout.flush()
+
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+        for line in issue_lines:
+            print(line)
 
     if not new_offers and not search_results:
         print("\nNo offer found.")
