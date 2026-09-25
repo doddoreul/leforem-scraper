@@ -190,7 +190,9 @@ python scraper.py --fresh --occupation-guid <id metier> --location-guid <id lieu
   les fichiers de données).
 - `serveur.py` : le petit serveur local qui affiche la page.
 - `index.html`, `style.css`, `script.js` : la page web elle-même.
-- `data.json`, `historique_supprimees.json` : les données générées par le
-  scraper (ne pas y toucher à la main).
+- `data.json`, `historique_supprimees.json`, `blacklist.json` : les données
+  générées par le scraper (ne pas y toucher à la main). `blacklist.json`
+  contient les numéros d'annonces introuvables (404), automatiquement
+  ignorés au scrap suivant ; tu peux le supprimer pour tout retenter.
 
 Bonne recherche !

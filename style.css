@@ -306,6 +306,21 @@ h1 {
     color: var(--text-muted);
 }
 
+.stat-filter {
+    cursor: pointer;
+    user-select: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.stat-filter:hover {
+    border-color: var(--accent);
+}
+
+.stat-filter.active {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
 /* ============================================================
    TABLE
    ============================================================ */

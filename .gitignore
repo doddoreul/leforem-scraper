@@ -3,6 +3,7 @@ data.json
 data_*.json
 historique_supprimees.json
 historique_*.json
+blacklist.json
 
 # Former system (no longer used)
 parametres.json

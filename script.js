@@ -355,6 +355,7 @@ function createCurrentRow(offer) {
     const number = String(offer.number);
     const tr = document.createElement("tr");
     tr.dataset.number = number;
+    tr.dataset.isNew = offer.is_new === true ? "true" : "false";
 
     const textCell = (nodes, className) => {
         const td = document.createElement("td");
@@ -513,6 +514,9 @@ function updateStatusInUrl(value) {
     window.history.replaceState({}, "", url);
 }
 
+let groupFilter = "all";
+let groupFilterZones = [];
+
 function applyFilters() {
     const filter = document.getElementById("statusFilter");
     const statusValue = filter ? filter.value : "";
@@ -521,6 +525,8 @@ function applyFilters() {
         "currentRows",
         "currentSearch",
         function (row) {
+            if (groupFilter === "new" && row.dataset.isNew !== "true") return false;
+            if (groupFilter === "old" && row.dataset.isNew !== "false") return false;
             if (statusValue === "") return true;
             const status = getStatus(String(row.dataset.number));
             if (statusValue === "unsorted") return status === "";
@@ -581,6 +587,29 @@ function applyFiltersToTable(tbodyId, searchId, otherFiltersPass) {
             group.separation.style.display = visible > 0 ? "" : "none";
         }
     });
+}
+
+function setupGroupFilterZones() {
+    groupFilterZones = Array.from(document.querySelectorAll(".stat-filter"));
+    groupFilterZones.forEach(zone => {
+        zone.addEventListener("click", function () {
+            const value = this.dataset.filter || "all";
+            groupFilter = groupFilter === value ? "all" : value;
+            updateGroupFilterZones();
+            applyFilters();
+        });
+    });
+}
+
+function updateGroupFilterZones() {
+    groupFilterZones.forEach(zone => {
+        zone.classList.toggle("active", zone.dataset.filter === groupFilter);
+    });
+}
+
+function resetGroupFilter() {
+    groupFilter = "all";
+    groupFilterZones.forEach(zone => zone.classList.remove("active"));
 }
 
 
@@ -916,6 +945,7 @@ function switchScraping(e) {
     historyUrl = option.dataset.history || HISTORY_URL;
     setActiveScraping(option.dataset.base || "");
     localStorage.setItem("forem_scraping_select", option.value);
+    resetGroupFilter();
     reloadTables();
 }
 
@@ -1035,6 +1065,7 @@ async function init() {
 
     setupTabs();
     setupNewSearch();
+    setupGroupFilterZones();
     await setupScrapingSelector();
 
     const filter = document.getElementById("statusFilter");

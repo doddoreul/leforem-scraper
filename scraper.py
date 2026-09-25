@@ -42,6 +42,7 @@ HEADERS = {
 
 DATA_FILE = "data.json"
 HISTORY_FILE = "historique_supprimees.json"
+BLACKLIST_FILE = "blacklist.json"
 VERSION = 1
 
 
@@ -379,6 +380,21 @@ def write_json_atomically(path, content):
     os.replace(tmp_path, path)
 
 
+def read_blacklist(path=BLACKLIST_FILE):
+    data = read_json(path, None)
+    if isinstance(data, list):
+        return {
+            str(number).strip()
+            for number in data
+            if str(number).strip()
+        }
+    return set()
+
+
+def write_blacklist(blacklist, path=BLACKLIST_FILE):
+    write_json_atomically(path, sorted(blacklist))
+
+
 # ============================================================
 # REMOVED-OFFERS HISTORY
 # ============================================================
@@ -504,6 +520,10 @@ def main():
         path=history_file, timestamp=now
     )
 
+    blacklist = read_blacklist()
+    if blacklist:
+        print(f"Blacklisted offers: {len(blacklist)}")
+
     if base_name:
         print(f"Scrape: {base_name}")
     if args.label:
@@ -530,6 +550,21 @@ def main():
         location_guid=args.location_guid,
     )
 
+    new_count = sum(
+        1 for entry in search_results
+        if entry["number"] not in previous_numbers
+        and entry["number"] not in blacklist
+    )
+
+    if new_count > 0:
+        answer = input(
+            f"{new_count} nouvelles annonces trouvées, "
+            "souhaitez-vous les scraper? (Y/n) "
+        ).strip().lower()
+        if answer not in ("", "y", "yes", "o", "oui"):
+            print("Annulation. Les fichiers existants sont conservés.")
+            return
+
     new_offers = []
     reused_count = 0
 
@@ -540,6 +575,9 @@ def main():
         for index, entry in enumerate(search_results, start=1):
             number = entry["number"]
             published_on = entry.get("published_on", "")
+
+            if number in blacklist:
+                continue
 
             previous = previous_by_number.get(number)
 
@@ -567,7 +605,15 @@ def main():
                 offer["is_new"] = number not in previous_numbers
                 new_offers.append(offer)
             except requests.RequestException as e:
-                print(f"    Network error: {e}")
+                if (
+                    getattr(e, "response", None) is not None
+                    and e.response.status_code == 404
+                ):
+                    blacklist.add(number)
+                    write_blacklist(blacklist)
+                    print(f"    Offer {number} not found (404): blacklisted")
+                else:
+                    print(f"    Network error: {e}")
             except Exception as e:
                 print(f"    Error: {e}")
 
