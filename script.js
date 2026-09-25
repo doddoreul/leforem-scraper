@@ -22,12 +22,12 @@ function setActiveScraping(baseName) {
 
 const STATUS_OPTIONS = [
     { value: "", label: "—" },
-    { value: "interesse", label: "Interested" },
-    { value: "pas_interesse", label: "Not interested" },
-    { value: "postule", label: "Applied" },
-    { value: "contacte", label: "Contacted" },
-    { value: "refuse", label: "Rejected" },
-    { value: "rdv", label: "Interview planned" },
+    { value: "interesse", label: "Intéressé" },
+    { value: "pas_interesse", label: "Pas intéressé" },
+    { value: "postule", label: "Postulé" },
+    { value: "contacte", label: "Contacté" },
+    { value: "refuse", label: "Refusé" },
+    { value: "rdv", label: "RDV prévu" },
 ];
 
 
@@ -198,7 +198,7 @@ function createStatusSelect(number) {
     const select = document.createElement("select");
     select.className = "status-select";
     select.dataset.number = number;
-    select.title = "Application status";
+    select.title = "Statut de la candidature";
 
     STATUS_OPTIONS.forEach(({ value, label }) => {
         const option = document.createElement("option");
@@ -222,7 +222,7 @@ function createOfferLink(offer) {
     link.href = offer.url || "#";
     link.target = "_blank";
     link.rel = "noopener noreferrer";
-    link.textContent = offer.offer_title || "(No title)";
+    link.textContent = offer.offer_title || "(Sans titre)";
     link.addEventListener("click", function () {
         markClickedRow(link);
     });
@@ -271,10 +271,10 @@ function createDescriptionBlock(offer) {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "desc-toggle";
-        button.textContent = "Show more";
+        button.textContent = "Afficher plus";
         button.addEventListener("click", function () {
             const expanded = description.classList.toggle("expanded");
-            this.textContent = expanded ? "Show less" : "Show more";
+            this.textContent = expanded ? "Afficher moins" : "Afficher plus";
         });
         container.appendChild(button);
     }
@@ -290,7 +290,7 @@ function createStarCell(number) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "star-button";
-    button.title = "Mark as favorite";
+    button.title = "Marquer comme favori";
     button.setAttribute("aria-pressed", isFavorite(numberStr) ? "true" : "false");
     button.textContent = isFavorite(numberStr) ? "★" : "☆";
 
@@ -314,7 +314,7 @@ function createNotesCell(number) {
     textarea.rows = 1;
     textarea.placeholder = "…";
     textarea.value = getRemark(String(number));
-    textarea.title = "Personal remark";
+    textarea.title = "Remarque personnelle";
     textarea.addEventListener("input", function () {
         setRemark(String(number), this.value);
         this.style.height = "auto";
@@ -330,10 +330,10 @@ function createDetailsCell(values) {
     td.className = "col-details";
 
     [
-        ["Contract", values.contract_type],
-        ["Schedule", values.schedule],
-        ["Pay", values.pay],
-        ["Salary", values.salary],
+        ["Contrat", values.contract_type],
+        ["Horaire", values.schedule],
+        ["Rémunération", values.pay],
+        ["Salaire", values.salary],
     ].forEach(([labelText, value]) => {
         if (!value) return;
         const line = document.createElement("div");
@@ -430,17 +430,17 @@ function renderCurrent(offers, scrapeDate) {
     tbody.innerHTML = "";
 
     if (offers.length === 0) {
-        tbody.appendChild(createInfoRow("No offer found."));
+        tbody.appendChild(createInfoRow("Aucune annonce trouvée."));
         return;
     }
 
     if (newOffers.length > 0) {
-        tbody.appendChild(createSeparationRow(`New offers (${newOffers.length})`));
+        tbody.appendChild(createSeparationRow(`Nouvelles annonces (${newOffers.length})`));
         newOffers.forEach(offer => tbody.appendChild(createCurrentRow(offer)));
     }
 
     if (olderOffers.length > 0) {
-        tbody.appendChild(createSeparationRow(`Older offers (${olderOffers.length})`));
+        tbody.appendChild(createSeparationRow(`Anciennes annonces (${olderOffers.length})`));
         olderOffers.forEach(offer => tbody.appendChild(createCurrentRow(offer)));
     }
 }
@@ -461,7 +461,7 @@ function renderDeleted(offers) {
     });
 
     if (sorted.length === 0) {
-        tbody.appendChild(createInfoRow("No removed offer.", 8));
+        tbody.appendChild(createInfoRow("Aucune annonce supprimée.", 8));
         return;
     }
 
@@ -714,7 +714,7 @@ function searchOccupations(term) {
         .catch(e => {
             console.error(e);
             showSuggestionError(
-                "occupationSuggestions", "Network error: " + e.message
+                "occupationSuggestions", "Erreur réseau : " + e.message
             );
         });
 }
@@ -739,7 +739,7 @@ function renderOccupationSuggestions(list, term) {
     });
     if (!filtered.length) {
         showSuggestionError(
-            "occupationSuggestions", `No occupation found for "${term}".`
+            "occupationSuggestions", `Aucun métier trouvé pour « ${term} ».`
         );
     }
 }
@@ -775,7 +775,7 @@ function filterLocations(term, list) {
     if (!filtered.length) {
         showSuggestionError(
             "locationSuggestions",
-            term ? "No location found." : "Type to filter locations."
+            term ? "Aucun lieu trouvé." : "Tape pour filtrer les lieux."
         );
         return;
     }
@@ -840,13 +840,13 @@ async function copyCommand() {
     if (!command) return;
     try {
         await navigator.clipboard.writeText(command);
-        status.textContent = "Command copied. Paste it in the terminal, " +
-            "inside the leforem-scraper folder.";
+        status.textContent = "Commande copiée. Colle-la dans le terminal, " +
+            "dans le dossier leforem-scraper.";
     } catch (e) {
         const box = document.getElementById("commandBox");
         box.select();
         document.execCommand("copy");
-        status.textContent = "Command copied.";
+        status.textContent = "Commande copiée.";
     }
 }
 
@@ -907,8 +907,8 @@ function updateTitle(data) {
     const label = data && typeof data.label === "string"
         ? data.label.trim() : "";
     const title = label
-        ? "Forem offers — " + label
-        : "Forem offers — Industrial electromechanic";
+        ? "Offres Forem — " + label
+        : "Offres Forem — Électromécanicien industriel";
     document.getElementById("mainTitle").textContent = title;
     document.title = title;
 }
@@ -968,13 +968,13 @@ async function reloadTables() {
     const data = await loadJsonWithFallback(
         dataUrl,
         tbodyCurrent,
-        "Unable to load " + dataUrl
+        "Impossible de charger " + dataUrl
     );
 
     const history = await loadJsonWithFallback(
         historyUrl,
         tbodyDeleted,
-        "Unable to load " + historyUrl,
+        "Impossible de charger " + historyUrl,
         7
     );
 
@@ -1001,7 +1001,7 @@ async function reloadTables() {
         console.error("Rendering error", e);
         showError(
             tbodyCurrent,
-            "Error while rendering offers: " + e.message
+            "Erreur lors de l'affichage des annonces : " + e.message
         );
     }
 }
@@ -1011,8 +1011,8 @@ async function init() {
     if (window.location.protocol === "file:") {
         showError(
             document.getElementById("currentRows"),
-            "Page opened directly from disk. Run: " +
-            "python serveur.py, then open http://localhost:8123/."
+            "Page ouverte directement depuis le disque. Lancez : " +
+            "python serveur.py, puis http://localhost:8123/."
         );
         return;
     }

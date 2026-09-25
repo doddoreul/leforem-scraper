@@ -144,21 +144,21 @@ Pour arrêter le serveur plus tard : ferme la fenêtre ou appuie sur
 
 ## 7) Se servir de la page web
 
-La page est en anglais, mais tout est simple :
+La page est en français. Tout est simple :
 
-- **Current offers** : les offres actuelles. Chaque ligne a :
+- **Annonces actuelles** : les offres actuelles. Chaque ligne a :
   - une **étoile** pour mettre l'offre en favori,
-  - un menu **Status** pour suivre ta candidature (Interested, Applied,
-    Contacted, Rejected…),
-  - une zone **Remarks** pour écrire un commentaire,
+  - un menu **Statut** pour suivre ta candidature (Intéressé, Postulé,
+    Contacté, Refusé…),
+  - une zone **Remarque** pour écrire un commentaire,
   - un lien vers l'offre originale sur le site du Forem.
-- **Removed offers** : les offres qui ont disparu du site.
-- **New / Older offers** : le programme affiche d'abord les nouvelles offres
-  (nouvelles = absentes du précédent scraping).
+- **Annonces supprimées** : les offres qui ont disparu du site.
+- **Nouvelles / Anciennes annonces** : le programme affiche d'abord les
+  nouvelles offres (nouvelles = absentes du précédent scraping).
 - En haut : une **barre de recherche** pour filtrer les lignes par
-  mots-clés, et le menu **Status** pour filtrer par statut.
-- **New search** : pour changer de métier ou de lieu. Un bouton te génère la
-  commande à copier-coller dans le terminal :
+  mots-clés, et le menu **Statut** pour filtrer par statut.
+- **Nouvelle recherche** : pour changer de métier ou de lieu. Un bouton te
+  génère la commande à copier-coller dans le terminal :
 
 ```
 python scraper.py --fresh --occupation-guid <id metier> --location-guid <id lieu> --base mon-scraping --label "Mon metier / Ma ville"

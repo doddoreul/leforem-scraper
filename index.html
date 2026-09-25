@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Forem offers — Industrial electromechanic</title>
+<title>Offres Forem — Électromécanicien industriel</title>
 
 <link rel="stylesheet" href="style.css?v=15">
 
@@ -15,13 +15,13 @@
 
     <div class="header-row">
 
-        <h1 id="mainTitle">Forem offers — Industrial electromechanic</h1>
+        <h1 id="mainTitle">Offres Forem — Électromécanicien industriel</h1>
 
         <label class="scraping-label" for="scrapingSelect">Scraping&nbsp;:</label>
-        <select id="scrapingSelect" aria-label="Active scraping"></select>
+        <select id="scrapingSelect" aria-label="Scraping actif"></select>
 
         <button class="new-search-btn" type="button" id="newSearchBtn">
-            New search
+            Nouvelle recherche
         </button>
 
     </div>
@@ -29,11 +29,11 @@
     <nav class="tabs" role="tablist">
 
         <button class="tab-btn active" type="button" data-target="current" role="tab" aria-selected="true">
-            Current offers
+            Annonces actuelles
         </button>
 
         <button class="tab-btn" type="button" data-target="deleted" role="tab" aria-selected="false">
-            Removed offers
+            Annonces supprimées
         </button>
 
     </nav>
@@ -51,19 +51,19 @@
         <div class="stats">
 
             <div class="stat">
-                <strong id="statTotal">0</strong> offer(s)
+                <strong id="statTotal">0</strong> annonce(s)
             </div>
 
             <div class="stat stat-new">
-                <strong id="statNew">0</strong> new
+                <strong id="statNew">0</strong> nouvelle(s)
             </div>
 
             <div class="stat">
-                <strong id="statOld">0</strong> older
+                <strong id="statOld">0</strong> ancienne(s)
             </div>
 
             <div class="stat stat-date">
-                Last scrape: <span id="statDate">—</span>
+                Dernier scraping : <span id="statDate">—</span>
             </div>
 
         </div>
@@ -71,22 +71,22 @@
         <div class="tools">
 
             <label class="filter" for="statusFilter">
-                <span>Status:</span>
+                <span>Statut :</span>
                 <select id="statusFilter">
-                    <option value="">All statuses</option>
-                    <option value="unsorted">Unsorted</option>
-                    <option value="interesse">Interested</option>
-                    <option value="pas_interesse">Not interested</option>
-                    <option value="postule">Applied</option>
-                    <option value="contacte">Contacted</option>
-                    <option value="refuse">Rejected</option>
-                    <option value="rdv">Interview planned</option>
+                    <option value="">Tous les statuts</option>
+                    <option value="unsorted">Non trié</option>
+                    <option value="interesse">Intéressé</option>
+                    <option value="pas_interesse">Pas intéressé</option>
+                    <option value="postule">Postulé</option>
+                    <option value="contacte">Contacté</option>
+                    <option value="refuse">Refusé</option>
+                    <option value="rdv">RDV prévu</option>
                 </select>
             </label>
 
             <label class="search" for="currentSearch">
                 <span>🔎</span>
-                <input type="search" id="currentSearch" placeholder="Search… (keywords)">
+                <input type="search" id="currentSearch" placeholder="Rechercher… (mots clés)">
             </label>
 
         </div>
@@ -99,21 +99,21 @@
 
             <thead>
             <tr>
-                <th class="col-star" title="Favorite">★</th>
-                <th class="col-status">Status</th>
-                <th class="col-published">Published</th>
-                <th class="col-forem-id">Forem ID</th>
-                <th class="col-offer">Offer</th>
-                <th class="col-company">Company</th>
-                <th class="col-details">Contract · Schedule · Pay</th>
-                <th class="col-location">Location</th>
-                <th class="col-notes">Remarks</th>
+                <th class="col-star" title="Favori">★</th>
+                <th class="col-status">Statut</th>
+                <th class="col-published">Publication</th>
+                <th class="col-forem-id">ID Forem</th>
+                <th class="col-offer">Offre</th>
+                <th class="col-company">Société</th>
+                <th class="col-details">Contrat · Horaire · Rémunération</th>
+                <th class="col-location">Lieu</th>
+                <th class="col-notes">Remarque</th>
             </tr>
             </thead>
 
             <tbody id="currentRows">
                 <tr class="info-row">
-                    <td colspan="9">Loading offers...</td>
+                    <td colspan="9">Chargement des annonces...</td>
                 </tr>
             </tbody>
 
@@ -134,7 +134,7 @@
         <div class="stats">
 
             <div class="stat">
-                <strong id="statDeleted">0</strong> removed offer(s)
+                <strong id="statDeleted">0</strong> annonce(s) supprimée(s)
             </div>
 
         </div>
@@ -143,7 +143,7 @@
 
             <label class="search" for="deletedSearch">
                 <span>🔎</span>
-                <input type="search" id="deletedSearch" placeholder="Search… (keywords)">
+                <input type="search" id="deletedSearch" placeholder="Rechercher… (mots clés)">
             </label>
 
         </div>
@@ -156,20 +156,20 @@
 
             <thead>
             <tr>
-                <th class="col-star" title="Favorite">★</th>
-                <th class="col-forem-id">Forem ID</th>
-                <th class="col-offer">Offer</th>
-                <th class="col-company">Company</th>
-                <th class="col-details">Contract · Schedule · Pay</th>
-                <th class="col-location">Location</th>
-                <th class="col-removed-on">Removed on</th>
-                <th class="col-notes">Remarks</th>
+                <th class="col-star" title="Favori">★</th>
+                <th class="col-forem-id">ID Forem</th>
+                <th class="col-offer">Offre</th>
+                <th class="col-company">Société</th>
+                <th class="col-details">Contrat · Horaire · Rémunération</th>
+                <th class="col-location">Lieu</th>
+                <th class="col-removed-on">Supprimée le</th>
+                <th class="col-notes">Remarque</th>
             </tr>
             </thead>
 
             <tbody id="deletedRows">
                 <tr class="info-row">
-                    <td colspan="8">Loading removed offers...</td>
+                    <td colspan="8">Chargement des annonces supprimées...</td>
                 </tr>
             </tbody>
 
@@ -188,46 +188,46 @@
     <div class="modal-box">
 
         <div class="modal-header">
-            <h2 id="searchModalTitle">New search</h2>
-            <button class="modal-close" type="button" id="closeModalBtn" aria-label="Close">✕</button>
+            <h2 id="searchModalTitle">Nouvelle recherche</h2>
+            <button class="modal-close" type="button" id="closeModalBtn" aria-label="Fermer">✕</button>
         </div>
 
         <p class="modal-hint">
-            Find the occupation and the location: a ready-to-paste scraping command will be generated.
+            Trouve le métier et le lieu : une commande de scraping prête à coller sera générée.
         </p>
 
         <div class="search-field">
-            <label for="occupationInput">Keyword</label>
-            <input type="text" id="occupationInput" placeholder="e.g. electrician, welder…" autocomplete="off">
+            <label for="occupationInput">Mot-clé</label>
+            <input type="text" id="occupationInput" placeholder="p. ex. : électricien, soudeur…" autocomplete="off">
             <ul class="suggestions" id="occupationSuggestions"></ul>
         </div>
 
         <div class="search-field">
-            <label for="locationInput">Location</label>
-            <input type="text" id="locationInput" placeholder="e.g. Liege, Huy…" autocomplete="off">
+            <label for="locationInput">Lieu</label>
+            <input type="text" id="locationInput" placeholder="p. ex. : Liège, Huy…" autocomplete="off">
             <ul class="suggestions" id="locationSuggestions"></ul>
         </div>
 
         <div class="confirmation" id="confirmationArea">
-            <p class="confirmation-title">Search parameters</p>
+            <p class="confirmation-title">Paramètres de la recherche</p>
             <dl class="confirmation-info">
-                <dt>Occupation</dt>
+                <dt>Métier</dt>
                 <dd id="confirmationOccupation">—</dd>
-                <dt>Guid</dt>
+                <dt>GUID</dt>
                 <dd id="confirmationOccupationGuid" class="guid">—</dd>
-                <dt>Location</dt>
+                <dt>Lieu</dt>
                 <dd id="confirmationLocation">—</dd>
-                <dt>Guid</dt>
+                <dt>GUID</dt>
                 <dd id="confirmationLocationGuid" class="guid">—</dd>
             </dl>
-            <label class="command-label" for="commandBox">Command to paste in the terminal</label>
+            <label class="command-label" for="commandBox">Commande à coller dans le terminal</label>
             <textarea id="commandBox" class="command-box" rows="3" readonly spellcheck="false"></textarea>
             <p class="confirmation-status" id="scrapeStatus"></p>
         </div>
 
         <div class="modal-footer">
-            <button class="btn-secondary" type="button" id="cancelModalBtn">Cancel</button>
-            <button class="btn-primary" type="button" id="copyCommandBtn" disabled>Copy command</button>
+            <button class="btn-secondary" type="button" id="cancelModalBtn">Annuler</button>
+            <button class="btn-primary" type="button" id="copyCommandBtn" disabled>Copier la commande</button>
         </div>
 
     </div>
