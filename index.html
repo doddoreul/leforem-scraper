@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Offres Forem — Électromécanicien industriel</title>
 
-<link rel="stylesheet" href="style.css?v=22">
+<link rel="stylesheet" href="style.css?v=25">
 
 </head>
 <body>
@@ -48,22 +48,25 @@
 
     <div class="toolbar">
 
-        <div class="stats">
+        <div class="stat-group" role="group" aria-label="Filtres par groupe">
 
-            <div class="stat stat-filter" data-filter="all" title="Afficher toutes les annonces">
+            <button class="stat stat-filter active" type="button" data-filter="all"
+                    title="Afficher toutes les annonces">
                 <strong id="statTotal">0</strong> annonce(s)
-            </div>
+            </button>
 
-            <div class="stat stat-new stat-filter" data-filter="new" title="Afficher seulement les nouvelles annonces">
+            <button class="stat stat-new stat-filter" type="button" data-filter="new"
+                    title="Afficher seulement les nouvelles annonces">
                 <strong id="statNew">0</strong> nouvelle(s)
-            </div>
+            </button>
 
-            <div class="stat stat-filter" data-filter="old" title="Afficher seulement les anciennes annonces">
+            <button class="stat stat-filter" type="button" data-filter="old"
+                    title="Afficher seulement les anciennes annonces">
                 <strong id="statOld">0</strong> ancienne(s)
-            </div>
+            </button>
 
             <div class="stat stat-date">
-                Dernier scraping : <span id="statDate">—</span>
+                Dernier scraping&nbsp;: <span id="statDate">—</span>
             </div>
 
         </div>
@@ -96,6 +99,23 @@
             <span class="export-message" id="exportMessage"></span>
 
         </div>
+
+    </div>
+
+    <div class="follow-up-panel hidden" id="followUpPanel">
+
+        <div class="follow-up-head">
+            <span class="follow-up-title">À relancer</span>
+            <span class="follow-up-count" id="followUpCount">0</span>
+            <button class="follow-up-all" type="button" id="followUpAllBtn"
+                    title="Remettre le compteur à zéro pour toutes les annonces affichées">
+                Tout marquer comme relancé
+            </button>
+        </div>
+
+        <div class="follow-up-hint" id="followUpHint"></div>
+
+        <div class="follow-up-list" id="followUpList"></div>
 
     </div>
 
@@ -137,7 +157,7 @@
 
     <div class="toolbar">
 
-        <div class="stats">
+        <div class="stat-group">
 
             <div class="stat">
                 <strong id="statDeleted">0</strong> annonce(s) supprimée(s)
@@ -185,7 +205,7 @@
 
 </section>
 
-<script src="script.js?v=19"></script>
+<script src="script.js?v=21"></script>
 
 <div class="modal" id="searchModal" role="dialog" aria-modal="true" aria-labelledby="searchModalTitle">
 

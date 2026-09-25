@@ -177,13 +177,141 @@ def format_contract_type(value):
     return clean_text(value)
 
 
+# The free-text fields written by employers are in French, so the
+# patterns below mirror that vocabulary: hour ranges, shift cycles,
+# and day/night/weekend work. Everything is evaluated per sentence so
+# a negation ("Zéro nuit") only cancels its own sentence.
+HOUR_RANGE_PATTERN = re.compile(
+    r"(?:de\s+)?(\d{1,2})h(?::?(\d{2}))?"
+    r"\s*(?:[-–—→]\s*(?:de\s+)?|à|a|au)\s*"
+    r"(\d{1,2})h(?::?(\d{2}))?",
+    re.I,
+)
+SHIFT_CODE_PATTERN = re.compile(r"\b([23])[xX]8\b")
+SHIFT_WORD_PATTERN = re.compile(
+    r"\b([23])\s*(?:pauses?|shifts?|équipes?|postes?)\b", re.I
+)
+DAY_WORK_PATTERN = re.compile(
+    r"\b(?:horaire\s+)?(?:uniquement\s+)?(?:de\s+)?jour\b", re.I
+)
+NIGHT_WORK_PATTERN = re.compile(r"\b(?:de\s+)?nuit\b|nocturne", re.I)
+WEEKEND_WORK_PATTERN = re.compile(r"\bweek-?end\b|\bweek\s+end\b", re.I)
+NEGATION_PATTERN = re.compile(
+    r"\b(?:pas\s+d[eu]?|sans|z[ée]ro|aucun(?:e)?|jamais)\b", re.I
+)
+
+SCHEDULE_TEXT_FIELDS = (
+    "benefitsComments",
+    "commentaireGeneral",
+    "descriptionJob",
+    "descriptionEmployeur",
+)
+SCHEDULE_MAX_CHARS = 90
+
+
+def _schedule_is_negated(sentence, match):
+    return bool(NEGATION_PATTERN.search(sentence, 0, match.end()))
+
+
+def _extract_schedule_tokens(sentences):
+    """Free-text schedule facts, most informative first."""
+    range_found = None
+    shift_code = ""
+    shift_word = ""
+    day_state = "unknown"
+    night_state = "unknown"
+    weekend_state = "unknown"
+
+    for sentence in sentences:
+        if range_found is None:
+            m = HOUR_RANGE_PATTERN.search(sentence)
+            if m:
+                range_found = "{0}h{1}-{2}h{3}".format(
+                    m.group(1), m.group(2) or "", m.group(3), m.group(4) or ""
+                )
+
+        if not shift_code:
+            m = SHIFT_CODE_PATTERN.search(sentence)
+            if m:
+                shift_code = m.group(1) + "x8"
+
+        if not shift_word:
+            m = SHIFT_WORD_PATTERN.search(sentence)
+            if m:
+                shift_word = m.group(1) + " pauses"
+
+        if day_state != "yes":
+            m = DAY_WORK_PATTERN.search(sentence)
+            if m:
+                day_state = "no" if _schedule_is_negated(sentence, m) else "yes"
+
+        if night_state not in ("yes", "rare"):
+            m = NIGHT_WORK_PATTERN.search(sentence)
+            if m:
+                if _schedule_is_negated(sentence, m):
+                    night_state = "no"
+                elif re.search(r"\bmoins\s+fr[ée]quen", sentence, re.I):
+                    night_state = "rare"
+                else:
+                    night_state = "yes"
+
+        if weekend_state != "yes":
+            m = WEEKEND_WORK_PATTERN.search(sentence)
+            if m:
+                weekend_state = (
+                    "no" if _schedule_is_negated(sentence, m) else "yes"
+                )
+
+    tokens = []
+    if range_found:
+        tokens.append(range_found)
+    if shift_word:
+        tokens.append(shift_word)
+    elif shift_code:
+        tokens.append(shift_code)
+    if day_state == "yes":
+        tokens.append("de jour")
+    if night_state == "yes":
+        tokens.append("nuit")
+    elif night_state == "rare":
+        tokens.append("nuit (rare)")
+    if weekend_state == "yes":
+        tokens.append("week-end")
+    return tokens
+
+
 def extract_schedule(detail):
     regime = clean_text(detail.get("regimeTravail"))
-    period = ""
+    precision = clean_text(detail.get("regimeTravailPrecision"))
+
     shift = detail.get("shift")
+    if not isinstance(shift, dict):
+        benefits = detail.get("benefits")
+        if isinstance(benefits, dict):
+            shift = benefits.get("shift")
+    period = ""
     if isinstance(shift, dict):
         period = clean_text(shift.get("shiftPeriod"))
-    return " — ".join(part for part in (regime, period) if part)
+
+    parts = [part for part in (regime, precision, period) if part]
+
+    text_sources = [
+        html_to_text(detail.get(field) or "") for field in SCHEDULE_TEXT_FIELDS
+    ]
+    sentences = re.split(
+        r"(?<=[.!?])\s+",
+        " ".join(source for source in text_sources if source),
+    )
+
+    tokens = [
+        token for token in _extract_schedule_tokens(sentences)
+        if not any(token in part for part in parts)
+    ]
+
+    result = " — ".join(parts + tokens)
+    if len(result) > SCHEDULE_MAX_CHARS:
+        result = result[:SCHEDULE_MAX_CHARS].rstrip() + "…"
+    return result
 
 
 def extract_pay(benefits, max_chars=25):
@@ -255,6 +383,55 @@ def extract_salary(detail, max_chars=75):
     return chosen
 
 
+EMAIL_PATTERN = re.compile(
+    r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,}"
+)
+
+# Free-text fields that sometimes carry the contact address when the
+# structured "howToApply.email" field is empty (French source text).
+EMAIL_TEXT_FIELDS = (
+    "descriptionJob",
+    "benefitsComments",
+    "descriptionEmployeur",
+    "commentaireGeneral",
+)
+
+EMAIL_MAX_COUNT = 3
+
+
+def extract_email(detail):
+    # 1) Structured contact field, when provided.
+    how = detail.get("howToApply")
+    structured = ""
+    if isinstance(how, dict):
+        value = how.get("email")
+        if EMAIL_PATTERN.fullmatch(str(value or "").strip()):
+            structured = value.strip()
+
+    if structured:
+        return structured
+
+    # 2) Fallback: scan the free-text fields written by employers.
+    found = []
+    seen = set()
+
+    for field in EMAIL_TEXT_FIELDS:
+        if len(found) >= EMAIL_MAX_COUNT:
+            break
+        text = html_to_text(detail.get(field) or "")
+        for match in EMAIL_PATTERN.findall(text):
+            email = match.strip().rstrip(".")
+            key = email.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append(email)
+            if len(found) >= EMAIL_MAX_COUNT:
+                break
+
+    return ", ".join(found)
+
+
 def extract_location(workplaces):
     if not workplaces:
         return ""
@@ -308,6 +485,7 @@ def build_offer(detail, published_on=""):
         "offer_title": clean_text(detail.get("titreOffre")),
         "description": description,
         "company": clean_text(detail.get("nomEmployeur")),
+        "email": extract_email(detail),
         "url": url,
         "contract_type": format_contract_type(detail.get("typeContrat")),
         "schedule": extract_schedule(detail),

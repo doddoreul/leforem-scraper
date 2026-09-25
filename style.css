@@ -190,26 +190,38 @@ h1 {
    STATISTICS AND TOOLBAR
    ============================================================ */
 
-.stats {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-}
-
 .toolbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 14px;
     flex-wrap: wrap;
     margin-bottom: 16px;
+}
+
+.stat-group {
+    display: inline-flex;
+    align-items: stretch;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
 }
 
 .tools {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
+}
+
+.filter,
+.search,
+.export-btn {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
 }
 
 .filter {
@@ -283,7 +295,7 @@ h1 {
     border: 1px solid var(--border);
     background: var(--bg-surface);
     color: var(--text-primary);
-    padding: 7px 14px;
+    padding: 9px 16px;
     border-radius: 12px;
     font-size: 13px;
     font-weight: 600;
@@ -297,8 +309,9 @@ h1 {
 }
 
 .export-message {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-secondary);
+    white-space: nowrap;
 }
 
 th.sortable {
@@ -320,20 +333,25 @@ th.sortable.sort-desc::after {
 }
 
 .stat {
-    display: flex;
+    display: inline-flex;
     align-items: baseline;
     gap: 6px;
-    background: var(--bg-surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 10px 16px;
+    padding: 9px 16px;
+    font-family: inherit;
     font-size: 13px;
     color: var(--text-secondary);
-    box-shadow: var(--shadow-card);
+    background: transparent;
+    border: 0;
+    cursor: default;
+    white-space: nowrap;
+}
+
+.stat + .stat {
+    border-left: 1px solid var(--border);
 }
 
 .stat strong {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 700;
     color: var(--text-primary);
 }
@@ -344,21 +362,182 @@ th.sortable.sort-desc::after {
 
 .stat-date {
     color: var(--text-muted);
+    font-size: 12px;
 }
 
 .stat-filter {
     cursor: pointer;
     user-select: none;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .stat-filter:hover {
-    border-color: var(--accent);
+    background: var(--row-hover);
 }
 
 .stat-filter.active {
+    background: linear-gradient(135deg, var(--accent), var(--accent-two));
+    color: var(--accent-text);
+}
+
+.stat-filter.active strong,
+.stat-filter.active.stat-new strong {
+    color: var(--accent-text);
+}
+
+/* ============================================================
+   RELANCES (FOLLOW-UPS)
+   ============================================================ */
+
+.follow-up-panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 14px;
+    box-shadow: var(--shadow-card);
+    padding: 14px 18px;
+    margin-bottom: 16px;
+}
+
+.follow-up-panel.hidden {
+    display: none;
+}
+
+.follow-up-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.follow-up-title {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.follow-up-count {
+    min-width: 24px;
+    height: 24px;
+    padding: 0 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-two));
+    color: var(--accent-text);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.follow-up-all {
+    margin-left: auto;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.follow-up-all:hover {
+    background: var(--row-hover);
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+}
+
+.follow-up-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+.follow-up-list {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.follow-up-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    flex-wrap: wrap;
+}
+
+.follow-up-item:hover {
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.follow-up-num {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.follow-up-body {
+    flex: 1 1 220px;
+    min-width: 0;
+}
+
+.follow-up-body a {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.follow-up-body a:hover {
+    text-decoration: underline;
+}
+
+.follow-up-meta {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+.follow-up-status {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--row-hover);
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.follow-up-ago {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.follow-up-relance {
+    border: 1px solid var(--accent);
+    background: transparent;
+    color: var(--accent);
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    white-space: nowrap;
+}
+
+.follow-up-relance:hover {
+    background: var(--accent);
+    color: var(--accent-text);
 }
 
 /* ============================================================
@@ -587,6 +766,17 @@ th.col-forem-id {
 .detail-label {
     color: var(--text-muted);
     font-size: 11px;
+}
+
+.detail-link {
+    color: var(--accent);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.detail-link:hover {
+    text-decoration: underline;
 }
 
 .col-location {

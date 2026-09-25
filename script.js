@@ -62,10 +62,14 @@ function getStatus(number) {
 function setStatus(number, value) {
     if (value) {
         statuses[number] = value;
+        statutDates[number] = new Date().toISOString();
     } else {
         delete statuses[number];
+        delete statutDates[number];
     }
     saveStatuses();
+    saveStatutDates();
+    refreshFollowUps();
 }
 
 function cleanStatuses(currentNumbers) {
@@ -82,6 +86,76 @@ function cleanStatuses(currentNumbers) {
 }
 
 let statuses = loadStatuses();
+
+
+// ============================================================
+// LOCAL STORAGE (status dates)
+// The last date a status changed drives the "relance" reminders.
+// ============================================================
+
+function loadStatutDates() {
+    try {
+        const value = localStorage.getItem(getStorageKey("statut_dates"));
+        if (!value) return {};
+        const parsed = JSON.parse(value);
+        return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (e) {
+        console.error("Unable to load status dates", e);
+        return {};
+    }
+}
+
+function saveStatutDates() {
+    try {
+        localStorage.setItem(getStorageKey("statut_dates"), JSON.stringify(statutDates));
+    } catch (e) {
+        console.error("Unable to save status dates", e);
+    }
+}
+
+function getStatutDate(number) {
+    return statutDates[number] || "";
+}
+
+function setStatutDate(number, value) {
+    if (value) {
+        statutDates[number] = value;
+    } else {
+        delete statutDates[number];
+    }
+    saveStatutDates();
+}
+
+function cleanStatutDates(currentNumbers) {
+    let changed = false;
+    Object.keys(statutDates).forEach(number => {
+        if (!currentNumbers.has(number)) {
+            delete statutDates[number];
+            changed = true;
+        }
+    });
+    if (changed) {
+        saveStatutDates();
+    }
+}
+
+// First visit after this feature: treat existing statuses as fresh
+// so no flood of reminders for statuses set before tracking began.
+function backfillStatutDates() {
+    let changed = false;
+    const now = new Date().toISOString();
+    Object.keys(statuses).forEach(number => {
+        if (statuses[number] && !statutDates[number]) {
+            statutDates[number] = now;
+            changed = true;
+        }
+    });
+    if (changed) {
+        saveStatutDates();
+    }
+}
+
+let statutDates = loadStatutDates();
 
 
 // ============================================================
@@ -329,12 +403,7 @@ function createDetailsCell(values) {
     const td = document.createElement("td");
     td.className = "col-details";
 
-    [
-        ["Contrat", values.contract_type],
-        ["Horaire", values.schedule],
-        ["Rémunération", values.pay],
-        ["Salaire", values.salary],
-    ].forEach(([labelText, value]) => {
+    const addLine = (labelText, value, linkHref) => {
         if (!value) return;
         const line = document.createElement("div");
         line.className = "detail-line";
@@ -344,9 +413,32 @@ function createDetailsCell(values) {
         label.textContent = labelText + ": ";
         line.appendChild(label);
 
-        line.appendChild(document.createTextNode(value));
+        if (linkHref) {
+            const link = document.createElement("a");
+            link.className = "detail-link";
+            link.href = linkHref;
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            link.textContent = value;
+            line.appendChild(link);
+        } else {
+            line.appendChild(document.createTextNode(value));
+        }
         td.appendChild(line);
-    });
+    };
+
+    [
+        ["Contrat", values.contract_type],
+        ["Horaire", values.schedule],
+        ["Rémunération", values.pay],
+        ["Salaire", values.salary],
+    ].forEach(([labelText, value]) => addLine(labelText, value, ""));
+
+    if (values.email) {
+        const emails = String(values.email);
+        const first = emails.split(",")[0].trim();
+        addLine("Email", emails, "mailto:" + first);
+    }
 
     return td;
 }
@@ -451,6 +543,8 @@ function renderCurrent(offers, scrapeDate) {
         tbody.appendChild(createSeparationRow(`Anciennes annonces (${olderOffers.length})`));
         olderOffers.forEach(offer => tbody.appendChild(createCurrentRow(offer)));
     }
+
+    refreshFollowUps();
 }
 
 function renderDeleted(offers) {
@@ -491,7 +585,126 @@ function formatDate(value) {
     const d = new Date(value);
     if (isNaN(d.getTime())) return value;
     const p = n => String(n).padStart(2, "0");
-    return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${p(d.getFullYear())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+
+// ============================================================
+// RELANCES (FOLLOW-UPS)
+// Offers "postulé" / "contacté" for too long go to the top of
+// the workflow so the user remembers to follow them up.
+// ============================================================
+
+const FOLLOWUP_DAYS = 7;
+const FOLLOWUP_STATUSES = ["postule", "contacte"];
+
+function timeAgoShort(iso) {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    const days = Math.floor((Date.now() - d.getTime()) / (24 * 60 * 60 * 1000));
+    if (days <= 0) return "aujourd'hui";
+    if (days === 1) return "il y a 1 jour";
+    return "il y a " + days + " jours";
+}
+
+function buildFollowUpItem(item) {
+    const { offer, status, date } = item;
+
+    const num = document.createElement("span");
+    num.className = "follow-up-num";
+    num.textContent = String(offer.number);
+
+    const title = createOfferLink(offer);
+
+    const meta = document.createElement("div");
+    meta.className = "follow-up-meta";
+    meta.textContent = offer.company || "";
+
+    const body = document.createElement("div");
+    body.className = "follow-up-body";
+    body.appendChild(title);
+    body.appendChild(meta);
+
+    const statusLabel = document.createElement("span");
+    statusLabel.className = "follow-up-status";
+    statusLabel.textContent = statusLabel(status);
+
+    const ago = document.createElement("span");
+    ago.className = "follow-up-ago";
+    ago.textContent = timeAgoShort(date);
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "follow-up-relance";
+    button.dataset.number = String(offer.number);
+    button.textContent = "Relancé";
+    button.title = "Marquer comme relancé aujourd'hui";
+
+    const row = document.createElement("div");
+    row.className = "follow-up-item";
+    row.appendChild(num);
+    row.appendChild(body);
+    row.appendChild(statusLabel);
+    row.appendChild(ago);
+    row.appendChild(button);
+
+    return row;
+}
+
+function getFollowUps() {
+    const now = Date.now();
+    const limit = FOLLOWUP_DAYS * 24 * 60 * 60 * 1000;
+    return currentOffers
+        .filter(offer => {
+            const number = String(offer.number);
+            const status = getStatus(number);
+            if (!FOLLOWUP_STATUSES.includes(status)) return false;
+            const date = getStatutDate(number);
+            if (!date) return false;
+            const t = new Date(date).getTime();
+            return !isNaN(t) && (now - t) >= limit;
+        })
+        .map(offer => ({
+            offer,
+            status: getStatus(String(offer.number)),
+            date: getStatutDate(String(offer.number)),
+        }))
+        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+}
+
+function refreshFollowUps() {
+    const panel = document.getElementById("followUpPanel");
+    const listEl = document.getElementById("followUpList");
+    const countEl = document.getElementById("followUpCount");
+    if (!panel || !listEl || !countEl) return;
+
+    const list = getFollowUps();
+
+    if (!list.length) {
+        panel.classList.add("hidden");
+        listEl.innerHTML = "";
+        return;
+    }
+
+    countEl.textContent = String(list.length);
+    listEl.innerHTML = "";
+    list.forEach(item => listEl.appendChild(buildFollowUpItem(item)));
+    panel.classList.remove("hidden");
+}
+
+function markFollowedUp(number) {
+    setStatutDate(number, new Date().toISOString());
+    refreshFollowUps();
+}
+
+function markAllFollowedUp() {
+    const now = new Date().toISOString();
+    const list = getFollowUps();
+    list.forEach(({ offer }) => {
+        statutDates[String(offer.number)] = now;
+    });
+    saveStatutDates();
+    refreshFollowUps();
 }
 
 
@@ -1127,6 +1340,7 @@ function offerMatchesKeys(offer, inputId) {
         offer.published_on,
         offer.offer_title,
         offer.company,
+        offer.email,
         offer.contract_type,
         offer.schedule,
         offer.pay,
@@ -1157,7 +1371,7 @@ function getOffersForExport() {
 
 function buildCsv(offers) {
     const header = [
-        "Numéro", "Statut", "Remarque", "Nom de l'offre", "Société",
+        "Numéro", "Statut", "Remarque", "Nom de l'offre", "Société", "Email",
         "Contrat", "Horaire", "Rémunération", "Lieu",
     ];
     const lines = [header.join(";")];
@@ -1169,6 +1383,7 @@ function buildCsv(offers) {
             getRemark(number).replace(/\r?\n/g, " "),
             offer.offer_title || "",
             offer.company || "",
+            offer.email || "",
             offer.contract_type || "",
             offer.schedule || "",
             offer.pay || "",
@@ -1369,6 +1584,8 @@ async function reloadTables() {
     cleanStatuses(currentNumbers);
     cleanRemarks(currentNumbers);
     cleanFavorites(currentNumbers);
+    cleanStatutDates(currentNumbers);
+    backfillStatutDates();
 
     try {
         renderCurrent(offers, scrapeDate);
@@ -1424,6 +1641,25 @@ async function init() {
             if (e.key === "Escape") closeStaleAlert();
         });
     }
+
+    const followUpAllBtn = document.getElementById("followUpAllBtn");
+    if (followUpAllBtn) {
+        followUpAllBtn.addEventListener("click", markAllFollowedUp);
+    }
+    const followUpList = document.getElementById("followUpList");
+    if (followUpList) {
+        followUpList.addEventListener("click", function (e) {
+            const btn = e.target.closest(".follow-up-relance");
+            if (!btn) return;
+            markFollowedUp(btn.dataset.number);
+        });
+    }
+    const followUpHint = document.getElementById("followUpHint");
+    if (followUpHint) {
+        followUpHint.textContent =
+            "Postulé ou contacté depuis plus de " + FOLLOWUP_DAYS + " jours.";
+    }
+    refreshFollowUps();
 
     await setupScrapingSelector();
 
