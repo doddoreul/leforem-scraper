@@ -25,6 +25,12 @@
     --star-color: #f59e0b;
     --focus-ring: rgba(37, 99, 235, 0.25);
     --scrollbar-thumb: #cbd5e1;
+    --alert-gone-bg: #fef2f2;
+    --alert-gone-text: #b91c1c;
+    --alert-gone-border: #fca5a5;
+    --alert-back-bg: #f0fdf4;
+    --alert-back-text: #15803d;
+    --alert-back-border: #86efac;
 }
 
 /* ============================================================
@@ -52,10 +58,16 @@
         --separation-text: #94a3b8;
         --link-hover: #93c5fd;
         --desc-toggle: #94a3b8;
-        --star-color: #fbbf24;
-        --focus-ring: rgba(59, 130, 246, 0.35);
-        --scrollbar-thumb: #334155;
-    }
+--star-color: #fbbf24;
+    --focus-ring: rgba(59, 130, 246, 0.35);
+    --scrollbar-thumb: #334155;
+    --alert-gone-bg: #3f1d1d;
+    --alert-gone-text: #fca5a5;
+    --alert-gone-border: #7f1d1d;
+    --alert-back-bg: #14301d;
+    --alert-back-text: #86efac;
+    --alert-back-border: #166534;
+}
 }
 
 /* ============================================================
@@ -592,6 +604,104 @@ th.sortable.sort-desc::after {
 .follow-up-relance:hover {
     background: var(--accent);
     color: var(--accent-text);
+}
+
+/* ============================================================
+   TRACKED OFFER ALERTS
+   ============================================================ */
+
+.tracked-alert-panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 14px;
+    box-shadow: var(--shadow-card);
+    padding: 10px 14px;
+    margin-bottom: 16px;
+}
+
+.tracked-alert-panel.hidden {
+    display: none;
+}
+
+.tracked-alert-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.tracked-alert-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+.tracked-alert-dismiss {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 3px 8px;
+    border-radius: 8px;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.tracked-alert-dismiss:hover {
+    background: var(--row-hover);
+    color: var(--text-primary);
+}
+
+.tracked-alert-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.tracked-alert-item {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--text-primary);
+    flex-wrap: wrap;
+}
+
+.tracked-alert-item a {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.tracked-alert-item a:hover {
+    text-decoration: underline;
+}
+
+.tracked-alert-badge {
+    flex: none;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+}
+
+.tracked-alert-gone .tracked-alert-badge {
+    background: var(--alert-gone-bg);
+    color: var(--alert-gone-text);
+    border-color: var(--alert-gone-border);
+}
+
+.tracked-alert-back .tracked-alert-badge {
+    background: var(--alert-back-bg);
+    color: var(--alert-back-text);
+    border-color: var(--alert-back-border);
 }
 
 /* ============================================================

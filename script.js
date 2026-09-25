@@ -78,6 +78,7 @@ function setStatus(number, value) {
     saveStatuses();
     saveStatutDates();
     refreshFollowUps();
+    renderTrackedAlerts();
 }
 
 function cleanStatuses(currentNumbers) {
@@ -585,6 +586,91 @@ function rerenderTables() {
         renderDeleted(deletedOffers);
     }
     applyFilters();
+    renderTrackedAlerts();
+}
+
+
+// ============================================================
+// TRACKING LOSS ALERTS
+// Warns (discretely) when a favorite / active application ends up
+// in the deleted offers, or comes back from there. Alerts are
+// recomputed from the current state; "Masquer" hides them for the
+// rest of the session.
+// ============================================================
+
+const TRACKED_ALERT_STATUSES = ["postule", "contacte"];
+
+let trackedAlertsDismissed = false;
+
+function getTrackedAlertNumbers() {
+    const set = new Set();
+    Object.keys(favorites).forEach(number => {
+        if (favorites[number] === true) {
+            set.add(number);
+        }
+    });
+    Object.keys(statuses).forEach(number => {
+        if (TRACKED_ALERT_STATUSES.indexOf(statuses[number]) !== -1) {
+            set.add(number);
+        }
+    });
+    return set;
+}
+
+function buildTrackedAlertItem(kind, offer, removedOn) {
+    const row = document.createElement("div");
+    row.className = "tracked-alert-item tracked-alert-" + kind;
+
+    const badge = document.createElement("span");
+    badge.className = "tracked-alert-badge";
+    badge.textContent = kind === "gone" ? "Disparue" : "De retour";
+
+    const message = document.createElement("span");
+    message.appendChild(createOfferLink(offer));
+    const company = offer.company ? " (" + offer.company + ")" : "";
+    const date = formatDate(removedOn);
+    message.appendChild(document.createTextNode(
+        kind === "gone"
+            ? company + " — passée dans les annonces supprimées (" + date + ")."
+            : company + " — de retour dans les annonces (supprimée le " + date + ")."
+    ));
+
+    row.appendChild(badge);
+    row.appendChild(message);
+    return row;
+}
+
+function renderTrackedAlerts() {
+    const panel = document.getElementById("trackedAlertPanel");
+    const list = document.getElementById("trackedAlertList");
+    if (!panel || !list) return;
+
+    if (trackedAlertsDismissed) {
+        panel.classList.add("hidden");
+        return;
+    }
+
+    const tracked = getTrackedAlertNumbers();
+    const currentNumbers = new Set(
+        (currentOffers || []).map(o => String(o.number))
+    );
+
+    const items = [];
+    (deletedOffers || []).forEach(offer => {
+        const number = String(offer.number);
+        if (!tracked.has(number)) return;
+        const kind = currentNumbers.has(number) ? "back" : "gone";
+        items.push(buildTrackedAlertItem(kind, offer, offer.removed_on));
+    });
+
+    list.innerHTML = "";
+    if (items.length === 0) {
+        panel.classList.add("hidden");
+        return;
+    }
+
+    items.forEach(item => list.appendChild(item));
+    panel.classList.remove("hidden");
 }
 
 function renderDeleted(offers) {
@@ -1746,10 +1832,13 @@ async function reloadTables() {
     lastData = data;
 
     const currentNumbers = new Set(offers.map(o => String(o.number)));
-    cleanStatuses(currentNumbers);
-    cleanRemarks(currentNumbers);
-    cleanFavorites(currentNumbers);
-    cleanStatutDates(currentNumbers);
+    const keepNumbers = new Set(currentNumbers);
+    deleted.forEach(o => keepNumbers.add(String(o.number)));
+
+    cleanStatuses(keepNumbers);
+    cleanRemarks(keepNumbers);
+    cleanFavorites(keepNumbers);
+    cleanStatutDates(keepNumbers);
     backfillStatutDates();
 
     try {
@@ -1757,6 +1846,7 @@ async function reloadTables() {
         renderDeleted(deleted);
         applyFilters();
         updateTitle(data);
+        renderTrackedAlerts();
     } catch (e) {
         console.error("Rendering error", e);
         showError(
@@ -1816,6 +1906,17 @@ async function init() {
             .addEventListener("click", closeStaleAlert);
         staleModal.addEventListener("keydown", function (e) {
             if (e.key === "Escape") closeStaleAlert();
+        });
+    }
+
+    const trackedAlertDismissBtn = document.getElementById("trackedAlertDismissBtn");
+    if (trackedAlertDismissBtn) {
+        trackedAlertDismissBtn.addEventListener("click", function () {
+            trackedAlertsDismissed = true;
+            const panel = document.getElementById("trackedAlertPanel");
+            if (panel) {
+                panel.classList.add("hidden");
+            }
         });
     }
 

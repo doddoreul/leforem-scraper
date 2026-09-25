@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Offres Forem — Électromécanicien industriel</title>
 
-<link rel="stylesheet" href="style.css?v=27">
+<link rel="stylesheet" href="style.css?v=28">
 
 </head>
 <body>
@@ -131,6 +131,18 @@
 
     </div>
 
+    <div class="tracked-alert-panel hidden" id="trackedAlertPanel" role="status">
+
+        <div class="tracked-alert-head">
+            <span class="tracked-alert-title">Suivi d'offres</span>
+            <button type="button" class="tracked-alert-dismiss" id="trackedAlertDismissBtn"
+                    title="Masquer ces alertes pour cette session">Masquer</button>
+        </div>
+
+        <div class="tracked-alert-list" id="trackedAlertList"></div>
+
+    </div>
+
     <div class="follow-up-panel hidden" id="followUpPanel">
 
         <div class="follow-up-head">
@@ -234,7 +246,7 @@
 
 </section>
 
-<script src="script.js?v=23"></script>
+<script src="script.js?v=24"></script>
 
 <div class="modal" id="searchModal" role="dialog" aria-modal="true" aria-labelledby="searchModalTitle">
 
