@@ -311,7 +311,7 @@ function createNotesCell(number) {
     td.className = "notes-cell";
 
     const textarea = document.createElement("textarea");
-    textarea.rows = 1;
+    textarea.rows = 5;
     textarea.placeholder = "…";
     textarea.value = getRemark(String(number));
     textarea.title = "Remarque personnelle";
@@ -495,6 +495,22 @@ function normalizeText(text) {
 
 function getKeywords(value) {
     return normalizeText(value).split(/\s+/).filter(Boolean);
+}
+
+function getStatusFromUrl() {
+    const value = new URLSearchParams(window.location.search).get("status");
+    const allowed = STATUS_OPTIONS.map(o => o.value).concat(["unsorted"]);
+    return allowed.includes(value) ? value : "";
+}
+
+function updateStatusInUrl(value) {
+    const url = new URL(window.location.href);
+    if (value) {
+        url.searchParams.set("status", value);
+    } else {
+        url.searchParams.delete("status");
+    }
+    window.history.replaceState({}, "", url);
 }
 
 function applyFilters() {
@@ -1023,7 +1039,11 @@ async function init() {
 
     const filter = document.getElementById("statusFilter");
     if (filter) {
-        filter.addEventListener("change", applyFilters);
+        filter.value = getStatusFromUrl();
+        filter.addEventListener("change", function () {
+            applyFilters();
+            updateStatusInUrl(filter.value);
+        });
     }
 
     ["currentSearch", "deletedSearch"].forEach(id => {

@@ -548,7 +548,7 @@ a:hover {
 
 .notes-cell textarea {
     width: 100%;
-    min-height: 32px;
+    min-height: 94px;
     resize: vertical;
     border: 1px solid transparent;
     border-radius: 8px;
