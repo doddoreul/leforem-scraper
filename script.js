@@ -961,6 +961,132 @@ function updateTitle(data) {
 
 
 // ============================================================
+// CSV EXPORT
+// ============================================================
+
+let currentOffers = [];
+
+function statusLabel(value) {
+    const option = STATUS_OPTIONS.find(o => o.value === value);
+    return option ? option.label : (value ? value : "");
+}
+
+function csvField(value) {
+    const text = String(value == null ? "" : value);
+    if (/[;"\r\n]/.test(text)) {
+        return '"' + text.replace(/"/g, '""') + '"';
+    }
+    return text;
+}
+
+function localDateString(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + d;
+}
+
+function offerMatchesKeys(offer, inputId) {
+    const input = document.getElementById(inputId);
+    if (!input) return true;
+    const keywords = getKeywords(input.value);
+    if (!keywords.length) return true;
+    const text = normalizeText([
+        offer.number,
+        offer.published_on,
+        offer.offer_title,
+        offer.company,
+        offer.contract_type,
+        offer.schedule,
+        offer.pay,
+        offer.location,
+    ].filter(Boolean).join(" "));
+    return keywords.every(word => text.includes(word));
+}
+
+function getOffersForExport() {
+    const filter = document.getElementById("statusFilter");
+    const statusValue = filter ? filter.value : "";
+
+    return currentOffers.filter(offer => {
+        const number = String(offer.number);
+        if (groupFilter === "new" && offer.is_new !== true) return false;
+        if (groupFilter === "old" && offer.is_new === true) return false;
+        if (statusValue !== "") {
+            const status = getStatus(number);
+            if (statusValue === "unsorted") {
+                if (status !== "") return false;
+            } else if (status !== statusValue) {
+                return false;
+            }
+        }
+        return offerMatchesKeys(offer, "currentSearch");
+    });
+}
+
+function buildCsv(offers) {
+    const header = [
+        "Numéro", "Statut", "Remarque", "Nom de l'offre", "Société",
+        "Contrat", "Horaire", "Rémunération", "Lieu",
+    ];
+    const lines = [header.join(";")];
+    offers.forEach(offer => {
+        const number = String(offer.number || "");
+        lines.push([
+            number,
+            statusLabel(getStatus(number)),
+            getRemark(number).replace(/\r?\n/g, " "),
+            offer.offer_title || "",
+            offer.company || "",
+            offer.contract_type || "",
+            offer.schedule || "",
+            offer.pay || "",
+            offer.location || "",
+        ].map(csvField).join(";"));
+    });
+    return "\uFEFF" + lines.join("\r\n");
+}
+
+function downloadCsv(filename, content) {
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function exportCsv() {
+    const offers = getOffersForExport();
+    const message = document.getElementById("exportMessage");
+
+    const select = document.getElementById("scrapingSelect");
+    const option = select && select.selectedOptions[0];
+    const base = (option && option.dataset.base) || "annonces";
+    const filename = "annonces_" + base + "_" +
+        localDateString(new Date()) + ".csv";
+
+    if (!offers.length) {
+        if (message) {
+            message.textContent = "Aucune annonce à exporter.";
+            setTimeout(function () { message.textContent = ""; }, 4000);
+        }
+        return;
+    }
+
+    downloadCsv(filename, buildCsv(offers));
+    if (message) {
+        message.textContent = offers.length +
+            " annonce(s) exportée(s) : " + filename;
+        setTimeout(function () { message.textContent = ""; }, 4000);
+    }
+}
+
+
+// ============================================================
 // INITIALIZATION
 // ============================================================
 
@@ -1033,6 +1159,8 @@ async function reloadTables() {
     const scrapeDate = data && data.scrape_timestamp
         ? data.scrape_timestamp : "";
 
+    currentOffers = offers;
+
     const currentNumbers = new Set(offers.map(o => String(o.number)));
     cleanStatuses(currentNumbers);
     cleanRemarks(currentNumbers);
@@ -1066,6 +1194,10 @@ async function init() {
     setupTabs();
     setupNewSearch();
     setupGroupFilterZones();
+    const exportBtn = document.getElementById("exportCsvBtn");
+    if (exportBtn) {
+        exportBtn.addEventListener("click", exportCsv);
+    }
     await setupScrapingSelector();
 
     const filter = document.getElementById("statusFilter");

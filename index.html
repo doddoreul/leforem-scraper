@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Offres Forem — Électromécanicien industriel</title>
 
-<link rel="stylesheet" href="style.css?v=15">
+<link rel="stylesheet" href="style.css?v=16">
 
 </head>
 <body>
@@ -88,6 +88,12 @@
                 <span>🔎</span>
                 <input type="search" id="currentSearch" placeholder="Rechercher… (mots clés)">
             </label>
+
+            <button class="export-btn" type="button" id="exportCsvBtn"
+                    title="Exporter les annonces visibles en CSV">
+                Exporter CSV
+            </button>
+            <span class="export-message" id="exportMessage"></span>
 
         </div>
 
@@ -179,7 +185,7 @@
 
 </section>
 
-<script src="script.js?v=15"></script>
+<script src="script.js?v=16"></script>
 
 <div class="modal" id="searchModal" role="dialog" aria-modal="true" aria-labelledby="searchModalTitle">
 
