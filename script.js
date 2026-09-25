@@ -8,6 +8,14 @@ const API_SCRAPINGS = "/api/scrapings";
 
 const DEFAULT_STORAGE_PREFIX = "forem_electromecanicien_";
 
+const TRACKED_PLAIN_KEYS = ["forem_scraping_select"];
+const TRACKED_KEY_PATTERN = /^forem_.+_(statuts|remarques|favoris|statut_dates)$/;
+
+function isTrackedStorageKey(key) {
+    return TRACKED_KEY_PATTERN.test(key) ||
+        TRACKED_PLAIN_KEYS.indexOf(key) !== -1;
+}
+
 let storagePrefix = DEFAULT_STORAGE_PREFIX;
 
 function getStorageKey(suffix) {
@@ -264,6 +272,16 @@ function cleanFavorites(currentNumbers) {
 let favorites = loadFavorites();
 
 
+// Re-reads the in-memory maps from localStorage. Needed when the
+// active scraping changes or after an import restores the data.
+function reloadStorageMaps() {
+    statuses = loadStatuses();
+    remarks = loadRemarks();
+    favorites = loadFavorites();
+    statutDates = loadStatutDates();
+}
+
+
 // ============================================================
 // RENDERING
 // ============================================================
@@ -374,6 +392,7 @@ function createStarCell(number) {
         this.textContent = active ? "★" : "☆";
         this.setAttribute("aria-pressed", active ? "true" : "false");
         this.classList.toggle("active", active);
+        rerenderTables();
     });
 
     td.appendChild(button);
@@ -474,9 +493,11 @@ function createCurrentRow(offer) {
     return tr;
 }
 
-function createSeparationRow(text) {
+function createSeparationRow(text, className) {
     const row = document.createElement("tr");
-    row.className = "separation-row";
+    row.className = className
+        ? "separation-row " + className
+        : "separation-row";
     row.dataset.separation = "true";
 
     const cell = document.createElement("td");
@@ -511,12 +532,12 @@ function createDeletedRow(offer) {
 }
 
 function renderCurrent(offers, scrapeDate) {
-    const newOffers = offers.filter(o => o.is_new === true);
-    const olderOffers = offers.filter(o => o.is_new !== true);
+    const allNew = offers.filter(o => o.is_new === true);
+    const allOld = offers.filter(o => o.is_new !== true);
 
     document.getElementById("statTotal").textContent = offers.length;
-    document.getElementById("statNew").textContent = newOffers.length;
-    document.getElementById("statOld").textContent = olderOffers.length;
+    document.getElementById("statNew").textContent = allNew.length;
+    document.getElementById("statOld").textContent = allOld.length;
     document.getElementById("statDate").textContent = scrapeDate ? formatDate(scrapeDate) : "—";
 
     const tbody = document.getElementById("currentRows");
@@ -534,6 +555,16 @@ function renderCurrent(offers, scrapeDate) {
         return;
     }
 
+    const favorites = offers.filter(o => isFavorite(String(o.number)));
+    const favNumbers = new Set(favorites.map(o => String(o.number)));
+    const newOffers = allNew.filter(o => !favNumbers.has(String(o.number)));
+    const olderOffers = allOld.filter(o => !favNumbers.has(String(o.number)));
+
+    if (favorites.length > 0) {
+        tbody.appendChild(createSeparationRow(`Favoris (${favorites.length})`, "separ-favorites"));
+        favorites.forEach(offer => tbody.appendChild(createCurrentRow(offer)));
+    }
+
     if (newOffers.length > 0) {
         tbody.appendChild(createSeparationRow(`Nouvelles annonces (${newOffers.length})`));
         newOffers.forEach(offer => tbody.appendChild(createCurrentRow(offer)));
@@ -545,6 +576,15 @@ function renderCurrent(offers, scrapeDate) {
     }
 
     refreshFollowUps();
+}
+
+function rerenderTables() {
+    if (!currentOffers) return;
+    renderCurrent(currentOffers, lastScrapeDate);
+    if (deletedOffers) {
+        renderDeleted(deletedOffers);
+    }
+    applyFilters();
 }
 
 function renderDeleted(offers) {
@@ -1169,6 +1209,7 @@ function switchScraping(e) {
     dataUrl = option.value;
     historyUrl = option.dataset.history || HISTORY_URL;
     setActiveScraping(option.dataset.base || "");
+    reloadStorageMaps();
     localStorage.setItem("forem_scraping_select", option.value);
     resetGroupFilter();
     resetSort();
@@ -1405,6 +1446,130 @@ function downloadCsv(filename, content) {
     URL.revokeObjectURL(url);
 }
 
+
+// ============================================================
+// TRACKING EXPORT / IMPORT
+// Statuses, remarks, favorites and relance dates are exported as a
+// single JSON file so the tracking can be moved to another PC.
+// ============================================================
+
+function downloadJson(filename, content) {
+    const blob = new Blob([content], { type: "application/json;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function showTrackingMessage(text) {
+    const el = document.getElementById("trackingMessage");
+    if (el) {
+        el.textContent = text;
+        setTimeout(function () { el.textContent = ""; }, 6000);
+    }
+}
+
+function setupImportExportMenu() {
+    const trigger = document.getElementById("importExportBtn");
+    const menu = document.getElementById("importExportMenu");
+    if (!trigger || !menu) return;
+
+    const setOpen = function (open) {
+        menu.hidden = !open;
+        trigger.setAttribute("aria-expanded", open ? "true" : "false");
+    };
+
+    trigger.addEventListener("click", function (e) {
+        e.stopPropagation();
+        setOpen(menu.hidden);
+    });
+
+    document.addEventListener("click", function (e) {
+        if (!menu.contains(e.target)) {
+            setOpen(false);
+        }
+    });
+
+    document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") {
+            setOpen(false);
+        }
+    });
+
+    menu.addEventListener("click", function (e) {
+        if (e.target.closest("button") || e.target.closest("label")) {
+            setOpen(false);
+        }
+    });
+}
+
+function exportTracking() {
+    const data = {};
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!isTrackedStorageKey(key)) continue;
+        try {
+            data[key] = JSON.parse(localStorage.getItem(key));
+        } catch (e) {
+            data[key] = localStorage.getItem(key);
+        }
+    }
+    const payload = {
+        app: "leforem-scraper",
+        schemaVersion: 1,
+        exportDate: new Date().toISOString(),
+        data: data
+    };
+    const filename = "suivi_forem_" + localDateString(new Date()) + ".json";
+    downloadJson(filename, JSON.stringify(payload, null, 2));
+    showTrackingMessage(
+        "Suivi exporté (" + Object.keys(data).length + " jeu(x) de données)."
+    );
+}
+
+function importTrackingFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function () {
+        let parsed;
+        try {
+            parsed = JSON.parse(reader.result);
+        } catch (e) {
+            showTrackingMessage("Fichier invalide : JSON illisible.");
+            return;
+        }
+        const payload = parsed && typeof parsed === "object" ? parsed : {};
+        const data = payload.data && typeof payload.data === "object"
+            ? payload.data : {};
+        let imported = 0;
+        Object.keys(data).forEach(key => {
+            if (!isTrackedStorageKey(key)) return;
+            try {
+                localStorage.setItem(key, JSON.stringify(data[key]));
+                imported++;
+            } catch (e) {
+                console.error("Unable to store imported key", key, e);
+            }
+        });
+        if (imported === 0) {
+            showTrackingMessage("Aucune donnée de suivi reconnue dans ce fichier.");
+            return;
+        }
+        reloadStorageMaps();
+        backfillStatutDates();
+        rerenderTables();
+        showTrackingMessage(imported + " jeu(x) de données importé(s).");
+    };
+    reader.onerror = function () {
+        showTrackingMessage("Impossible de lire le fichier.");
+    };
+    reader.readAsText(file, "utf-8");
+}
+
 function exportCsv() {
     const offers = getOffersForExport();
     const message = document.getElementById("exportMessage");
@@ -1620,6 +1785,18 @@ async function init() {
     if (exportBtn) {
         exportBtn.addEventListener("click", exportCsv);
     }
+    const exportTrackingBtn = document.getElementById("exportTrackingBtn");
+    if (exportTrackingBtn) {
+        exportTrackingBtn.addEventListener("click", exportTracking);
+    }
+    const importTrackingInput = document.getElementById("importTrackingInput");
+    if (importTrackingInput) {
+        importTrackingInput.addEventListener("change", function () {
+            importTrackingFile(this.files && this.files[0]);
+            this.value = "";
+        });
+    }
+    setupImportExportMenu();
 
     const closeStaleBtn = document.getElementById("closeStaleBtn");
     if (closeStaleBtn) {

@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Offres Forem — Électromécanicien industriel</title>
 
-<link rel="stylesheet" href="style.css?v=25">
+<link rel="stylesheet" href="style.css?v=27">
 
 </head>
 <body>
@@ -92,11 +92,40 @@
                 <input type="search" id="currentSearch" placeholder="Rechercher… (mots clés)">
             </label>
 
-            <button class="export-btn" type="button" id="exportCsvBtn"
-                    title="Exporter les annonces visibles en CSV">
-                Exporter CSV
-            </button>
+            <div class="dropdown" id="importExportDropdown">
+
+                <button class="export-btn" type="button" id="importExportBtn"
+                        aria-haspopup="menu" aria-expanded="false"
+                        title="Exporter les annonces ou le suivi, ou en importer un">
+                    Import&nbsp;/&nbsp;Export <span class="caret" aria-hidden="true">▾</span>
+                </button>
+
+                <div class="dropdown-menu" id="importExportMenu" hidden>
+
+                    <button type="button" id="exportCsvBtn"
+                            title="Exporter les annonces visibles en CSV">
+                        Exporter CSV
+                    </button>
+
+                    <button type="button" id="exportTrackingBtn"
+                            title="Sauvegarder statuts, remarques, favoris et relances en fichier JSON">
+                        Exporter le suivi
+                    </button>
+
+                    <label for="importTrackingInput"
+                           title="Restaurer un fichier de suivi exporté depuis un autre PC">
+                        Importer le suivi
+                    </label>
+
+                    <input type="file" id="importTrackingInput"
+                           accept=".json,application/json" hidden>
+
+                </div>
+
+            </div>
+
             <span class="export-message" id="exportMessage"></span>
+            <span class="export-message" id="trackingMessage"></span>
 
         </div>
 
@@ -205,7 +234,7 @@
 
 </section>
 
-<script src="script.js?v=21"></script>
+<script src="script.js?v=23"></script>
 
 <div class="modal" id="searchModal" role="dialog" aria-modal="true" aria-labelledby="searchModalTitle">
 
