@@ -301,6 +301,24 @@ h1 {
     color: var(--text-secondary);
 }
 
+th.sortable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+th.sortable.sort-asc::after {
+    content: " \25B2";
+    font-size: 9px;
+    color: var(--accent-text);
+}
+
+th.sortable.sort-desc::after {
+    content: " \25BC";
+    font-size: 9px;
+    color: var(--accent-text);
+}
+
 .stat {
     display: flex;
     align-items: baseline;
@@ -537,6 +555,10 @@ a:hover {
     color: var(--text-muted);
     font-size: 12px;
     text-align: center;
+}
+
+th.col-forem-id {
+    color: var(--accent-text);
 }
 
 .col-offer {

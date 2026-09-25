@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Offres Forem — Électromécanicien industriel</title>
 
-<link rel="stylesheet" href="style.css?v=16">
+<link rel="stylesheet" href="style.css?v=22">
 
 </head>
 <body>
@@ -106,13 +106,13 @@
             <thead>
             <tr>
                 <th class="col-star" title="Favori">★</th>
-                <th class="col-status">Statut</th>
-                <th class="col-published">Publication</th>
-                <th class="col-forem-id">ID Forem</th>
-                <th class="col-offer">Offre</th>
-                <th class="col-company">Société</th>
-                <th class="col-details">Contrat · Horaire · Rémunération</th>
-                <th class="col-location">Lieu</th>
+                <th class="col-status" data-sort="status">Statut</th>
+                <th class="col-published" data-sort="published_on">Publication</th>
+                <th class="col-forem-id" data-sort="number">ID Forem</th>
+                <th class="col-offer" data-sort="offer_title">Offre</th>
+                <th class="col-company" data-sort="company">Société</th>
+                <th class="col-details" data-sort="contract_type">Contrat · Horaire · Rémunération</th>
+                <th class="col-location" data-sort="location">Lieu</th>
                 <th class="col-notes">Remarque</th>
             </tr>
             </thead>
@@ -163,12 +163,12 @@
             <thead>
             <tr>
                 <th class="col-star" title="Favori">★</th>
-                <th class="col-forem-id">ID Forem</th>
-                <th class="col-offer">Offre</th>
-                <th class="col-company">Société</th>
-                <th class="col-details">Contrat · Horaire · Rémunération</th>
-                <th class="col-location">Lieu</th>
-                <th class="col-removed-on">Supprimée le</th>
+                <th class="col-forem-id" data-sort="number">ID Forem</th>
+                <th class="col-offer" data-sort="offer_title">Offre</th>
+                <th class="col-company" data-sort="company">Société</th>
+                <th class="col-details" data-sort="contract_type">Contrat · Horaire · Rémunération</th>
+                <th class="col-location" data-sort="location">Lieu</th>
+                <th class="col-removed-on" data-sort="removed_on">Supprimée le</th>
                 <th class="col-notes">Remarque</th>
             </tr>
             </thead>
@@ -185,7 +185,7 @@
 
 </section>
 
-<script src="script.js?v=16"></script>
+<script src="script.js?v=19"></script>
 
 <div class="modal" id="searchModal" role="dialog" aria-modal="true" aria-labelledby="searchModalTitle">
 
@@ -234,6 +234,36 @@
         <div class="modal-footer">
             <button class="btn-secondary" type="button" id="cancelModalBtn">Annuler</button>
             <button class="btn-primary" type="button" id="copyCommandBtn" disabled>Copier la commande</button>
+        </div>
+
+    </div>
+
+</div>
+
+<div class="modal" id="staleModal" role="dialog" aria-modal="true" aria-labelledby="staleModalTitle">
+
+    <div class="modal-backdrop"></div>
+
+    <div class="modal-box">
+
+        <div class="modal-header">
+            <h2 id="staleModalTitle">Données peut-être obsolètes</h2>
+            <button class="modal-close" type="button" id="closeStaleBtn" aria-label="Fermer">✕</button>
+        </div>
+
+        <p class="modal-hint">
+            Le dernier scraping date de <strong id="staleAge">—</strong>.
+            De nouvelles annonces ont peut-être été publiées depuis.
+            Lance le scraping pour les afficher :
+        </p>
+
+        <label class="command-label" for="staleCommandBox">Commande à coller dans le terminal</label>
+        <textarea id="staleCommandBox" class="command-box" rows="3" readonly spellcheck="false"></textarea>
+        <p class="confirmation-status" id="staleStatus"></p>
+
+        <div class="modal-footer">
+            <button class="btn-secondary" type="button" id="closeStaleFooterBtn">Plus tard</button>
+            <button class="btn-primary" type="button" id="copyStaleBtn">Copier la commande</button>
         </div>
 
     </div>

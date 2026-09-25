@@ -435,6 +435,13 @@ function renderCurrent(offers, scrapeDate) {
         return;
     }
 
+    if (sortIsActive() && sortTable === "currentRows") {
+        sortedOffers(offers).forEach(offer => {
+            tbody.appendChild(createCurrentRow(offer));
+        });
+        return;
+    }
+
     if (newOffers.length > 0) {
         tbody.appendChild(createSeparationRow(`Nouvelles annonces (${newOffers.length})`));
         newOffers.forEach(offer => tbody.appendChild(createCurrentRow(offer)));
@@ -455,18 +462,23 @@ function renderDeleted(offers) {
         counter.textContent = String(offers.length);
     }
 
-    const sorted = offers.slice().sort((a, b) => {
-        const aTime = new Date(a.removed_on || "1970-01-01T00:00:00").getTime();
-        const bTime = new Date(b.removed_on || "1970-01-01T00:00:00").getTime();
-        return bTime - aTime;
-    });
+    let list;
+    if (sortIsActive() && sortTable === "deletedRows") {
+        list = sortedOffers(offers);
+    } else {
+        list = offers.slice().sort((a, b) => {
+            const aTime = new Date(a.removed_on || "1970-01-01T00:00:00").getTime();
+            const bTime = new Date(b.removed_on || "1970-01-01T00:00:00").getTime();
+            return bTime - aTime;
+        });
+    }
 
-    if (sorted.length === 0) {
+    if (list.length === 0) {
         tbody.appendChild(createInfoRow("Aucune annonce supprimée.", 8));
         return;
     }
 
-    sorted.forEach(offer => tbody.appendChild(createDeletedRow(offer)));
+    list.forEach(offer => tbody.appendChild(createDeletedRow(offer)));
 }
 
 
@@ -946,6 +958,7 @@ function switchScraping(e) {
     setActiveScraping(option.dataset.base || "");
     localStorage.setItem("forem_scraping_select", option.value);
     resetGroupFilter();
+    resetSort();
     reloadTables();
 }
 
@@ -961,10 +974,128 @@ function updateTitle(data) {
 
 
 // ============================================================
-// CSV EXPORT
+// SHARED STATE
 // ============================================================
 
 let currentOffers = [];
+let deletedOffers = [];
+let lastScrapeDate = "";
+let lastData = null;
+let staleAlertShown = false;
+
+let sortTable = null;
+let sortKey = null;
+let sortDir = 0; // 0 none, 1 ascending, -1 descending
+
+
+// ============================================================
+// TABLE SORTING
+// ============================================================
+
+function parseSortDate(value) {
+    if (!value) return 0;
+    const short = /^(\d{1,2})-(\d{1,2})-(\d{2})$/.exec(value);
+    if (short) {
+        return new Date(
+            "20" + short[3] + "-" + short[2] + "-" + short[1]
+        ).getTime();
+    }
+    const t = new Date(value).getTime();
+    return isNaN(t) ? 0 : t;
+}
+
+function getStatusRank(offer) {
+    const value = getStatus(String(offer.number)) || "";
+    const idx = STATUS_OPTIONS.findIndex(o => o.value === value);
+    return idx === -1 ? STATUS_OPTIONS.length : idx;
+}
+
+function getSortValue(offer, key) {
+    switch (key) {
+        case "status":
+            return getStatusRank(offer);
+        case "published_on":
+        case "removed_on":
+            return parseSortDate(offer[key]);
+        case "number":
+            return String(offer.number || "");
+        default:
+            return String(offer[key] || "");
+    }
+}
+
+function compareForSort(a, b, key, dir) {
+    const va = getSortValue(a, key);
+    const vb = getSortValue(b, key);
+    if (typeof va === "number" && typeof vb === "number") {
+        return (va - vb) * dir;
+    }
+    return va.localeCompare(vb, "fr", { sensitivity: "base" }) * dir;
+}
+
+function sortedOffers(offers) {
+    if (!sortKey || !sortDir) return offers;
+    return offers.slice().sort(function (a, b) {
+        return compareForSort(a, b, sortKey, sortDir);
+    });
+}
+
+function sortIsActive() {
+    return Boolean(sortKey && sortDir);
+}
+
+function tableKeyFor(th) {
+    const tbody = th.closest("table").querySelector("tbody");
+    return tbody ? tbody.id : "";
+}
+
+function setupSortableColumns() {
+    document.querySelectorAll("th[data-sort]").forEach(th => {
+        th.classList.add("sortable");
+        th.addEventListener("click", function () {
+            const tableKey = tableKeyFor(th);
+            const key = this.dataset.sort;
+            if (sortKey === key && sortTable === tableKey) {
+                if (sortDir === 1) {
+                    sortDir = -1;
+                } else {
+                    sortTable = null;
+                    sortKey = null;
+                    sortDir = 0;
+                }
+            } else {
+                sortTable = tableKey;
+                sortKey = key;
+                sortDir = 1;
+            }
+            updateSortHeaders();
+            renderCurrent(currentOffers, lastScrapeDate);
+            renderDeleted(deletedOffers);
+            applyFilters();
+        });
+    });
+}
+
+function updateSortHeaders() {
+    document.querySelectorAll("th[data-sort]").forEach(th => {
+        th.classList.remove("sort-asc", "sort-desc");
+        if (th.dataset.sort === sortKey && tableKeyFor(th) === sortTable) {
+            th.classList.add(sortDir === 1 ? "sort-asc" : "sort-desc");
+        }
+    });
+}
+
+function resetSort() {
+    sortTable = null;
+    sortKey = null;
+    sortDir = 0;
+    updateSortHeaders();
+}
+
+
+// ============================================================
+// CSV EXPORT
+// ============================================================
 
 function statusLabel(value) {
     const option = STATUS_OPTIONS.find(o => o.value === value);
@@ -1087,6 +1218,76 @@ function exportCsv() {
 
 
 // ============================================================
+// STALE SCRAPE ALERT
+// ============================================================
+
+const STALE_AFTER_HOURS = 12;
+
+function buildScrapeCommand(data) {
+    if (!data) return "";
+    const parts = ["python", "scraper.py"];
+    if (data.occupation_guid) {
+        parts.push("--occupation-guid " + data.occupation_guid);
+    }
+    if (data.location_guid) {
+        parts.push("--location-guid " + data.location_guid);
+    }
+    if (data.name) {
+        parts.push("--base " + data.name);
+    }
+    if (data.label) {
+        parts.push("--label \"" + data.label + "\"");
+    }
+    return parts.join(" ");
+}
+
+function timeAgoLabel(timestamp) {
+    if (!timestamp) return "date inconnue";
+    const hours = Math.floor(
+        (Date.now() - new Date(timestamp).getTime()) / 3600000
+    );
+    if (hours < 1) return "il y a moins d'une heure";
+    if (hours < 24) return "il y a " + hours + " h";
+    const days = Math.floor(hours / 24);
+    return "il y a " + days + " jour(s)";
+}
+
+function maybeShowStaleAlert(data, scrapeDate) {
+    if (staleAlertShown || !data) return;
+    const t = new Date(scrapeDate).getTime();
+    if (isNaN(t)) return;
+    const tooOld =
+        Date.now() - t > STALE_AFTER_HOURS * 3600 * 1000;
+    if (!tooOld) return;
+
+    staleAlertShown = true;
+    document.getElementById("staleAge").textContent = timeAgoLabel(scrapeDate);
+    document.getElementById("staleCommandBox").value = buildScrapeCommand(data);
+    document.getElementById("staleStatus").textContent = "";
+    document.getElementById("staleModal").classList.add("visible");
+}
+
+function closeStaleAlert() {
+    const modal = document.getElementById("staleModal");
+    if (modal) modal.classList.remove("visible");
+}
+
+async function copyStaleCommand() {
+    const box = document.getElementById("staleCommandBox");
+    const status = document.getElementById("staleStatus");
+    if (!box.value) return;
+    try {
+        await navigator.clipboard.writeText(box.value);
+        status.textContent = "Commande copiée.";
+    } catch (e) {
+        box.select();
+        document.execCommand("copy");
+        status.textContent = "Commande copiée.";
+    }
+}
+
+
+// ============================================================
 // INITIALIZATION
 // ============================================================
 
@@ -1160,6 +1361,9 @@ async function reloadTables() {
         ? data.scrape_timestamp : "";
 
     currentOffers = offers;
+    deletedOffers = deleted;
+    lastScrapeDate = scrapeDate;
+    lastData = data;
 
     const currentNumbers = new Set(offers.map(o => String(o.number)));
     cleanStatuses(currentNumbers);
@@ -1194,10 +1398,33 @@ async function init() {
     setupTabs();
     setupNewSearch();
     setupGroupFilterZones();
+    setupSortableColumns();
     const exportBtn = document.getElementById("exportCsvBtn");
     if (exportBtn) {
         exportBtn.addEventListener("click", exportCsv);
     }
+
+    const closeStaleBtn = document.getElementById("closeStaleBtn");
+    if (closeStaleBtn) {
+        closeStaleBtn.addEventListener("click", closeStaleAlert);
+    }
+    const closeStaleFooterBtn = document.getElementById("closeStaleFooterBtn");
+    if (closeStaleFooterBtn) {
+        closeStaleFooterBtn.addEventListener("click", closeStaleAlert);
+    }
+    const copyStaleBtn = document.getElementById("copyStaleBtn");
+    if (copyStaleBtn) {
+        copyStaleBtn.addEventListener("click", copyStaleCommand);
+    }
+    const staleModal = document.getElementById("staleModal");
+    if (staleModal) {
+        staleModal.querySelector(".modal-backdrop")
+            .addEventListener("click", closeStaleAlert);
+        staleModal.addEventListener("keydown", function (e) {
+            if (e.key === "Escape") closeStaleAlert();
+        });
+    }
+
     await setupScrapingSelector();
 
     const filter = document.getElementById("statusFilter");
@@ -1217,6 +1444,7 @@ async function init() {
     });
 
     await reloadTables();
+    maybeShowStaleAlert(lastData, lastScrapeDate);
 }
 
 document.addEventListener("DOMContentLoaded", init);
