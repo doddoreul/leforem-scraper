@@ -453,8 +453,10 @@ function createDescriptionBlock(offer) {
     const head = document.createElement("div");
     head.className = "offer-head";
 
-    const badge = createStateBadge(getOfferState(offer));
-    head.appendChild(badge);
+    const state = getOfferState(offer);
+    if (state !== "unchanged" && state !== "old") {
+        head.appendChild(createStateBadge(state));
+    }
 
     const title = createOfferLink(offer);
     head.appendChild(title);

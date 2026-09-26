@@ -247,6 +247,26 @@ def record_scrape(history, entry):
     return history
 
 
+def merge_details(previous, fetched, keep):
+    """Merge the raw detail payloads of two runs into one store.
+
+    `previous` and `fetched` are dicts {number: payload}. Payloads are
+    kept only for numbers in `keep` (current offers + deleted tombstone).
+    A range freshly fetched this run always wins over the cached one.
+    """
+    merged = {}
+    if isinstance(previous, dict):
+        for number in keep:
+            payload = previous.get(number)
+            if payload is not None:
+                merged[number] = payload
+    if isinstance(fetched, dict):
+        for number, payload in fetched.items():
+            if payload is not None:
+                merged[number] = payload
+    return merged
+
+
 # ============================================================
 # DATES
 # ============================================================

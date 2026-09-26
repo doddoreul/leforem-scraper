@@ -10,6 +10,7 @@ import requests
 import scraper
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
 
 PORT = 8123
 
@@ -32,19 +33,17 @@ STATIC_FILES = {
     "/script.js": ("script.js", "application/javascript; charset=utf-8"),
     "/insights.js": ("insights.js", "application/javascript; charset=utf-8"),
     "/detail.js": ("detail.js", "application/javascript; charset=utf-8"),
-    "/data.json": ("data.json", "application/json; charset=utf-8"),
-    "/historique_supprimees.json": (
-        "historique_supprimees.json", "application/json; charset=utf-8"
-    ),
-    "/historique_modifications.json": (
-        "historique_modifications.json", "application/json; charset=utf-8"
-    ),
-    "/historique_scrapes.json": (
-        "historique_scrapes.json", "application/json; charset=utf-8"
-    ),
 }
 
-CLEAN_FILE_NAME = re.compile(r"data_[A-Za-z0-9_-]+\.json")
+DATA_FILES = {
+    "/data.json": "data.json",
+    "/details.json": "details.json",
+    "/historique_supprimees.json": "historique_supprimees.json",
+    "/historique_modifications.json": "historique_modifications.json",
+    "/historique_scrapes.json": "historique_scrapes.json",
+}
+
+CLEAN_FILE_NAME = re.compile(r"(data|details)_[A-Za-z0-9_-]+\.json")
 
 SESSION = requests.Session()
 SESSION.headers.update(scraper.HEADERS)
@@ -64,6 +63,12 @@ def scrape_files_for(name):
     )
 
 
+def details_file_for(name):
+    if name:
+        return f"details_{name}.json"
+    return "details.json"
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "LeForemScraper/1.0"
 
@@ -77,24 +82,32 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _serve_file(self, path):
-        if path in STATIC_FILES:
+        if path in DATA_FILES:
+            file_name = DATA_FILES[path]
+            file_root = DATA_DIR
+            mime_type = "application/json; charset=utf-8"
+        elif path in STATIC_FILES:
             file_name, mime_type = STATIC_FILES[path]
+            file_root = BASE_DIR
         else:
             base_name = os.path.basename(path)
-            if CLEAN_FILE_NAME.fullmatch(base_name):
-                file_name = base_name
-                mime_type = "application/json; charset=utf-8"
-            elif base_name.startswith("historique_") and base_name.endswith(
-                ".json"
+            if (
+                CLEAN_FILE_NAME.fullmatch(base_name)
+                or (
+                    base_name.startswith("historique_")
+                    and base_name.endswith(".json")
+                )
             ):
                 file_name = base_name
+                file_root = DATA_DIR
                 mime_type = "application/json; charset=utf-8"
             else:
                 self.send_error(404)
                 return
 
-        file_path = os.path.join(BASE_DIR, file_name)
-        if os.path.dirname(file_path) != BASE_DIR:
+        file_dir = os.path.normpath(file_root)
+        file_path = os.path.normpath(os.path.join(file_dir, file_name))
+        if os.path.dirname(file_path) != file_dir:
             self.send_error(404)
             return
         try:
@@ -133,16 +146,21 @@ class Handler(BaseHTTPRequestHandler):
         self._serve_file(path)
 
     def _handle_scrapings(self):
+        if not os.path.isdir(DATA_DIR):
+            self._send_json(200, [])
+            return
         results = []
-        for file_name in sorted(os.listdir(BASE_DIR)):
+        for file_name in sorted(os.listdir(DATA_DIR)):
             if file_name == "data.json":
                 name = ""
-            elif CLEAN_FILE_NAME.fullmatch(file_name):
+            elif CLEAN_FILE_NAME.fullmatch(file_name) and file_name.startswith(
+                "data_"
+            ):
                 name = file_name[len("data_"):-len(".json")]
             else:
                 continue
             try:
-                with open(os.path.join(BASE_DIR, file_name),
+                with open(os.path.join(DATA_DIR, file_name),
                           "r", encoding="utf-8") as f:
                     data = json.load(f)
             except (OSError, json.JSONDecodeError):
@@ -155,6 +173,7 @@ class Handler(BaseHTTPRequestHandler):
                 "file": file_name,
                 "history": scrape_files_for(name)[1],
                 "modifications": scrape_files_for(name)[2],
+                "details": details_file_for(name),
                 "label": data.get("label", "") or "",
                 "scrape_timestamp": data.get("scrape_timestamp", "") or "",
                 "occupationGuid": data.get("occupation_guid", "") or "",

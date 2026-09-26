@@ -351,5 +351,41 @@ class TestScraperHelpers(unittest.TestCase):
         self.assertEqual(offer["published_on"], "16-09-26")
 
 
+class TestMergeDetails(unittest.TestCase):
+    def test_fetched_wins_over_previous(self):
+        previous = {"1": {"a": 1}, "2": {"a": 2}}
+        fetched = {"1": {"a": 3}}
+        merged = core.merge_details(
+            previous=previous, fetched=fetched, keep={"1", "2", "3"}
+        )
+        self.assertEqual(merged["1"], {"a": 3})
+        self.assertEqual(merged["2"], {"a": 2})
+
+    def test_only_kept_numbers_are_preserved(self):
+        previous = {"1": {"a": 1}, "2": {"a": 2}, "3": {"a": 3}}
+        fetched = {"4": {"a": 4}}
+        merged = core.merge_details(
+            previous=previous, fetched=fetched, keep={"2", "4"}
+        )
+        self.assertEqual(set(merged.keys()), {"2", "4"})
+
+    def test_fetched_number_added_even_if_not_in_keep(self):
+        previous = {"1": {"a": 1}}
+        fetched = {"9": {"a": 9}}
+        merged = core.merge_details(
+            previous=previous, fetched=fetched, keep={"1"}
+        )
+        self.assertEqual(merged["9"], {"a": 9})
+
+    def test_no_payloads_are_dropped_as_none(self):
+        previous = {"1": None, "2": {"a": 2}}
+        fetched = {"2": None}
+        merged = core.merge_details(
+            previous=previous, fetched=fetched, keep={"1", "2"}
+        )
+        self.assertEqual(merged.get("1"), None)
+        self.assertEqual(merged["2"], {"a": 2})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -51,11 +51,12 @@ HEADERS = {
     "Referer": "https://www.leforem.be/recherche-offres/resultat-recherche",
 }
 
-DATA_FILE = "data.json"
-HISTORY_FILE = "historique_supprimees.json"
-MODIFICATIONS_FILE = "historique_modifications.json"
-SCRAPES_FILE = "historique_scrapes.json"
-BLACKLIST_FILE = "blacklist.json"
+DATA_DIR = "data"
+DATA_FILE = os.path.join(DATA_DIR, "data.json")
+HISTORY_FILE = os.path.join(DATA_DIR, "historique_supprimees.json")
+MODIFICATIONS_FILE = os.path.join(DATA_DIR, "historique_modifications.json")
+SCRAPES_FILE = os.path.join(DATA_DIR, "historique_scrapes.json")
+BLACKLIST_FILE = os.path.join(DATA_DIR, "blacklist.json")
 VERSION = 1
 
 
@@ -66,6 +67,7 @@ VERSION = 1
 _throttle_lock = threading.Lock()
 _next_request_at = 0.0
 _blacklist_lock = threading.Lock()
+_details_lock = threading.Lock()
 _thread_local = threading.local()
 
 
@@ -634,6 +636,7 @@ def read_history(path=HISTORY_FILE, timestamp=""):
 
 def write_json_atomically(path, content):
     tmp_path = f"{path}.tmp"
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(content, f, ensure_ascii=False, indent=2)
         f.write("\n")
@@ -668,15 +671,30 @@ def scraper_files(base_name):
     """File names for a scrape, keeping each search isolated."""
     if base_name:
         return (
-            f"data_{base_name}.json",
-            f"historique_{base_name}.json",
-            f"historique_modifications_{base_name}.json",
+            os.path.join(DATA_DIR, f"data_{base_name}.json"),
+            os.path.join(DATA_DIR, f"historique_{base_name}.json"),
+            os.path.join(DATA_DIR, f"historique_modifications_{base_name}.json"),
         )
     return (
         DATA_FILE,
         HISTORY_FILE,
         MODIFICATIONS_FILE,
     )
+
+
+def details_file(base_name):
+    """Raw detail payload store for a scrape (`details.json` or
+    `details_<base>.json`), kept under data/."""
+    if base_name:
+        return os.path.join(DATA_DIR, f"details_{base_name}.json")
+    return os.path.join(DATA_DIR, "details.json")
+
+
+def read_details(path):
+    data = read_json(path, None)
+    if isinstance(data, dict) and isinstance(data.get("details"), dict):
+        return data.get("details") or {}
+    return {}
 
 
 # ============================================================
@@ -790,6 +808,7 @@ def main():
 
     base_name = re.sub(r"[^A-Za-z0-9_-]+", "-", args.base).strip("-")
     data_file, history_file, modifications_file = scraper_files(base_name)
+    details_file_path = details_file(base_name)
 
     now = now_iso_timestamp()
 
@@ -815,6 +834,8 @@ def main():
     )
     scrapes = core.read_scrape_history(SCRAPES_FILE)
 
+    previous_details = read_details(details_file_path)
+
     blacklist = read_blacklist()
     if blacklist:
         print(f"Offers tracked as missing: {len(blacklist)}")
@@ -826,6 +847,7 @@ def main():
     if args.label:
         print(f"Label: {args.label}")
     print(f"Files: {data_file}, {history_file}, {modifications_file}")
+    print(f"Details: {details_file_path}")
     print(f"Scrape history: {SCRAPES_FILE}")
 
     if args.limit is not None:
@@ -863,6 +885,7 @@ def main():
             return
 
     new_offers = []
+    new_details = {}
     force_retry = args.fresh or args.retry_blacklist
 
     if search_results:
@@ -898,6 +921,8 @@ def main():
                 offer = build_offer(
                     detail, published_on=published_on
                 )
+                with _details_lock:
+                    new_details[number] = detail
                 return task, offer, "fetched"
             except requests.HTTPError as e:
                 status = (
@@ -1040,6 +1065,22 @@ def main():
     write_json_atomically(data_file, data)
     write_blacklist(blacklist)
 
+    keep_details_numbers = {
+        clean_text(o.get("number"))
+        for o in new_offers
+        if isinstance(o, dict) and clean_text(o.get("number"))
+    } | set(deleted_numbers)
+    final_details = core.merge_details(
+        previous=previous_details,
+        fetched=new_details,
+        keep=keep_details_numbers,
+    )
+    write_json_atomically(details_file_path, {
+        "version": VERSION,
+        "updated_timestamp": now,
+        "details": final_details,
+    })
+
     print()
     print(
         f"Done: {len(new_offers)} offer(s) "
@@ -1052,7 +1093,8 @@ def main():
     )
     print(
         f"Files written: {data_file}, {history_file}, "
-        f"{modifications_file}, {SCRAPES_FILE}"
+        f"{modifications_file}, {SCRAPES_FILE}, "
+        f"{details_file_path}"
     )
 
 
