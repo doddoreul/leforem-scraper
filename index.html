@@ -6,10 +6,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Offres Forem — Électromécanicien industriel</title>
 
-<link rel="stylesheet" href="style.css?v=28">
+<link rel="stylesheet" href="style.css?v=31">
 
 </head>
 <body>
+
+<nav class="page-nav" aria-label="Navigation entre pages">
+
+    <div class="page-nav-inner">
+
+        <a class="page-link active" href="index.html" aria-current="page">Offres</a>
+
+        <a class="page-link" href="insights.html">Dashboard</a>
+
+    </div>
+
+</nav>
 
 <header class="header">
 
@@ -126,6 +138,84 @@
 
             <span class="export-message" id="exportMessage"></span>
             <span class="export-message" id="trackingMessage"></span>
+
+        </div>
+
+        <div class="tools filters-advanced" id="advancedFilters">
+
+            <label class="filter" for="stateFilter">
+                <span>État :</span>
+                <select id="stateFilter">
+                    <option value="">Tous</option>
+                    <option value="new">Nouvelle</option>
+                    <option value="updated">Modifiée</option>
+                    <option value="reappeared">De retour</option>
+                    <option value="old">Ancienne</option>
+                </select>
+            </label>
+
+            <label class="filter" for="contractFilter">
+                <span>Contrat :</span>
+                <select id="contractFilter">
+                    <option value="">Tous</option>
+                    <option value="cdi">CDI</option>
+                    <option value="cdd">CDD</option>
+                    <option value="interim">Intérim</option>
+                    <option value="autre">Autre</option>
+                </select>
+            </label>
+
+            <label class="filter" for="scheduleFilter">
+                <span>Horaire :</span>
+                <select id="scheduleFilter">
+                    <option value="">Tous</option>
+                    <option value="plein">Temps plein</option>
+                    <option value="partiel">Temps partiel</option>
+                    <option value="jour">De jour</option>
+                    <option value="nuit">De nuit</option>
+                    <option value="weekend">Week-end</option>
+                    <option value="pauses">Pauses (2x8 / 3x8)</option>
+                </select>
+            </label>
+
+            <label class="filter" for="salaryFilter">
+                <span>Rémunération :</span>
+                <select id="salaryFilter">
+                    <option value="">Indifférent</option>
+                    <option value="oui">Renseignée</option>
+                    <option value="non">Non renseignée</option>
+                </select>
+            </label>
+
+            <label class="filter" for="dateFilter">
+                <span>Publiée :</span>
+                <select id="dateFilter">
+                    <option value="">Peu importe</option>
+                    <option value="today">Aujourd'hui</option>
+                    <option value="24h">Depuis 24h</option>
+                    <option value="3j">3 derniers jours</option>
+                    <option value="7j">7 derniers jours</option>
+                    <option value="30j">30 derniers jours</option>
+                </select>
+            </label>
+
+            <label class="filter" for="expireFilter">
+                <span>Échéance :</span>
+                <select id="expireFilter">
+                    <option value="">Peu importe</option>
+                    <option value="soon">Expire sous 7 jours</option>
+                </select>
+            </label>
+
+            <label class="filter" for="priorityFilter">
+                <span>Priorité :</span>
+                <select id="priorityFilter">
+                    <option value="">Toutes</option>
+                    <option value="haute">Haute</option>
+                    <option value="moyenne">Moyenne</option>
+                    <option value="faible">Faible</option>
+                </select>
+            </label>
 
         </div>
 
@@ -246,7 +336,7 @@
 
 </section>
 
-<script src="script.js?v=24"></script>
+<script src="script.js?v=26"></script>
 
 <div class="modal" id="searchModal" role="dialog" aria-modal="true" aria-labelledby="searchModalTitle">
 

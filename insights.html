@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — Suivi Forem</title>
+
+<link rel="stylesheet" href="style.css?v=31">
+
+</head>
+<body>
+
+<nav class="page-nav" aria-label="Navigation entre pages">
+
+    <div class="page-nav-inner">
+
+        <a class="page-link" href="index.html">Offres</a>
+
+        <a class="page-link active" href="insights.html" aria-current="page">Dashboard</a>
+
+    </div>
+
+</nav>
+
+<main class="dashboard">
+
+    <header class="dash-head">
+
+        <div>
+            <h1 class="dash-title">LE FOREM MONITOR</h1>
+            <p class="dash-sub">
+                Suivi des offres, des évolutions et de ta progression.
+            </p>
+        </div>
+
+        <label class="filter" for="dashScope">
+            <span>Recherche :</span>
+            <select id="dashScope">
+                <option value="all">Toutes les recherches</option>
+            </select>
+        </label>
+
+    </header>
+
+    <section class="dash-kpis" id="kpiRow" aria-label="Indicateurs clés"></section>
+
+    <div class="dash-grid">
+
+        <section class="dash-card dash-card-wide" id="card-evolution" aria-labelledby="evolutionTitle">
+            <h2 class="dash-card-title" id="evolutionTitle">Évolution des offres au fil des scrapings</h2>
+            <canvas id="evolutionCanvas" class="dash-canvas" aria-label="Graphique d'évolution des offres"></canvas>
+            <p class="dash-note" id="evolutionNote"></p>
+        </section>
+
+        <section class="dash-card" id="card-statuses" aria-labelledby="statusTitle">
+            <h2 class="dash-card-title" id="statusTitle">Candidatures</h2>
+            <div id="statusBars" class="dash-bars"></div>
+        </section>
+
+        <section class="dash-card" id="card-new" aria-labelledby="newTitle">
+            <h2 class="dash-card-title" id="newTitle">Nouvelles offres (récentes)</h2>
+            <ul id="newList" class="dash-list"></ul>
+        </section>
+
+        <section class="dash-card" id="card-modifs" aria-labelledby="modifsTitle">
+            <h2 class="dash-card-title" id="modifsTitle">Modifications récentes</h2>
+            <ul id="modifsList" class="dash-list"></ul>
+        </section>
+
+        <section class="dash-card" id="card-lieux" aria-labelledby="lieuxTitle">
+            <h2 class="dash-card-title" id="lieuxTitle">Lieux</h2>
+            <div id="lieuxBars" class="dash-bars"></div>
+        </section>
+
+        <section class="dash-card" id="card-contrats" aria-labelledby="contratsTitle">
+            <h2 class="dash-card-title" id="contratsTitle">Contrats</h2>
+            <div id="contratsBars" class="dash-bars"></div>
+        </section>
+
+        <section class="dash-card" id="card-horaires" aria-labelledby="horairesTitle">
+            <h2 class="dash-card-title" id="horairesTitle">Horaires</h2>
+            <div id="horairesBars" class="dash-bars"></div>
+        </section>
+
+        <section class="dash-card" id="card-salaire" aria-labelledby="salaireTitle">
+            <h2 class="dash-card-title" id="salaireTitle">Rémunération</h2>
+            <div id="salaireStats" class="dash-bars"></div>
+        </section>
+
+        <section class="dash-card dash-card-wide" id="card-scrapes" aria-labelledby="scrapesTitle">
+            <h2 class="dash-card-title" id="scrapesTitle">Historique des scrapings</h2>
+            <div class="dash-table-wrap">
+                <table class="dash-table">
+                    <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Recherche</th>
+                        <th>Total</th>
+                        <th>Nouvelles</th>
+                        <th>Modifiées</th>
+                        <th>Revenues</th>
+                        <th>Supprimées</th>
+                    </tr>
+                    </thead>
+                    <tbody id="scrapesTable"></tbody>
+                </table>
+            </div>
+        </section>
+
+    </div>
+
+    <p class="dash-empty hidden" id="dashEmpty">
+        Aucune donnée : lance un scraping (python scraper.py) puis recharge cette page.
+    </p>
+
+</main>
+
+<script src="insights.js?v=2"></script>
+
+</body>
+</html>

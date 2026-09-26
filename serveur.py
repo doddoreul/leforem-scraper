@@ -26,11 +26,21 @@ STATIC_FILES = {
     "": ("index.html", "text/html; charset=utf-8"),
     "/": ("index.html", "text/html; charset=utf-8"),
     "/index.html": ("index.html", "text/html; charset=utf-8"),
+    "/insights.html": ("insights.html", "text/html; charset=utf-8"),
+    "/detail.html": ("detail.html", "text/html; charset=utf-8"),
     "/style.css": ("style.css", "text/css; charset=utf-8"),
     "/script.js": ("script.js", "application/javascript; charset=utf-8"),
+    "/insights.js": ("insights.js", "application/javascript; charset=utf-8"),
+    "/detail.js": ("detail.js", "application/javascript; charset=utf-8"),
     "/data.json": ("data.json", "application/json; charset=utf-8"),
     "/historique_supprimees.json": (
         "historique_supprimees.json", "application/json; charset=utf-8"
+    ),
+    "/historique_modifications.json": (
+        "historique_modifications.json", "application/json; charset=utf-8"
+    ),
+    "/historique_scrapes.json": (
+        "historique_scrapes.json", "application/json; charset=utf-8"
     ),
 }
 
@@ -42,8 +52,16 @@ SESSION.headers.update(scraper.HEADERS)
 
 def scrape_files_for(name):
     if name:
-        return f"data_{name}.json", f"historique_{name}.json"
-    return "data.json", "historique_supprimees.json"
+        return (
+            f"data_{name}.json",
+            f"historique_{name}.json",
+            f"historique_modifications_{name}.json",
+        )
+    return (
+        "data.json",
+        "historique_supprimees.json",
+        "historique_modifications.json",
+    )
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -136,6 +154,7 @@ class Handler(BaseHTTPRequestHandler):
                 "name": name,
                 "file": file_name,
                 "history": scrape_files_for(name)[1],
+                "modifications": scrape_files_for(name)[2],
                 "label": data.get("label", "") or "",
                 "scrape_timestamp": data.get("scrape_timestamp", "") or "",
                 "occupationGuid": data.get("occupation_guid", "") or "",

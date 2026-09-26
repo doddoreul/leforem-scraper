@@ -12,6 +12,8 @@ from html.parser import HTMLParser
 
 import requests
 
+import core
+
 
 # ============================================================
 # CONFIGURATION
@@ -51,6 +53,8 @@ HEADERS = {
 
 DATA_FILE = "data.json"
 HISTORY_FILE = "historique_supprimees.json"
+MODIFICATIONS_FILE = "historique_modifications.json"
+SCRAPES_FILE = "historique_scrapes.json"
 BLACKLIST_FILE = "blacklist.json"
 VERSION = 1
 
@@ -480,6 +484,12 @@ def build_offer(detail, published_on=""):
 
     description = html_to_text(detail.get("descriptionJob"))
 
+    date_publication = clean_text(
+        detail.get("datePublication") or detail.get("dateDebutDiffusion")
+    )
+    if not core.parse_forem_date(date_publication):
+        date_publication = clean_text(detail.get("dateDebutDiffusion"))
+
     return {
         "number": number,
         "offer_title": clean_text(detail.get("titreOffre")),
@@ -493,6 +503,10 @@ def build_offer(detail, published_on=""):
         "salary": extract_salary(detail),
         "location": extract_location(detail.get("lieuxTravail")),
         "published_on": clean_text(published_on),
+        "date_publication": date_publication,
+        "date_fin_diffusion": clean_text(detail.get("dateFinDiffusion")),
+        "date_modification": clean_text(detail.get("dateModification")),
+        "metier": clean_text(detail.get("metier")),
         "summary": build_summary(description),
     }
 
@@ -630,17 +644,39 @@ def write_json_atomically(path, content):
 
 def read_blacklist(path=BLACKLIST_FILE):
     data = read_json(path, None)
-    if isinstance(data, list):
-        return {
-            str(number).strip()
-            for number in data
-            if str(number).strip()
-        }
-    return set()
+    return core.read_blacklist_data(data)
 
 
 def write_blacklist(blacklist, path=BLACKLIST_FILE):
-    write_json_atomically(path, sorted(blacklist))
+    write_json_atomically(path, blacklist)
+
+
+def normalize_published_on(offer):
+    """Le Forem sometimes returns relative text ("Publie aujourd'hui")
+    as the search publication date. Fall back to the absolute
+    date_publication from the offer detail, stored as DD-MM-YY."""
+    raw = offer.get("published_on")
+    if core.parse_forem_date(raw):
+        return
+    absolute = core.parse_forem_date(offer.get("date_publication"))
+    if absolute:
+        year, month, day = absolute.split("-")
+        offer["published_on"] = "%s-%s-%s" % (day, month, year[2:])
+
+
+def scraper_files(base_name):
+    """File names for a scrape, keeping each search isolated."""
+    if base_name:
+        return (
+            f"data_{base_name}.json",
+            f"historique_{base_name}.json",
+            f"historique_modifications_{base_name}.json",
+        )
+    return (
+        DATA_FILE,
+        HISTORY_FILE,
+        MODIFICATIONS_FILE,
+    )
 
 
 # ============================================================
@@ -685,6 +721,7 @@ def update_history(previous_offers, new_offers, history, timestamp):
         previous = previous_by_number.get(number, {})
         entry = dict(previous)
         entry["is_new"] = False
+        entry["offer_state"] = "deleted"
         entry["removed"] = True
         entry["removed_on"] = timestamp
         entries.append(entry)
@@ -717,7 +754,12 @@ def main():
     parser.add_argument(
         "--fresh",
         action="store_true",
-        help="Force re-scraping of every offer detail.",
+        help="Force a full refresh, including offers recorded as missing.",
+    )
+    parser.add_argument(
+        "--retry-blacklist",
+        action="store_true",
+        help="Attempt every blacklisted offer again this run.",
     )
     parser.add_argument(
         "--occupation-guid",
@@ -747,12 +789,7 @@ def main():
         parser.error("--limit must be a positive integer")
 
     base_name = re.sub(r"[^A-Za-z0-9_-]+", "-", args.base).strip("-")
-    if base_name:
-        data_file = f"data_{base_name}.json"
-        history_file = f"historique_{base_name}.json"
-    else:
-        data_file = DATA_FILE
-        history_file = HISTORY_FILE
+    data_file, history_file, modifications_file = scraper_files(base_name)
 
     now = now_iso_timestamp()
 
@@ -767,16 +804,29 @@ def main():
     history = read_history(
         path=history_file, timestamp=now
     )
+    deleted_numbers = {
+        clean_text(entry.get("number"))
+        for entry in history.get("offers", [])
+        if isinstance(entry, dict) and clean_text(entry.get("number"))
+    }
+
+    modifications = core.read_modifications(
+        path=modifications_file, timestamp=now
+    )
+    scrapes = core.read_scrape_history(SCRAPES_FILE)
 
     blacklist = read_blacklist()
     if blacklist:
-        print(f"Blacklisted offers: {len(blacklist)}")
+        print(f"Offers tracked as missing: {len(blacklist)}")
+        if args.retry_blacklist:
+            print("  (--retry-blacklist: attempting them again)")
 
     if base_name:
         print(f"Scrape: {base_name}")
     if args.label:
         print(f"Label: {args.label}")
-    print(f"Files: {data_file}, {history_file}")
+    print(f"Files: {data_file}, {history_file}, {modifications_file}")
+    print(f"Scrape history: {SCRAPES_FILE}")
 
     if args.limit is not None:
         print(f"Limit requested: {args.limit} offer(s)")
@@ -785,7 +835,7 @@ def main():
     print()
 
     if args.fresh:
-        print("--fresh mode: re-scraping every offer detail.")
+        print("--fresh mode: full refresh, blacklisted offers are retried.")
     print()
 
     session = requests.Session()
@@ -801,7 +851,6 @@ def main():
     new_count = sum(
         1 for entry in search_results
         if entry["number"] not in previous_numbers
-        and entry["number"] not in blacklist
     )
 
     if new_count > 0:
@@ -814,56 +863,58 @@ def main():
             return
 
     new_offers = []
-    reused_count = 0
+    force_retry = args.fresh or args.retry_blacklist
 
     if search_results:
         total = len(search_results)
-        tasks = [
-            (index, entry)
-            for index, entry in enumerate(search_results, start=1)
-            if entry["number"] not in blacklist
-        ]
-        skipped = total - len(tasks)
+        tasks = []
+        for index, entry in enumerate(search_results, start=1):
+            number = entry["number"]
+            if core.should_fetch(number, blacklist, force=force_retry):
+                tasks.append((index, entry))
+            else:
+                tasks.append((index, entry, True))
+        skipped = total - len([t for t in tasks if len(t) == 2])
         print(
             f"\nFetching details ({len(tasks)} offer(s)) "
             f"with {MAX_WORKERS} parallel workers..."
         )
         if skipped:
-            print(f"  ({skipped} blacklisted, skipped)")
+            print(
+                f"  ({skipped} offered already missing, kept from cache)"
+            )
 
         def process_entry(task):
-            index, entry = task
+            index, entry = task[:2]
             number = entry["number"]
             published_on = entry.get("published_on", "")
             previous = previous_by_number.get(number)
 
-            if (
-                not args.fresh
-                and previous
-                and clean_text(previous.get("published_on"))
-                and clean_text(previous.get("published_on")) == published_on
-            ):
-                offer = dict(previous)
-                offer["is_new"] = False
-                return task, offer, "reused"
+            if len(task) == 3:
+                return task, None, "blacklisted"
 
             try:
                 detail = fetch_detail(get_session(), number)
                 offer = build_offer(
                     detail, published_on=published_on
                 )
-                offer["is_new"] = number not in previous_numbers
                 return task, offer, "fetched"
             except requests.HTTPError as e:
-                if (
-                    getattr(e, "response", None) is not None
-                    and e.response.status_code == 404
-                ):
-                    return task, None, "404"
-                return task, None, f"HTTP error: {e}"
+                status = (
+                    getattr(e, "response", None).status_code
+                    if getattr(e, "response", None) is not None
+                    else "?"
+                )
+                with _blacklist_lock:
+                    core.note_miss(blacklist, number, now)
+                return task, None, f"HTTP {status}: {e}"
             except requests.RequestException as e:
+                with _blacklist_lock:
+                    core.note_miss(blacklist, number, now)
                 return task, None, f"Network error: {e}"
             except Exception as e:
+                with _blacklist_lock:
+                    core.note_miss(blacklist, number, now)
                 return task, None, f"Error: {e}"
 
         done = 0
@@ -873,24 +924,31 @@ def main():
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=MAX_WORKERS
         ) as executor:
-            for (index, entry), offer, outcome in executor.map(
+            for task, offer, outcome in executor.map(
                 process_entry, tasks
             ):
+                index, entry = task[0], task[1]
                 number = entry["number"]
-                if outcome == "reused":
-                    new_offers.append(offer)
-                    reused_count += 1
-                elif outcome == "fetched":
+                if offer is not None:
+                    with _blacklist_lock:
+                        core.note_recovery(blacklist, number)
                     new_offers.append(offer)
                     fetched_count += 1
-                elif outcome == "404":
-                    blacklist.add(number)
-                    with _blacklist_lock:
-                        write_blacklist(blacklist)
+                elif outcome == "blacklisted":
+                    if number in previous_by_number:
+                        cached = dict(previous_by_number[number])
+                        cached["is_new"] = False
+                        new_offers.append(cached)
                     issue_lines.append(
-                        f"  Offer {number} missing (404): blacklisted"
+                        f"  Offer {number}: kept from cache (missing recorded)"
                     )
                 else:
+                    # Temporary failure: keep the previous data so a
+                    # single bad request never wipes an offer out.
+                    if number in previous_by_number:
+                        cached = dict(previous_by_number[number])
+                        cached["is_new"] = False
+                        new_offers.append(cached)
                     issue_lines.append(f"  Offer {number}: {outcome}")
                 done += 1
                 sys.stdout.write(
@@ -907,9 +965,64 @@ def main():
     if not new_offers and not search_results:
         print("\nNo offer found.")
 
+    # State classification + personal-change history.
+    states, current_numbers = core.collect_states(
+        previous_offers, new_offers, deleted_numbers
+    )
+
+    for offer in new_offers:
+        if not isinstance(offer, dict):
+            continue
+        number = clean_text(offer.get("number"))
+        if not number:
+            continue
+        normalize_published_on(offer)
+        state = (
+            "updated" if number in states["updated"]
+            else "reappeared" if number in states["reappeared"]
+            else "new" if number in states["new"]
+            else "unchanged"
+        )
+        offer["offer_state"] = state
+        offer["is_new"] = state in ("new", "reappeared")
+        if state == "reappeared":
+            offer["reappeared"] = True
+
+        changes = core.compare_offers(
+            previous_by_number.get(number, {}), offer
+        )
+        if changes:
+            core.append_modification(modifications, number, changes, now)
+        if state == "new":
+            event_date = (
+                core.parse_forem_date(offer.get("published_on"))
+                or now
+            )
+            core.append_modification(
+                modifications, number, None, event_date, event="created"
+            )
+        elif state == "reappeared":
+            core.append_modification(
+                modifications, number, None, now, event="reappeared"
+            )
+
+    for number in states["deleted"]:
+        core.append_modification(
+            modifications, number, None, now, event="deleted"
+        )
+
     update_history(
         previous_offers, new_offers, history, now
     )
+
+    summary = core.summarize_scrape(states, total=len(new_offers))
+    entry = {
+        "timestamp": now,
+        "search": base_name,
+        "label": args.label,
+        **summary,
+    }
+    core.record_scrape(scrapes, entry)
 
     data = {
         "version": VERSION,
@@ -922,12 +1035,25 @@ def main():
     }
 
     write_json_atomically(history_file, history)
+    write_json_atomically(modifications_file, modifications)
+    write_json_atomically(SCRAPES_FILE, scrapes)
     write_json_atomically(data_file, data)
+    write_blacklist(blacklist)
 
     print()
-    print(f"Done: {len(new_offers)} offer(s) "
-          f"({reused_count} reused, {len(new_offers) - reused_count} fetched)")
-    print(f"Files written: {data_file}, {history_file}")
+    print(
+        f"Done: {len(new_offers)} offer(s) "
+        f"({fetched_count} fetched)"
+    )
+    print(
+        "States: {nouvelles} new, {reapparues} back, "
+        "{modifiees} modified, {inchangees} unchanged, "
+        "{supprimees} deleted".format(**summary)
+    )
+    print(
+        f"Files written: {data_file}, {history_file}, "
+        f"{modifications_file}, {SCRAPES_FILE}"
+    )
 
 
 if __name__ == "__main__":
