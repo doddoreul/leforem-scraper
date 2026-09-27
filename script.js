@@ -5,8 +5,6 @@
 // Base URLs for the active scraping; populated by setupScrapingSelector()
 let dataUrl = "";
 let historyUrl = "";
-const API_SCRAPINGS = "/api/scrapings";
-
 const DEFAULT_STORAGE_PREFIX = "forem_electromecanicien_";
 
 let storagePrefix = DEFAULT_STORAGE_PREFIX;
@@ -1525,76 +1523,53 @@ async function copyCommand() {
 
 
 // ============================================================
-// SCRAPING SELECTOR
+// SCRAPING SELECTOR (shared component)
 // ============================================================
 
 function setupScrapingSelector() {
     const select = document.getElementById("scrapingSelect");
     if (!select) return Promise.resolve();
-    return fetch(API_SCRAPINGS, { cache: "no-store" })
-        .then(response => {
-            if (!response.ok) throw new Error("HTTP " + response.status);
-            return response.json();
-        })
-        .then(list => {
-            const stored = localStorage.getItem("forem_scraping_select");
-            list.forEach(item => {
-                const option = document.createElement("option");
-                option.value = item.file;
-                option.dataset.history = item.history;
-                option.dataset.base = item.name;
-                option.textContent = item.name !== ""
-                    ? (item.label || item.name)
-                    : (item.label || "Default (" + item.file + ")");
-                option.selected =
-                    item.file === stored || item.file === dataUrl;
-                select.appendChild(option);
-            });
-            const active = list.find(item => item.file === stored);
-            if (active) {
-                dataUrl = active.file;
-                historyUrl = active.history;
-                setActiveScraping(active.name || "");
+
+    return window.ScrapingSelector.createScrapingSelector({
+        selectId: "scrapingSelect",
+        allowAll: true,      // "Toutes les recherches" option
+        allowCreate: true,   // "Creer un nouveau scrap" option
+        onChange: function (key, scrapings) {
+            if (key === "all") {
+                dataUrl = "";
+                historyUrl = "";
+                setActiveScraping("");
+            } else {
+                const scrape = scrapings.find(function (s) { return s.file === key; });
+                if (scrape) {
+                    dataUrl = scrape.file;
+                    historyUrl = scrape.history;
+                    setActiveScraping(scrape.name || "");
+                }
             }
-
-            // Add "Créer un nouveau scrap" option at the end
-            const createOption = document.createElement("option");
-            createOption.value = "__create_new__";
-            createOption.textContent = "➕  Créer un nouveau scrap";
-            select.appendChild(createOption);
-
-            select.addEventListener("change", switchScraping);
-        })
-        .catch(e => {
-            console.error("Unable to list scrapings", e);
-        });
-}
-
-function switchScraping(e) {
-    const select = e.target;
-    const option = select.selectedOptions[0];
-    if (!option || !option.value) return;
-
-    // Special option: "Créer un nouveau scrap"
-    if (option.value === "__create_new__") {
-        openModal();
-        // Reset select to previous active scraping
-        const stored = localStorage.getItem("forem_scraping_select");
-        if (stored) {
-            select.value = stored;
+            reloadStorageMaps();
+            resetGroupFilter();
+            resetSort();
+            reloadTables();
         }
-        return;
-    }
-
-    dataUrl = option.value;
-    historyUrl = option.dataset.history || "";
-    setActiveScraping(option.dataset.base || "");
-    reloadStorageMaps();
-    localStorage.setItem("forem_scraping_select", option.value);
-    resetGroupFilter();
-    resetSort();
-    reloadTables();
+    }).then(function (result) {
+        // If we had a stored selection that was a specific scrape, ensure dataUrl/historyUrl are set
+        const stored = localStorage.getItem("forem_scraping_select");
+        if (stored && stored !== "all") {
+            const scrape = result.scrapings.find(function (s) { return s.file === stored; });
+            if (scrape) {
+                dataUrl = scrape.file;
+                historyUrl = scrape.history;
+                setActiveScraping(scrape.name || "");
+            }
+        }
+    });
 }
+
+// Listen for "Create new scrape" event from shared component
+document.addEventListener("foremCreateScrape", function () {
+    openModal();
+});
 
 function updateTitle(data) {
     const label = data && typeof data.label === "string"

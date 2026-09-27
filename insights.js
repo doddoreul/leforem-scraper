@@ -109,32 +109,27 @@ function readScope() {
 
 function populateScopeSelect() {
     const select = document.getElementById("dashScope");
-    select.innerHTML = "";
-    const allOpt = document.createElement("option");
-    allOpt.value = "all";
-    allOpt.textContent = "Toutes les recherches";
-    select.appendChild(allOpt);
-    scrapings.forEach(entry => {
-        const opt = document.createElement("option");
-        opt.value = entry.name;
-        opt.textContent = entry.label || entry.name || "Recherche principale";
-        select.appendChild(opt);
-    });
-    select.value = scope;
-    select.addEventListener("change", function () {
-        scope = this.value;
-        try {
-            localStorage.setItem(DASH_SCOPE_KEY, scope);
-        } catch (e) {
-            // ignore
-        }
-        refresh();
-    });
-}
+    if (!select) return Promise.resolve();
 
-function scopeEntries() {
-    if (scope === "all") return scrapings;
-    return scrapings.filter(s => s.name === scope);
+    return window.ScrapingSelector.createScrapingSelector({
+        selectId: "dashScope",
+        allowAll: true,      // "Toutes les recherches"
+        allowCreate: false,  // no "create new" in insights
+        onChange: function (key) {
+            if (key === "all") {
+                scope = "all";
+            } else {
+                const found = scrapings.find(function (s) { return s.file === key; });
+                scope = found ? found.name : "all";
+            }
+            try {
+                localStorage.setItem(DASH_SCOPE_KEY, scope);
+            } catch (e) {
+                // ignore
+            }
+            refresh();
+        }
+    });
 }
 
 function offerState(offer) {
@@ -687,7 +682,7 @@ async function init() {
         return;
     }
     scope = readScope();
-    populateScopeSelect();
+    await populateScopeSelect();
     await refresh();
 }
 
