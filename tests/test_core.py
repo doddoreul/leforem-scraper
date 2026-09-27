@@ -23,9 +23,8 @@ import scraper
 def make_offer(number, title="Titre", company="Entreprise",
                location="Liege", contract_type="Duree indeterminee",
                schedule="Temps plein", salary="", pay="",
-               published_on="16-09-26", date_publication="16/09/2026",
-               extra=None):
-    offer = {
+               published_on="16-09-26", date_publication="16/09/2026"):
+    return {
         "number": number,
         "offer_title": title,
         "company": company,
@@ -42,9 +41,6 @@ def make_offer(number, title="Titre", company="Entreprise",
         "summary": "",
         "is_new": False,
     }
-    if extra:
-        offer.update(extra)
-    return offer
 
 
 class TestDates(unittest.TestCase):
@@ -71,42 +67,8 @@ class TestDates(unittest.TestCase):
         self.assertEqual(core.days_between("garbage"), None)
 
 
-class TestChangeDetection(unittest.TestCase):
-    def test_compare_ignores_technical_and_new_fields(self):
-        previous = make_offer("1")
-        current = make_offer("1", extra={
-            "summary": "another",
-            "url": "http://x",
-            "is_new": True,
-            "offer_state": "updated",
-            "technique_collect": True,
-        })
-        self.assertEqual(core.compare_offers(previous, current), {})
-
-    def test_compare_detects_title_change(self):
-        previous = make_offer("1", title="Avant")
-        current = make_offer("1", title="Apres")
-        changes = core.compare_offers(previous, current)
-        self.assertIn("offer_title", changes)
-        self.assertEqual(changes["offer_title"]["old"], "Avant")
-        self.assertEqual(changes["offer_title"]["new"], "Apres")
-
-    def test_compare_skips_fields_absent_in_previous(self):
-        previous = make_offer("1")
-        del previous["salary"]
-        current = make_offer("1", salary="1500 euros/mois")
-        self.assertEqual(core.compare_offers(previous, current), {})
-
-    def test_whitespace_is_normalized(self):
-        previous = make_offer("1", title="  Electro   mecanicien ")
-        current = make_offer("1", title="Electro mecanicien")
-        self.assertNotIn(
-            "offer_title", core.compare_offers(previous, current)
-        )
-
-
 class TestStates(unittest.TestCase):
-    def test_four_scrape_scenario(self):
+    def test_three_scrape_scenario(self):
         # -- Scrape 1: three offers all new.
         previous = []
         current = [make_offer("100"), make_offer("200"), make_offer("300")]
@@ -129,42 +91,26 @@ class TestStates(unittest.TestCase):
 
         deleted_numbers = {str(o["number"]) for o in history["offers"]}
 
-        # -- Scrape 2: 100 unchanged, 300 changed, 400 new, 200 gone.
+        # -- Scrape 2: 100 unchanged, 400 new, 200 and 300 gone.
         previous = [make_offer("100"), make_offer("300")]
-        current = [
-            make_offer("100"),
-            make_offer("300", title="300 modifie"),
-            make_offer("400"),
-        ]
+        current = [make_offer("100"), make_offer("400")]
         states, current_numbers = core.collect_states(
             previous, current, deleted_numbers
         )
         self.assertEqual(states["unchanged"], ["100"])
-        self.assertEqual(states["updated"], ["300"])
         self.assertEqual(states["new"], ["400"])
         self.assertEqual(states["reappeared"], [])
-        self.assertEqual(states["deleted"], [])
+        self.assertEqual(states["deleted"], ["300"])
 
-        # -- Scrape 3: 200 is back, 100 unchanged, 300 gone.
-        previous = [make_offer("100"), make_offer("300", title="300 modifie"),
-                    make_offer("400")]
+        # -- Scrape 3: 200 is back, 100 and 400 unchanged.
+        previous = [make_offer("100"), make_offer("400")]
         current = [make_offer("200"), make_offer("100"), make_offer("400")]
         states, current_numbers = core.collect_states(
             previous, current, deleted_numbers
         )
         self.assertEqual(states["reappeared"], ["200"])
         self.assertEqual(states["unchanged"], ["100", "400"])
-        self.assertEqual(states["deleted"], ["300"])
-
-        # -- Scrape 4: 200 modified shortly after its reappearance.
-        previous = [make_offer("200"), make_offer("100"), make_offer("400")]
-        current = [make_offer("200", title="200 revu"),
-                   make_offer("100"), make_offer("400")]
-        states, current_numbers = core.collect_states(
-            previous, current, deleted_numbers
-        )
-        self.assertEqual(states["updated"], ["200"])
-        self.assertEqual(states["unchanged"], ["100", "400"])
+        self.assertEqual(states["deleted"], [])
 
     def test_offers_in_current_counts_as_current(self):
         current = [make_offer("1")]
@@ -175,43 +121,15 @@ class TestStates(unittest.TestCase):
     def test_summarize(self):
         states = {
             "new": ["1"],
-            "updated": ["2"],
             "unchanged": ["3"],
             "reappeared": [],
             "deleted": ["4"],
         }
         summary = core.summarize_scrape(states, total=3)
         self.assertEqual(summary["nouvelles"], 1)
-        self.assertEqual(summary["modifiees"], 1)
+        self.assertEqual(summary["inchangees"], 1)
         self.assertEqual(summary["supprimees"], 1)
         self.assertEqual(summary["total_offres"], 3)
-
-
-class TestModificationsHistory(unittest.TestCase):
-    def test_append_and_dedup(self):
-        history = core.empty_modifications("t1")
-        changes = {"offer_title": {"old": "A", "new": "B"}}
-        core.append_modification(history, "1", changes, "t1")
-        core.append_modification(history, "1", changes, "t2")
-        self.assertEqual(len(history["offers"]["1"]), 1)
-        self.assertEqual(history["offers"]["1"][0]["date"], "t2")
-
-        core.append_modification(history, "1", None, "t3", event="deleted")
-        self.assertEqual(len(history["offers"]["1"]), 2)
-        core.append_modification(history, "1", None, "t4", event="deleted")
-        self.assertEqual(len(history["offers"]["1"]), 2)
-        self.assertEqual(history["offers"]["1"][1]["date"], "t4")
-
-        core.append_modification(history, "1", None, "t5", event="created")
-        self.assertEqual(len(history["offers"]["1"]), 3)
-
-    def test_different_changes_not_collapsed(self):
-        history = core.empty_modifications("t1")
-        core.append_modification(history, "1", {"offer_title": {"old": "A",
-                                                               "new": "B"}}, "t1")
-        core.append_modification(history, "1", {"offer_title": {"old": "B",
-                                                               "new": "C"}}, "t2")
-        self.assertEqual(len(history["offers"]["1"]), 2)
 
 
 class TestScrapeHistory(unittest.TestCase):

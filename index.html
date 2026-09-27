@@ -6,10 +6,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Offres Forem — Électromécanicien industriel</title>
 
-<link rel="stylesheet" href="style.css?v=34">
+<link rel="stylesheet" href="style.css?v=37">
+
+<script>
+    (function () {
+        var saved;
+        try {
+            saved = localStorage.getItem("forem_theme");
+        } catch (e) {
+            saved = null;
+        }
+        if (saved !== "light" && saved !== "dark") {
+            saved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.setAttribute("data-theme", saved);
+    })();
+</script>
+
+<script src="theme.js?v=1" defer></script>
 
 </head>
-<body class="theme-dashboard">
+<body>
 
 <nav class="page-nav" aria-label="Navigation entre pages">
 
@@ -23,20 +40,31 @@
 
 </nav>
 
-<header class="header">
+<header class="page-head">
 
-    <div class="header-row">
+    <div class="page-head-titles">
 
-        <h1 id="mainTitle">Offres Forem — Électromécanicien industriel</h1>
+        <h1 class="page-title" id="mainTitle">Offres Forem — Électromécanicien industriel</h1>
 
-        <label class="scraping-label" for="scrapingSelect">Scraping&nbsp;:</label>
-        <select id="scrapingSelect" aria-label="Scraping actif"></select>
+        <p class="page-sub">
+            Offres scrapées sur leforem.be
+        </p>
+    </div>
 
-        <button class="new-search-btn" type="button" id="newSearchBtn">
-            Nouvelle recherche
-        </button>
+    <div class="page-head-tools">
+
+        <div class="head-field">
+
+            <label class="scraping-label" for="scrapingSelect">Scraping&nbsp;:</label>
+            <select id="scrapingSelect" aria-label="Scraping actif"></select>
+
+        </div>
 
     </div>
+
+</header>
+
+<div class="page-bar">
 
     <nav class="tabs" role="tablist">
 
@@ -50,7 +78,7 @@
 
     </nav>
 
-</header>
+</div>
 
 <!-- ============================================================
      TAB: CURRENT OFFERS
@@ -148,7 +176,6 @@
                 <select id="stateFilter">
                     <option value="">Tous</option>
                     <option value="new">Nouvelle</option>
-                    <option value="updated">Modifiée</option>
                     <option value="reappeared">De retour</option>
                     <option value="old">Ancienne</option>
                 </select>
@@ -196,24 +223,6 @@
                     <option value="3j">3 derniers jours</option>
                     <option value="7j">7 derniers jours</option>
                     <option value="30j">30 derniers jours</option>
-                </select>
-            </label>
-
-            <label class="filter" for="expireFilter">
-                <span>Échéance :</span>
-                <select id="expireFilter">
-                    <option value="">Peu importe</option>
-                    <option value="soon">Expire sous 7 jours</option>
-                </select>
-            </label>
-
-            <label class="filter" for="priorityFilter">
-                <span>Priorité :</span>
-                <select id="priorityFilter">
-                    <option value="">Toutes</option>
-                    <option value="haute">Haute</option>
-                    <option value="moyenne">Moyenne</option>
-                    <option value="faible">Faible</option>
                 </select>
             </label>
 

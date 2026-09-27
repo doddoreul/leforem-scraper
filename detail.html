@@ -6,7 +6,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Détail de l'offre — Suivi Forem</title>
 
-<link rel="stylesheet" href="style.css?v=34">
+<link rel="stylesheet" href="style.css?v=37">
+
+<script>
+    (function () {
+        var saved;
+        try {
+            saved = localStorage.getItem("forem_theme");
+        } catch (e) {
+            saved = null;
+        }
+        if (saved !== "light" && saved !== "dark") {
+            saved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.setAttribute("data-theme", saved);
+    })();
+</script>
+
+<script src="theme.js?v=1" defer></script>
 
 </head>
 <body>

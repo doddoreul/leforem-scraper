@@ -6,7 +6,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dashboard — Suivi Forem</title>
 
-<link rel="stylesheet" href="style.css?v=34">
+<link rel="stylesheet" href="style.css?v=37">
+
+<script>
+    (function () {
+        var saved;
+        try {
+            saved = localStorage.getItem("forem_theme");
+        } catch (e) {
+            saved = null;
+        }
+        if (saved !== "light" && saved !== "dark") {
+            saved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.setAttribute("data-theme", saved);
+    })();
+</script>
+
+<script src="theme.js?v=1" defer></script>
 
 </head>
 <body>
@@ -25,21 +42,27 @@
 
 <main class="dashboard">
 
-    <header class="dash-head">
+    <header class="page-head">
 
-        <div>
-            <h1 class="dash-title">LE FOREM MONITOR</h1>
-            <p class="dash-sub">
+        <div class="page-head-titles">
+
+            <h1 class="page-title">Monitor</h1>
+            <p class="page-sub">
                 Suivi des offres, des évolutions et de ta progression.
             </p>
+
         </div>
 
-        <label class="filter" for="dashScope">
-            <span>Recherche :</span>
-            <select id="dashScope">
-                <option value="all">Toutes les recherches</option>
-            </select>
-        </label>
+        <div class="page-head-tools">
+
+            <label class="filter" for="dashScope">
+                <span>Recherche :</span>
+                <select id="dashScope">
+                    <option value="all">Toutes les recherches</option>
+                </select>
+            </label>
+
+        </div>
 
     </header>
 
@@ -61,11 +84,6 @@
         <section class="dash-card" id="card-new" aria-labelledby="newTitle">
             <h2 class="dash-card-title" id="newTitle">Nouvelles offres (récentes)</h2>
             <ul id="newList" class="dash-list"></ul>
-        </section>
-
-        <section class="dash-card" id="card-modifs" aria-labelledby="modifsTitle">
-            <h2 class="dash-card-title" id="modifsTitle">Modifications récentes</h2>
-            <ul id="modifsList" class="dash-list"></ul>
         </section>
 
         <section class="dash-card" id="card-lieux" aria-labelledby="lieuxTitle">
@@ -98,7 +116,6 @@
                         <th>Recherche</th>
                         <th>Total</th>
                         <th>Nouvelles</th>
-                        <th>Modifiées</th>
                         <th>Revenues</th>
                         <th>Supprimées</th>
                     </tr>

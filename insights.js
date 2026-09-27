@@ -2,7 +2,7 @@
    DASHBOARD (LE FOREM MONITOR)
    Vue d'ensemble : KPIs, évolution des scrapings, statistiques
    par recherche (ou toutes recherches), répartition du suivi,
-   nouvelles offres, modifications récentes.
+   nouvelles offres.
    ============================================================ */
 
 const DEFAULT_PREFIX = "forem__";
@@ -20,7 +20,6 @@ const INSIGHTS_STATUS = [
 
 const STATE_TXT = {
     new: "Nouvelle",
-    updated: "Modifiée",
     reappeared: "De retour",
     old: "Ancienne",
     deleted: "Supprimée",
@@ -29,6 +28,7 @@ const STATE_TXT = {
 let scrapings = [];
 let scope = "all";
 let dataSets = [];
+let lastScrapeHistory = null;
 
 function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -178,7 +178,7 @@ function collectOffers() {
 }
 
 function collectiveCounts() {
-    const counts = { new: 0, updated: 0, reappeared: 0, old: 0 };
+    const counts = { new: 0, reappeared: 0, old: 0 };
     collectOffers().offers.forEach(offer => {
         const state = offerState(offer);
         if (counts[state] === undefined) counts[state] = 0;
@@ -250,7 +250,6 @@ function render(scrapeHistory) {
     renderKpis();
     renderStatusBars();
     renderNewList();
-    renderModifsList();
     renderDistribution("lieux", offer => offer.location);
     renderContracts();
     renderSchedules();
@@ -268,7 +267,6 @@ function renderKpis() {
     const items = [
         ["Offres", totalOffers(), "cyan"],
         ["Nouvelles", counts.new, "green"],
-        ["Modifiées", counts.updated, "yellow"],
         ["Revenues", counts.reappeared, "magenta"],
         ["Supprimées", deletedCount(), "red"],
         ["Suivies", totals.suivies, "cyan"],
@@ -350,48 +348,6 @@ function renderNewList() {
             STATE_TXT[offerState(offer)] || offerState(offer)
         );
         li.appendChild(badge);
-        root.appendChild(li);
-    });
-}
-
-function renderModifsList() {
-    const root = document.getElementById("modifsList");
-    const events = [];
-    dataSets.forEach(ds => {
-        const mods = ds.modifications && ds.modifications.offers
-            ? ds.modifications.offers : {};
-        Object.entries(mods).forEach(([number, list]) => {
-            (Array.isArray(list) ? list : []).forEach(ev => {
-                events.push({ ds, number, ...ev });
-            });
-        });
-    });
-    events.sort((a, b) => String(b.date).localeCompare(String(a.date)));
-    root.innerHTML = "";
-    if (!events.length) {
-        root.appendChild(el("li", "dash-none",
-            "Aucune modification enregistrée."));
-        return;
-    }
-    events.slice(0, 12).forEach(ev => {
-        const li = el("li", "dash-list-item");
-        li.appendChild(el("span", "dash-list-date", formatDay(ev.date)));
-        const link = el("a", "dash-list-link", String(ev.number));
-        link.href = detailHref(ev.ds.entry.name, ev.number);
-        link.target = "_blank";
-        li.appendChild(link);
-        let text = "";
-        if (ev.event === "created") {
-            text = "Nouvelle offre détectée";
-        } else if (ev.event === "reappeared") {
-            text = "Offre revenue";
-        } else if (ev.event === "deleted") {
-            text = "Offre retirée";
-        } else {
-            const fields = Object.keys(ev.changes || {});
-            text = fields.length ? "modif : " + fields.join(", ") : "modifiée";
-        }
-        li.appendChild(el("span", "dash-list-note", text));
         root.appendChild(li);
     });
 }
@@ -558,12 +514,21 @@ function renderEvolution(scrapeHistory) {
     drawChart(canvas, points, labels);
 }
 
+function cssVar(node, name, fallback) {
+    const value = getComputedStyle(node).getPropertyValue(name).trim();
+    return value || fallback;
+}
+
 function drawChart(canvas, points, labels) {
     const parent = canvas.parentElement;
     const height = parseInt(
         getComputedStyle(parent).getPropertyValue(
             "--dash-chart-height") || "200", 10
     );
+    const gridColor = cssVar(canvas, "--dash-line", "#D6E1E3");
+    const axisColor = cssVar(canvas, "--dash-text-secondary", "#698696");
+    const labelColor = cssVar(canvas, "--dash-muted", "#698696");
+    const accentColor = cssVar(canvas, "--dash-cyan", "#5289AD");
     canvas.height = height;
     const width = canvas.clientWidth || 600;
     const ratio = window.devicePixelRatio || 1;
@@ -591,17 +556,17 @@ function drawChart(canvas, points, labels) {
     for (let i = 0; i <= 4; i++) {
         const v = (top / 4) * i;
         const y = padT + plotH - (v / top) * plotH;
-        ctx.strokeStyle = "rgba(148,163,184,0.18)";
+        ctx.strokeStyle = gridColor;
         ctx.beginPath();
         ctx.moveTo(padL, y);
         ctx.lineTo(width - padR, y);
         ctx.stroke();
-        ctx.fillStyle = "#64748b";
+        ctx.fillStyle = axisColor;
         ctx.textAlign = "right";
         ctx.fillText(String(Math.round(v)), padL - 8, y + 4);
     }
 
-    ctx.strokeStyle = "#22d3ee";
+    ctx.strokeStyle = accentColor;
     ctx.lineWidth = 2;
     ctx.beginPath();
     points.forEach((p, i) => {
@@ -612,7 +577,7 @@ function drawChart(canvas, points, labels) {
     });
     ctx.stroke();
 
-    ctx.fillStyle = "#22d3ee";
+    ctx.fillStyle = accentColor;
     points.forEach((p, i) => {
         const x = plotW === 0 ? 0 : padL + (i * (plotW / (points.length - 1)));
         const y = padT + plotH - (p / top) * plotH;
@@ -621,7 +586,7 @@ function drawChart(canvas, points, labels) {
         ctx.fill();
     });
 
-    ctx.fillStyle = "#94a3b8";
+    ctx.fillStyle = labelColor;
     ctx.textAlign = "center";
     const labelEvery = Math.ceil(labels.length / 8);
     labels.forEach((label, i) => {
@@ -642,7 +607,7 @@ function renderScrapesTable(scrapeHistory) {
     if (!filtered.length) {
         const tr = document.createElement("tr");
         const td = el("td", "", "Aucun scraping enregistré.");
-        td.colSpan = 7;
+        td.colSpan = 6;
         tr.appendChild(td);
         tbody.appendChild(tr);
         return;
@@ -654,7 +619,6 @@ function renderScrapesTable(scrapeHistory) {
             r.label || r.search || "Recherche principale",
             r.total_offres,
             r.nouvelles,
-            r.modifiees,
             r.reapparues,
             r.supprimees,
         ].forEach(text => {
@@ -675,16 +639,15 @@ async function refresh() {
     dataSets = await Promise.all(entries.map(async entry => {
         const data = await fetchJson(entry.file);
         const hist = await fetchJson(entry.history);
-        const mods = await fetchJson(entry.modifications);
         return {
             entry,
             prefix: prefixFor(entry.name),
             offers: data && Array.isArray(data.offers) ? data.offers : [],
             deleted: hist && Array.isArray(hist.offers) ? hist.offers : [],
-            modifications: mods,
         };
     }));
     const scrapeHistory = await fetchJson("/historique_scrapes.json");
+    lastScrapeHistory = scrapeHistory;
     render(scrapeHistory);
 }
 
@@ -700,3 +663,7 @@ async function init() {
 }
 
 document.addEventListener("DOMContentLoaded", init);
+
+document.addEventListener("foremthemechange", function () {
+    if (lastScrapeHistory) render(lastScrapeHistory);
+});

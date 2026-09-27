@@ -113,8 +113,8 @@ terminal.
 
 | Option | Effet | Exemple |
 |---|---|---|
-| (aucune) | Scraping normal : seules les offres nouvelles/modifiées sont re-téléchargées | `python scraper.py` |
-| `--fresh` | Force le re-téléchargement de TOUTES les offres | `python scraper.py --fresh` |
+| (aucune) | Scraping normal : seules les nouvelles offres sont téléchargées, les autres sont reprises du cache | `python scraper.py` |
+| `--refresh` | Re-télécharge TOUTES les offres (utile après une longue interruption) | `python scraper.py --refresh` |
 | `--limit N` | Se limiter à N offres (utile pour tester) | `python scraper.py --limit 10` |
 
 ---
@@ -161,7 +161,7 @@ La page est en français. Tout est simple :
   génère la commande à copier-coller dans le terminal :
 
 ```
-python scraper.py --fresh --occupation-guid <id metier> --location-guid <id lieu> --base mon-scraping --label "Mon metier / Ma ville"
+python scraper.py --occupation-guid <id metier> --location-guid <id lieu> --base mon-scraping --label "Mon metier / Ma ville"
 ```
 
   Chaque nouveau scraping crée ses propres fichiers

@@ -181,15 +181,12 @@ function main() {
 function loadEntry(entry, root) {
     const detailsPromise = fetch(entry.details).then(r => r.json())
         .catch(() => null);
-    const modsPromise = fetch(entry.modifications).then(r => r.json())
-        .catch(() => null);
 
-    Promise.all([detailsPromise, modsPromise])
-        .then(([detailsData, modifications]) => {
+    detailsPromise
+        .then(detailsData => {
             const store = (detailsData && detailsData.details)
                 ? detailsData.details : null;
             const payload = store ? store[numberStr] : null;
-            const events = extractEvents(modifications);
 
             if (!payload) {
                 renderNotAvailable(
@@ -200,18 +197,12 @@ function loadEntry(entry, root) {
                 return;
             }
 
-            renderFiche(root, payload, events);
+            renderFiche(root, payload);
         })
         .catch(err => {
             renderNotAvailable(root, "Impossible de charger les données : "
                 + err.message);
         });
-}
-
-function extractEvents(modifications) {
-    if (!modifications || !modifications.offers) return [];
-    const list = modifications.offers[numberStr];
-    return Array.isArray(list) ? list.slice() : [];
 }
 
 function renderNotAvailable(root, message) {
@@ -254,7 +245,7 @@ function renderNotAvailable(root, message) {
 // FICHE
 // ============================================================
 
-function renderFiche(root, payload, events) {
+function renderFiche(root, payload) {
     root.innerHTML = "";
 
     const number = str(payload.numero || payload.idOffreEmploi || numberStr);
@@ -400,17 +391,6 @@ function renderFiche(root, payload, events) {
 
     // Votre suivi
     sideCol.appendChild(buildTracking(number));
-
-    // Historique des modifications
-    if (events.length) {
-        const histCard = el("section", "card");
-        histCard.appendChild(el(
-            "h2", "card-title",
-            "Historique des modifications (" + events.length + ")"
-        ));
-        histCard.appendChild(buildTimeline(events, number));
-        root.appendChild(histCard);
-    }
 }
 
 // ============================================================
@@ -735,49 +715,6 @@ function makeField(labelText, options, current, onChange) {
     select.addEventListener("change", () => onChange(select.value));
     wrap.appendChild(select);
     return wrap;
-}
-
-// ============================================================
-// TIMELINE
-// ============================================================
-
-function buildTimeline(events) {
-    const list = el("ul", "detail-timeline");
-    events.slice().reverse().forEach(entry => {
-        const item = el("li", "detail-timeline-item");
-        item.appendChild(el("span", "detail-timeline-date",
-            entry.date || ""));
-
-        if (entry.event === "created") {
-            item.appendChild(el(
-                "span", "detail-timeline-pill state-new", "Créée / détectée"
-            ));
-        } else if (entry.event === "reappeared") {
-            item.appendChild(el(
-                "span", "detail-timeline-pill state-reappeared", "De retour"
-            ));
-        } else if (entry.event === "deleted") {
-            item.appendChild(el(
-                "span", "detail-timeline-pill state-deleted", "Retirée"
-            ));
-        } else {
-            const changes = entry.changes || {};
-            Object.keys(changes).forEach(field => {
-                const change = changes[field] || {};
-                const oldText = String(change.old !== undefined ? change.old : "");
-                const newText = String(change.new !== undefined ? change.new : "");
-                const line = el("span", "detail-change");
-                line.appendChild(el("strong", "detail-change-field", field));
-                line.appendChild(document.createTextNode(" : "));
-                line.appendChild(el("span", "detail-change-old", oldText));
-                line.appendChild(el("span", "detail-change-arrow", " → "));
-                line.appendChild(el("span", "detail-change-new", newText));
-                item.appendChild(line);
-            });
-        }
-        list.appendChild(item);
-    });
-    return list;
 }
 
 document.addEventListener("DOMContentLoaded", main);

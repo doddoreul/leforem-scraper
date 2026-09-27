@@ -29,66 +29,13 @@ def norm_text(value):
 
 
 # ============================================================
-# CHANGE DETECTION
+# STATE CLASSIFICATION
 # ============================================================
 
-# Fields that matter to the candidate. Rewrites are purposeful: a
-# change in one of these is worth reporting. `summary` and `url` are
-# derived from/identical to other fields, so they are left out.
-COMPARE_FIELDS = (
-    "offer_title",
-    "company",
-    "location",
-    "contract_type",
-    "schedule",
-    "pay",
-    "salary",
-    "email",
-    "published_on",
-    "date_publication",
-    "date_fin_diffusion",
-    "date_modification",
-    "description",
-)
-
-# Technical fields never considered as user-facing changes.
-TECHNICAL_FIELDS = {
-    "is_new",
-    "summary",
-    "url",
-    "offer_state",
-    "reappeared",
-    "removed",
-    "removed_on",
-    "first_seen",
-    "changes",
-}
-
-
-def compare_offers(previous, current):
-    """Return {field: {"old": ..., "new": ...}} for significant diffs.
-
-    A field already present in `previous` is required: newly-introduced
-    columns (schema migrations) are ignored so a first run does not
-    flag every offer as "modified".
-    """
-    changes = {}
-    if not isinstance(previous, dict) or not isinstance(current, dict):
-        return changes
-    for field in COMPARE_FIELDS:
-        if field not in previous:
-            continue
-        old_value = norm_text(previous.get(field))
-        new_value = norm_text(current.get(field))
-        if old_value != new_value:
-            changes[field] = {"old": old_value, "new": new_value}
-    return changes
-
-
-def offer_state_for(number, previous_numbers, deleted_numbers, changes):
-    """Classify a *current* offer: new / updated / unchanged / reappeared."""
+def offer_state_for(number, previous_numbers, deleted_numbers):
+    """Classify a *current* offer: new / unchanged / reappeared."""
     if number in previous_numbers:
-        return "updated" if changes else "unchanged"
+        return "unchanged"
     if number in deleted_numbers:
         return "reappeared"
     return "new"
@@ -108,7 +55,6 @@ def collect_states(previous_offers, current_offers, deleted_numbers):
 
     states = {
         "new": [],
-        "updated": [],
         "unchanged": [],
         "reappeared": [],
         "deleted": [],
@@ -121,8 +67,7 @@ def collect_states(previous_offers, current_offers, deleted_numbers):
         if not number or number in current_numbers:
             continue
         current_numbers.add(number)
-        changes = compare_offers(previous.get(number, {}), offer)
-        state = offer_state_for(number, previous_numbers, deleted_numbers, changes)
+        state = offer_state_for(number, previous_numbers, deleted_numbers)
         states[state].append(number)
 
     for number in sorted(previous_numbers - current_numbers):
@@ -135,72 +80,13 @@ def summarize_scrape(states, total=None):
     """Compact counter dict used by the scrape history."""
     return {
         "nouvelles": len(states["new"]),
-        "modifiees": len(states["updated"]),
         "inchangees": len(states["unchanged"]),
         "reapparues": len(states["reappeared"]),
         "supprimees": len(states["deleted"]),
         "total_offres": total if total is not None
-        else len(states["new"]) + len(states["updated"]) + len(states["unchanged"])
+        else len(states["new"]) + len(states["unchanged"])
         + len(states["reappeared"]),
     }
-
-
-# ============================================================
-# MODIFICATIONS HISTORY
-# ============================================================
-
-MODIFICATIONS_VERSION = 1
-
-
-def empty_modifications(timestamp):
-    return {
-        "version": MODIFICATIONS_VERSION,
-        "updated_timestamp": timestamp,
-        "offers": {},
-    }
-
-
-def read_modifications(path, timestamp=""):
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict):
-            return empty_modifications(timestamp)
-        if not isinstance(data.get("offers"), dict):
-            data["offers"] = {}
-        data.setdefault("version", MODIFICATIONS_VERSION)
-        data.setdefault("updated_timestamp", timestamp)
-        return data
-    except (OSError, json.JSONDecodeError):
-        return empty_modifications(timestamp)
-
-
-def append_modification(history, number, changes, timestamp, event=None):
-    """Record a change event for an offer.
-
-    Identical consecutive events are collapsed (same field/old/new set)
-    into a single entry whose date is refreshed, avoiding duplicates.
-    """
-    offers = history.setdefault("offers", {})
-    entry = {"date": timestamp}
-    if event is not None:
-        entry["event"] = event
-    else:
-        entry["changes"] = changes
-
-    stack = offers.get(number)
-    if stack and isinstance(stack, list):
-        last = stack[-1]
-        if isinstance(last, dict):
-            last_changes = last.get("changes")
-            if (
-                entry.get("event") == last.get("event")
-                and last_changes == changes
-            ):
-                last["date"] = timestamp
-                return history
-    offers.setdefault(number, []).append(entry)
-    return history
 
 
 # ============================================================
@@ -442,7 +328,7 @@ def should_fetch(number, blacklist, force=False):
 
     A single 404 never blocks the next attempt (temporary errors are
     retried). Only after MISS_BLACKLIST_AFTER consecutive misses is the
-    number skipped; `force` (--retry-blacklist / --fresh) bypasses it.
+    number skipped; `force` (--refresh) bypasses it.
     """
     if force:
         return True

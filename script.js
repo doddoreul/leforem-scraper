@@ -407,7 +407,6 @@ function createOfferLink(offer) {
 
 const STATE_BADGE_TEXT = {
     new: "Nouvelle",
-    updated: "Modifiée",
     reappeared: "De retour",
     old: "Ancienne",
     deleted: "Supprimée",
@@ -1105,17 +1104,6 @@ function dateMatches(offer, value) {
     return diffDays >= 0 && diffDays <= days;
 }
 
-function expiresSoon(offer) {
-    const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(
-        String(offer.date_fin_diffusion || "").trim()
-    );
-    if (!m) return false;
-    const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
-    if (isNaN(d.getTime())) return false;
-    const days = (d.getTime() - Date.now()) / 86400000;
-    return days >= 0 && days <= 7;
-}
-
 function applyFilters() {
     const statusValue = readFilterValue("statusFilter");
     const stateFilter = readFilterValue("stateFilter");
@@ -1123,8 +1111,6 @@ function applyFilters() {
     const scheduleFilter = readFilterValue("scheduleFilter");
     const salaryFilter = readFilterValue("salaryFilter");
     const dateFilter = readFilterValue("dateFilter");
-    const priorityFilter = readFilterValue("priorityFilter");
-    const expireFilter = readFilterValue("expireFilter");
 
     applyFiltersToTable(
         "currentRows",
@@ -1152,8 +1138,6 @@ function applyFilters() {
                 if (salaryFilter === "oui" && !hasSalaryInfo(offer)) return false;
                 if (salaryFilter === "non" && hasSalaryInfo(offer)) return false;
                 if (!dateMatches(offer, dateFilter)) return false;
-                if (expireFilter === "soon" && !expiresSoon(offer)) return false;
-                if (priorityFilter && getPriority(number) !== priorityFilter) return false;
             }
             return true;
         }
@@ -1284,9 +1268,6 @@ function setupNewSearch() {
     const modal = document.getElementById("searchModal");
     if (!modal) return;
 
-    document.getElementById("newSearchBtn").addEventListener(
-        "click", openModal
-    );
     document.getElementById("closeModalBtn").addEventListener(
         "click", closeModal
     );
@@ -1338,6 +1319,8 @@ function setupNewSearch() {
 }
 
 function openModal() {
+    const modal = document.getElementById("searchModal");
+    if (!modal) return;
     selectedOccupation = null;
     selectedLocation = null;
     clearSuggestions("occupationSuggestions");
@@ -1348,7 +1331,6 @@ function openModal() {
     document.getElementById("commandBox").value = "";
     document.getElementById("copyCommandBtn").disabled = true;
     updateConfirmation();
-    const modal = document.getElementById("searchModal");
     modal.classList.add("visible");
     document.getElementById("occupationInput").focus();
 }
@@ -1492,7 +1474,7 @@ function buildCommand() {
     if (!selectedOccupation || !selectedLocation) return "";
     const slug = slugify(selectedOccupation.value + " " + selectedLocation.label);
     const label = selectedOccupation.value + " / " + selectedLocation.label;
-    return "python scraper.py --fresh --occupation-guid " + selectedOccupation.key +
+    return "python scraper.py --occupation-guid " + selectedOccupation.key +
         " --location-guid " + selectedLocation.key +
         " --base " + slug +
         " --label \"" + label + "\"";
@@ -1574,6 +1556,7 @@ function switchScraping(e) {
     resetGroupFilter();
     resetSort();
     reloadTables();
+    openModal();
 }
 
 function updateTitle(data) {
@@ -2230,7 +2213,7 @@ async function init() {
 
     [
         "stateFilter", "contractFilter", "scheduleFilter",
-        "salaryFilter", "dateFilter", "priorityFilter", "expireFilter",
+        "salaryFilter", "dateFilter",
     ].forEach(id => {
         const select = document.getElementById(id);
         if (select) {
