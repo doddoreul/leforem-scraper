@@ -1556,6 +1556,13 @@ function setupScrapingSelector() {
                 historyUrl = active.history;
                 setActiveScraping(active.name || "");
             }
+
+            // Add "Créer un nouveau scrap" option at the end
+            const createOption = document.createElement("option");
+            createOption.value = "__create_new__";
+            createOption.textContent = "➕  Créer un nouveau scrap";
+            select.appendChild(createOption);
+
             select.addEventListener("change", switchScraping);
         })
         .catch(e => {
@@ -1564,8 +1571,21 @@ function setupScrapingSelector() {
 }
 
 function switchScraping(e) {
-    const option = e.target.selectedOptions[0];
+    const select = e.target;
+    const option = select.selectedOptions[0];
     if (!option || !option.value) return;
+
+    // Special option: "Créer un nouveau scrap"
+    if (option.value === "__create_new__") {
+        openModal();
+        // Reset select to previous active scraping
+        const stored = localStorage.getItem("forem_scraping_select");
+        if (stored) {
+            select.value = stored;
+        }
+        return;
+    }
+
     dataUrl = option.value;
     historyUrl = option.dataset.history || "";
     setActiveScraping(option.dataset.base || "");
@@ -1574,7 +1594,6 @@ function switchScraping(e) {
     resetGroupFilter();
     resetSort();
     reloadTables();
-    openModal();
 }
 
 function updateTitle(data) {
