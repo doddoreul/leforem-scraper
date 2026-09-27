@@ -5,7 +5,7 @@
    nouvelles offres.
    ============================================================ */
 
-const DEFAULT_PREFIX = "forem__";
+const DEFAULT_PREFIX = "forem_electromecanicien_";
 const DASH_SCOPE_KEY = "forem_dash_select";
 
 const INSIGHTS_STATUS = [

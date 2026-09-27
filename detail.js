@@ -21,7 +21,7 @@ const DETAIL_PRIORITY_OPTIONS = [
     { value: "faible", label: "Faible" },
 ];
 
-const DEFAULT_PREFIX = "forem__";
+const DEFAULT_PREFIX = "forem_electromecanicien_";
 
 const params = new URLSearchParams(window.location.search);
 const numberStr = (params.get("number") || "").trim();
