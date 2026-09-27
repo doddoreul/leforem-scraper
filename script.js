@@ -2,8 +2,9 @@
 // CONFIGURATION
 // ============================================================
 
-const DATA_URL = "data.json";
-const HISTORY_URL = "historique_supprimees.json";
+// Base URLs for the active scraping; populated by setupScrapingSelector()
+let dataUrl = "";
+let historyUrl = "";
 const API_SCRAPINGS = "/api/scrapings";
 
 const DEFAULT_STORAGE_PREFIX = "forem_electromecanicien_";
@@ -1500,9 +1501,6 @@ async function copyCommand() {
 // SCRAPING SELECTOR
 // ============================================================
 
-let dataUrl = DATA_URL;
-let historyUrl = HISTORY_URL;
-
 function setupScrapingSelector() {
     const select = document.getElementById("scrapingSelect");
     if (!select) return Promise.resolve();
@@ -1542,7 +1540,7 @@ function switchScraping(e) {
     const option = e.target.selectedOptions[0];
     if (!option || !option.value) return;
     dataUrl = option.value;
-    historyUrl = option.dataset.history || HISTORY_URL;
+    historyUrl = option.dataset.history || "";
     setActiveScraping(option.dataset.base || "");
     reloadStorageMaps();
     localStorage.setItem("forem_scraping_select", option.value);
@@ -1928,6 +1926,12 @@ async function loadJsonWithFallback(url, tbody, failureMessage, colSpan) {
 async function reloadTables() {
     const tbodyCurrent = document.getElementById("currentRows");
     const tbodyDeleted = document.getElementById("deletedRows");
+
+    if (!dataUrl) {
+        tbodyCurrent.innerHTML = "<tr><td colspan='8' class='no-scraping'>Aucun scraping sélectionné. Choisissez-en un dans le menu.</td></tr>";
+        tbodyDeleted.innerHTML = "";
+        return;
+    }
 
     const data = await loadJsonWithFallback(
         dataUrl,

@@ -26,9 +26,6 @@ DETAIL_URL = (
     "api/Diffusion/DetailOffre/{}"
 )
 
-OCCUPATION_GUID = "fb3c1045-2adc-49ea-85d1-b5678c7bcd1f"
-LOCATION_GUID = "38215355-5f89-48ea-a728-14cfbc9a4b82"
-
 ROW = 50
 
 # Polite scraping: bounded parallelism + global rate limit.
@@ -52,8 +49,6 @@ HEADERS = {
 }
 
 DATA_DIR = "data"
-DATA_FILE = os.path.join(DATA_DIR, "data.json")
-HISTORY_FILE = os.path.join(DATA_DIR, "historique_supprimees.json")
 SCRAPES_FILE = os.path.join(DATA_DIR, "historique_scrapes.json")
 BLACKLIST_FILE = os.path.join(DATA_DIR, "blacklist.json")
 VERSION = 1
@@ -515,7 +510,7 @@ def build_offer(detail, published_on=""):
 # OFFER SEARCH
 # ============================================================
 
-def search_offers(session, limit=None, occupation_guid=OCCUPATION_GUID, location_guid=LOCATION_GUID):
+def search_offers(session, limit=None, occupation_guid=None, location_guid=None):
     payload = {
         "filtres": [],
         "filtresCodifies": [],
@@ -598,7 +593,7 @@ def read_json(path, default_model):
         return default_model
 
 
-def read_previous_offers(path=DATA_FILE):
+def read_previous_offers(path):
     data = read_json(path, None)
     if isinstance(data, dict):
         offers = data.get("offers", [])
@@ -623,7 +618,7 @@ def empty_history(timestamp):
     }
 
 
-def read_history(path=HISTORY_FILE, timestamp=""):
+def read_history(path, timestamp=""):
     data = read_json(path, None)
     if isinstance(data, dict) and isinstance(data.get("offers"), list):
         data.setdefault("version", VERSION)
@@ -667,23 +662,15 @@ def normalize_published_on(offer):
 
 def scraper_files(base_name):
     """File names for a scrape, keeping each search isolated."""
-    if base_name:
-        return (
-            os.path.join(DATA_DIR, f"data_{base_name}.json"),
-            os.path.join(DATA_DIR, f"historique_{base_name}.json"),
-        )
     return (
-        DATA_FILE,
-        HISTORY_FILE,
+        os.path.join(DATA_DIR, f"data_{base_name}.json"),
+        os.path.join(DATA_DIR, f"historique_{base_name}.json"),
     )
 
 
 def details_file(base_name):
-    """Raw detail payload store for a scrape (`details.json` or
-    `details_<base>.json`), kept under data/."""
-    if base_name:
-        return os.path.join(DATA_DIR, f"details_{base_name}.json")
-    return os.path.join(DATA_DIR, "details.json")
+    """Raw detail payload store for a scrape (`details_<base>.json`), kept under data/."""
+    return os.path.join(DATA_DIR, f"details_{base_name}.json")
 
 
 def read_details(path):
@@ -773,20 +760,19 @@ def main():
     )
     parser.add_argument(
         "--occupation-guid",
-        default=OCCUPATION_GUID,
-        help="Occupation GUID (default: industrial electromechanic).",
+        required=True,
+        help="Occupation GUID (required).",
     )
     parser.add_argument(
         "--location-guid",
-        default=LOCATION_GUID,
-        help="Work location GUID (default: Liege).",
+        required=True,
+        help="Work location GUID (required).",
     )
     parser.add_argument(
         "--base",
         default="",
-        help="Scrape name base: writes data_<base>.json and "
-             "historique_<base>.json (default: data.json / "
-             "historique_supprimees.json).",
+        help="Optional override for the scrape base name. "
+             "Default is generated from the GUIDs.",
     )
     parser.add_argument(
         "--label",
@@ -798,7 +784,14 @@ def main():
     if args.limit is not None and args.limit <= 0:
         parser.error("--limit must be a positive integer")
 
-    base_name = re.sub(r"[^A-Za-z0-9_-]+", "-", args.base).strip("-")
+    # Generate base_name from GUIDs (first 8 chars each) unless overridden.
+    if args.base:
+        base_name = re.sub(r"[^A-Za-z0-9_-]+", "-", args.base).strip("-")
+    else:
+        occ8 = args.occupation_guid[:8]
+        loc8 = args.location_guid[:8]
+        base_name = f"{occ8}-{loc8}"
+
     data_file, history_file = scraper_files(base_name)
     details_file_path = details_file(base_name)
 

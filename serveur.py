@@ -41,10 +41,8 @@ STATIC_FILES = {
 }
 
 DATA_FILES = {
-    "/data.json": "data.json",
-    "/details.json": "details.json",
-    "/historique_supprimees.json": "historique_supprimees.json",
     "/historique_scrapes.json": "historique_scrapes.json",
+    "/historique_modifications.json": "historique_modifications.json",
     "/companies.json": "companies.json",
 }
 
@@ -57,21 +55,14 @@ SESSION.headers.update(scraper.HEADERS)
 
 
 def scrape_files_for(name):
-    if name:
-        return (
-            f"data_{name}.json",
-            f"historique_{name}.json",
-        )
     return (
-        "data.json",
-        "historique_supprimees.json",
+        f"data_{name}.json",
+        f"historique_{name}.json",
     )
 
 
 def details_file_for(name):
-    if name:
-        return f"details_{name}.json"
-    return "details.json"
+    return f"details_{name}.json"
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -210,11 +201,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         results = []
         for file_name in sorted(os.listdir(DATA_DIR)):
-            if file_name == "data.json":
-                name = ""
-            elif CLEAN_FILE_NAME.fullmatch(file_name) and file_name.startswith(
-                "data_"
-            ):
+            if CLEAN_FILE_NAME.fullmatch(file_name) and file_name.startswith("data_"):
                 name = file_name[len("data_"):-len(".json")]
             else:
                 continue
@@ -238,8 +225,7 @@ class Handler(BaseHTTPRequestHandler):
                 "locationGuid": data.get("location_guid", "") or "",
                 "offerCount": len(offers) if isinstance(offers, list) else 0,
             })
-        results.sort(key=lambda e: (e["file"] != "data.json",
-                                    e["label"] or e["name"]))
+        results.sort(key=lambda e: e["label"] or e["name"])
         self._send_json(200, results)
 
     def _handle_occupations(self, q):

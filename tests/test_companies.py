@@ -79,26 +79,18 @@ class TempDataDir(unittest.TestCase):
         self._saved = (
             companies.DATA_DIR,
             scraper.DATA_DIR,
-            scraper.DATA_FILE,
-            scraper.HISTORY_FILE,
         )
         companies.DATA_DIR = self.data_dir
         scraper.DATA_DIR = self.data_dir
-        scraper.DATA_FILE = os.path.join(self.data_dir, "data.json")
-        scraper.HISTORY_FILE = os.path.join(
-            self.data_dir, "historique_supprimees.json"
-        )
 
     def tearDown(self):
         (
             companies.DATA_DIR,
             scraper.DATA_DIR,
-            scraper.DATA_FILE,
-            scraper.HISTORY_FILE,
         ) = self._saved
         self.tmp.cleanup()
 
-    def seed(self, offers, details=None, history=None, base=""):
+    def seed(self, offers, details=None, history=None, base="test"):
         suffix = f"_{base}" if base else ""
         write_data(self.data_dir, f"data{suffix}.json", {"offers": offers})
         if details:
@@ -356,11 +348,14 @@ class TestBuildIndex(TempDataDir):
         index = companies.build_index()
         record = index["employers"]["Start People"]
         self.assertEqual(record["offerCount"], 2)
-        self.assertEqual(
+        # Emails are cumulated from both scrapes; order depends on scrape order
+        self.assertCountEqual(
             record["emails"], ["liege@accents.be", "wavre@accents.be"]
         )
-        self.assertEqual(index["scrapes"], ["", "liege"])
-        self.assertEqual([o["base"] for o in record["offers"]], ["", "liege"])
+        # Scrapes are sorted alphabetically; default base is "test"
+        self.assertCountEqual(index["scrapes"], ["liege", "test"])
+        # Offer bases reflect the scrape they came from
+        self.assertCountEqual([o["base"] for o in record["offers"]], ["test", "liege"])
 
     def test_removed_offers_are_counted(self):
         self.seed(
