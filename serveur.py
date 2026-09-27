@@ -31,6 +31,7 @@ STATIC_FILES = {
     "/detail.html": ("detail.html", "text/html; charset=utf-8"),
     "/style.css": ("style.css", "text/css; charset=utf-8"),
     "/theme.js": ("theme.js", "application/javascript; charset=utf-8"),
+    "/suivi-io.js": ("suivi-io.js", "application/javascript; charset=utf-8"),
     "/script.js": ("script.js", "application/javascript; charset=utf-8"),
     "/insights.js": ("insights.js", "application/javascript; charset=utf-8"),
     "/detail.js": ("detail.js", "application/javascript; charset=utf-8"),

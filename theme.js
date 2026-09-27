@@ -1,5 +1,5 @@
 /* ============================================================
-   THÈME — cogwheel + menu de réglage (clair / sombre)
+   THÈME — cogwheel + réglages (mode sombre, import / export)
    ============================================================ */
 
 const THEME_KEY = "forem_theme";
@@ -42,6 +42,45 @@ function applyTheme(theme) {
     document.dispatchEvent(new CustomEvent(THEME_EVENT, { detail: { theme: next } }));
 }
 
+function escapeAttribute(value) {
+    return String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
+function gearActionMarkup(action) {
+    const id = escapeAttribute(action.id);
+    const label = escapeAttribute(action.label);
+    const title = action.title ? ' title="' + escapeAttribute(action.title) + '"' : "";
+    if (action.type === "file") {
+        const accept = action.accept ? ' accept="' + escapeAttribute(action.accept) + '"' : "";
+        return '<input type="file" id="' + id + '"' + accept + " hidden>" +
+            '<label class="theme-action" for="' + id + '"' + title + ">" + label + "</label>";
+    }
+    return '<button type="button" class="theme-action" id="' + id + '"' + title + ">" + label + "</button>";
+}
+
+function renderGearActions() {
+    const menu = document.getElementById("themeMenu");
+    if (!menu) return;
+    const actions = Array.isArray(window.FOREM_GEAR_ACTIONS) ? window.FOREM_GEAR_ACTIONS : [];
+    let section = menu.querySelector(".theme-actions");
+    if (actions.length === 0) {
+        if (section) section.remove();
+        return;
+    }
+    if (!section) {
+        section = document.createElement("div");
+        section.className = "theme-actions";
+        menu.appendChild(section);
+    }
+    section.innerHTML = '<p class="theme-menu-label">Données</p>' +
+        actions.map(gearActionMarkup).join("");
+}
+
+function syncThemeSwitch() {
+    const toggle = document.getElementById("themeSwitch");
+    if (toggle) toggle.checked = currentTheme() === "dark";
+}
+
 function buildThemeSettings() {
     if (document.getElementById("themeSettings")) return;
 
@@ -54,25 +93,23 @@ function buildThemeSettings() {
         '<span class="sr-only">Paramètres</span></button>' +
         '<div class="theme-menu" id="themeMenu" hidden>' +
         '<p class="theme-menu-title">Paramètres</p>' +
-        '<p class="theme-menu-label" id="themeLabel">Thème</p>' +
-        '<div class="theme-options" role="radiogroup" aria-labelledby="themeLabel">' +
-        '<label class="theme-option"><input type="radio" name="foremTheme" value="light"><span>Clair</span></label>' +
-        '<label class="theme-option"><input type="radio" name="foremTheme" value="dark"><span>Sombre</span></label>' +
-        '</div></div>';
+        '<div class="theme-switch-row">' +
+        '<label class="theme-switch-label" for="themeSwitch">Mode sombre</label>' +
+        '<input type="checkbox" id="themeSwitch" class="theme-switch" role="switch">' +
+        '</div>' +
+        '</div>';
 
     document.body.appendChild(wrap);
+    renderGearActions();
 
     const gear = document.getElementById("themeGear");
     const menu = document.getElementById("themeMenu");
-    const radios = Array.prototype.slice.call(menu.querySelectorAll('input[name="foremTheme"]'));
+    const toggle = document.getElementById("themeSwitch");
 
     function openMenu(open) {
         menu.hidden = !open;
         gear.setAttribute("aria-expanded", open ? "true" : "false");
-        if (open) {
-            const active = currentTheme();
-            radios.forEach(radio => { radio.checked = radio.value === active; });
-        }
+        if (open) syncThemeSwitch();
     }
 
     gear.addEventListener("click", function (event) {
@@ -80,10 +117,14 @@ function buildThemeSettings() {
         openMenu(menu.hidden);
     });
 
-    radios.forEach(radio => {
-        radio.addEventListener("change", function () {
-            if (radio.checked) applyTheme(radio.value);
-        });
+    toggle.addEventListener("change", function () {
+        applyTheme(toggle.checked ? "dark" : "light");
+    });
+
+    document.addEventListener(THEME_EVENT, syncThemeSwitch);
+
+    menu.addEventListener("click", function (event) {
+        if (event.target.closest(".theme-action")) openMenu(false);
     });
 
     document.addEventListener("click", function (event) {
@@ -96,6 +137,8 @@ function buildThemeSettings() {
             gear.focus();
         }
     });
+
+    syncThemeSwitch();
 }
 
 function initTheme() {

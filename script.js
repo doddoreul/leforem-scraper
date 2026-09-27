@@ -8,14 +8,6 @@ const API_SCRAPINGS = "/api/scrapings";
 
 const DEFAULT_STORAGE_PREFIX = "forem_electromecanicien_";
 
-const TRACKED_PLAIN_KEYS = ["forem_scraping_select"];
-const TRACKED_KEY_PATTERN = /^forem_.+_(statuts|remarques|favoris|statut_dates|priorites)$/;
-
-function isTrackedStorageKey(key) {
-    return TRACKED_KEY_PATTERN.test(key) ||
-        TRACKED_PLAIN_KEYS.indexOf(key) !== -1;
-}
-
 let storagePrefix = DEFAULT_STORAGE_PREFIX;
 let activeBaseName = "";
 
@@ -38,6 +30,7 @@ const STATUS_OPTIONS = [
     { value: "contacte", label: "Contacté" },
     { value: "refuse", label: "Refusé" },
     { value: "rdv", label: "RDV prévu" },
+    { value: "generique", label: "Annonce générique" },
 ];
 
 
@@ -1707,13 +1700,6 @@ function csvField(value) {
     return text;
 }
 
-function localDateString(date) {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    const d = String(date.getDate()).padStart(2, "0");
-    return y + "-" + m + "-" + d;
-}
-
 function offerMatchesKeys(offer, inputId) {
     const input = document.getElementById(inputId);
     if (!input) return true;
@@ -1791,127 +1777,9 @@ function downloadCsv(filename, content) {
 
 
 // ============================================================
-// TRACKING EXPORT / IMPORT
-// Statuses, remarks, favorites and relance dates are exported as a
-// single JSON file so the tracking can be moved to another PC.
+// SUIVI — l'export / import du suivi est défini dans suivi-io.js
+// (partagé avec le dashboard et la fiche offre)
 // ============================================================
-
-function downloadJson(filename, content) {
-    const blob = new Blob([content], { type: "application/json;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-}
-
-function showTrackingMessage(text) {
-    const el = document.getElementById("trackingMessage");
-    if (el) {
-        el.textContent = text;
-        setTimeout(function () { el.textContent = ""; }, 6000);
-    }
-}
-
-function setupImportExportMenu() {
-    const trigger = document.getElementById("importExportBtn");
-    const menu = document.getElementById("importExportMenu");
-    if (!trigger || !menu) return;
-
-    const setOpen = function (open) {
-        menu.hidden = !open;
-        trigger.setAttribute("aria-expanded", open ? "true" : "false");
-    };
-
-    trigger.addEventListener("click", function (e) {
-        e.stopPropagation();
-        setOpen(menu.hidden);
-    });
-
-    document.addEventListener("click", function (e) {
-        if (!menu.contains(e.target)) {
-            setOpen(false);
-        }
-    });
-
-    document.addEventListener("keydown", function (e) {
-        if (e.key === "Escape") {
-            setOpen(false);
-        }
-    });
-
-    menu.addEventListener("click", function (e) {
-        if (e.target.closest("button") || e.target.closest("label")) {
-            setOpen(false);
-        }
-    });
-}
-
-function exportTracking() {
-    const data = {};
-    for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (!isTrackedStorageKey(key)) continue;
-        try {
-            data[key] = JSON.parse(localStorage.getItem(key));
-        } catch (e) {
-            data[key] = localStorage.getItem(key);
-        }
-    }
-    const payload = {
-        app: "leforem-scraper",
-        schemaVersion: 1,
-        exportDate: new Date().toISOString(),
-        data: data
-    };
-    const filename = "suivi_forem_" + localDateString(new Date()) + ".json";
-    downloadJson(filename, JSON.stringify(payload, null, 2));
-    showTrackingMessage(
-        "Suivi exporté (" + Object.keys(data).length + " jeu(x) de données)."
-    );
-}
-
-function importTrackingFile(file) {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function () {
-        let parsed;
-        try {
-            parsed = JSON.parse(reader.result);
-        } catch (e) {
-            showTrackingMessage("Fichier invalide : JSON illisible.");
-            return;
-        }
-        const payload = parsed && typeof parsed === "object" ? parsed : {};
-        const data = payload.data && typeof payload.data === "object"
-            ? payload.data : {};
-        let imported = 0;
-        Object.keys(data).forEach(key => {
-            if (!isTrackedStorageKey(key)) return;
-            try {
-                localStorage.setItem(key, JSON.stringify(data[key]));
-                imported++;
-            } catch (e) {
-                console.error("Unable to store imported key", key, e);
-            }
-        });
-        if (imported === 0) {
-            showTrackingMessage("Aucune donnée de suivi reconnue dans ce fichier.");
-            return;
-        }
-        reloadStorageMaps();
-        backfillStatutDates();
-        rerenderTables();
-        showTrackingMessage(imported + " jeu(x) de données importé(s).");
-    };
-    reader.onerror = function () {
-        showTrackingMessage("Impossible de lire le fichier.");
-    };
-    reader.readAsText(file, "utf-8");
-}
 
 function exportCsv() {
     const offers = getOffersForExport();
@@ -2136,18 +2004,7 @@ async function init() {
     if (exportBtn) {
         exportBtn.addEventListener("click", exportCsv);
     }
-    const exportTrackingBtn = document.getElementById("exportTrackingBtn");
-    if (exportTrackingBtn) {
-        exportTrackingBtn.addEventListener("click", exportTracking);
-    }
-    const importTrackingInput = document.getElementById("importTrackingInput");
-    if (importTrackingInput) {
-        importTrackingInput.addEventListener("change", function () {
-            importTrackingFile(this.files && this.files[0]);
-            this.value = "";
-        });
-    }
-    setupImportExportMenu();
+    setupSuiviActions();
 
     const closeStaleBtn = document.getElementById("closeStaleBtn");
     if (closeStaleBtn) {
@@ -2231,5 +2088,11 @@ async function init() {
     await reloadTables();
     maybeShowStaleAlert(lastData, lastScrapeDate);
 }
+
+document.addEventListener("foremsuiviimported", function () {
+    reloadStorageMaps();
+    backfillStatutDates();
+    rerenderTables();
+});
 
 document.addEventListener("DOMContentLoaded", init);

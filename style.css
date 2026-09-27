@@ -1304,7 +1304,6 @@ h1 {
 
 .filter,
 .search,
-.export-btn,
 #scrapingSelect,
 .filter select {
     height: var(--control-h);
@@ -1357,20 +1356,6 @@ h1 {
     max-width: 260px;
 }
 
-.export-btn {
-    display: inline-flex;
-    align-items: center;
-    padding: 0 var(--space-4);
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.export-btn:hover {
-    background: var(--row-hover);
-    border-color: var(--accent);
-    color: var(--text-primary);
-}
-
 .filter select:hover,
 #scrapingSelect:hover,
 .search input:hover {
@@ -1405,63 +1390,38 @@ h1 {
 }
 
 /* ============================================================
-   IMPORT / EXPORT DROPDOWN
+   MESSAGES IMPORT / EXPORT
    ============================================================ */
-
-.dropdown {
-    position: relative;
-}
-
-.dropdown .caret {
-    margin-left: 6px;
-    font-size: 11px;
-    opacity: 0.7;
-}
-
-.dropdown-menu {
-    position: absolute;
-    top: calc(100% + 6px);
-    right: 0;
-    z-index: 30;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 210px;
-    padding: 6px;
-    background: var(--bg-surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-table);
-}
-
-.dropdown-menu[hidden] {
-    display: none;
-}
-
-.dropdown-menu button,
-.dropdown-menu label {
-    cursor: pointer;
-    user-select: none;
-    border: none;
-    background: transparent;
-    color: var(--text-primary);
-    font: inherit;
-    font-size: var(--font-md);
-    text-align: left;
-    white-space: nowrap;
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-sm);
-}
-
-.dropdown-menu button:hover,
-.dropdown-menu label:hover {
-    background: var(--row-hover);
-}
 
 .export-message {
     font-size: 12px;
     color: var(--text-secondary);
     white-space: nowrap;
+}
+
+.suivi-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    z-index: 80;
+    max-width: min(420px, calc(100vw - 32px));
+    padding: 10px var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-table);
+    font-size: var(--font-md);
+    text-align: center;
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, 8px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.suivi-toast.visible {
+    opacity: 1;
+    transform: translate(-50%, 0);
 }
 
 th.sortable {
@@ -2488,36 +2448,107 @@ th.col-forem-id {
     color: var(--text-primary);
 }
 
-.theme-options {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.theme-option {
+.theme-switch-row {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
+    justify-content: space-between;
+    gap: var(--space-3);
     padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-sm);
     font-size: var(--font-md);
-    color: var(--text-secondary);
-    cursor: pointer;
 }
 
-.theme-option:hover {
+.theme-switch-row:hover {
     background: var(--row-hover);
+}
+
+.theme-switch-label {
+    cursor: pointer;
+    user-select: none;
     color: var(--text-primary);
 }
 
-.theme-option input {
-    accent-color: var(--accent);
+.theme-switch {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    flex: none;
+    width: 38px;
+    height: 22px;
     margin: 0;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-surface-soft);
     cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.theme-option:has(input:checked) {
-    background: var(--info-bg);
-    color: var(--info-text);
-    font-weight: 600;
+.theme-switch::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    background: var(--text-muted);
+    transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.theme-switch:checked {
+    background: var(--accent-fill);
+    border-color: var(--accent);
+}
+
+.theme-switch:checked::after {
+    transform: translateX(16px);
+    background: var(--accent-text);
+}
+
+.theme-switch:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.theme-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: var(--space-3);
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--border);
+}
+
+.theme-actions .theme-menu-label {
+    margin-bottom: 4px;
+    font-size: var(--font-sm);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.theme-action {
+    display: block;
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-primary);
+    font: inherit;
+    font-size: var(--font-md);
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+}
+
+.theme-action:hover {
+    background: var(--row-hover);
+}
+
+.theme-action:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--focus-ring);
 }

@@ -12,6 +12,7 @@ const DETAIL_STATUS_OPTIONS = [
     { value: "contacte", label: "Contacté" },
     { value: "refuse", label: "Refusé" },
     { value: "rdv", label: "RDV prévu" },
+    { value: "generique", label: "Annonce générique" },
 ];
 
 const DETAIL_PRIORITY_OPTIONS = [
@@ -149,6 +150,7 @@ function richBlock(html) {
 function main() {
     const root = document.getElementById("detailRoot");
     if (!root) return;
+    setupSuiviActions();
 
     if (!numberStr) {
         renderNotAvailable(root, "Aucun numéro d'offre fourni dans l'URL.");
@@ -718,3 +720,7 @@ function makeField(labelText, options, current, onChange) {
 }
 
 document.addEventListener("DOMContentLoaded", main);
+
+document.addEventListener("foremsuiviimported", function () {
+    main();
+});

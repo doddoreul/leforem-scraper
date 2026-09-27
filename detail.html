@@ -23,7 +23,14 @@
     })();
 </script>
 
-<script src="theme.js?v=1" defer></script>
+<script>
+    window.FOREM_GEAR_ACTIONS = [
+        { id: "exportTrackingBtn", label: "Exporter le suivi", title: "Sauvegarder statuts, remarques, favoris et relances en fichier JSON" },
+        { id: "importTrackingInput", label: "Importer le suivi", title: "Restaurer un fichier de suivi exporté depuis un autre PC", type: "file", accept: ".json,application/json" }
+    ];
+</script>
+
+<script src="theme.js?v=4" defer></script>
 
 </head>
 <body>
@@ -52,6 +59,7 @@
 
 </main>
 
+<script src="suivi-io.js?v=1"></script>
 <script src="detail.js?v=2"></script>
 
 </body>

@@ -16,6 +16,7 @@ const INSIGHTS_STATUS = [
     ["contacte", "Contacté"],
     ["refuse", "Refusé"],
     ["rdv", "RDV prévu"],
+    ["generique", "Annonce générique"],
 ];
 
 const STATE_TXT = {
@@ -652,6 +653,7 @@ async function refresh() {
 }
 
 async function init() {
+    setupSuiviActions();
     scrapings = await fetchJson("/api/scrapings") || [];
     if (!scrapings.length) {
         showEmpty();
@@ -666,4 +668,8 @@ document.addEventListener("DOMContentLoaded", init);
 
 document.addEventListener("foremthemechange", function () {
     if (lastScrapeHistory) render(lastScrapeHistory);
+});
+
+document.addEventListener("foremsuiviimported", function () {
+    refresh();
 });

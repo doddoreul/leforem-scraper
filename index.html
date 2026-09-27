@@ -23,7 +23,15 @@
     })();
 </script>
 
-<script src="theme.js?v=1" defer></script>
+<script>
+    window.FOREM_GEAR_ACTIONS = [
+        { id: "exportCsvBtn", label: "Exporter CSV", title: "Exporter les annonces visibles en CSV" },
+        { id: "exportTrackingBtn", label: "Exporter le suivi", title: "Sauvegarder statuts, remarques, favoris et relances en fichier JSON" },
+        { id: "importTrackingInput", label: "Importer le suivi", title: "Restaurer un fichier de suivi exporté depuis un autre PC", type: "file", accept: ".json,application/json" }
+    ];
+</script>
+
+<script src="theme.js?v=4" defer></script>
 
 </head>
 <body>
@@ -124,6 +132,7 @@
                     <option value="contacte">Contacté</option>
                     <option value="refuse">Refusé</option>
                     <option value="rdv">RDV prévu</option>
+                    <option value="generique">Annonce générique</option>
                 </select>
             </label>
 
@@ -131,38 +140,6 @@
                 <span>🔎</span>
                 <input type="search" id="currentSearch" placeholder="Rechercher… (mots clés)">
             </label>
-
-            <div class="dropdown" id="importExportDropdown">
-
-                <button class="export-btn" type="button" id="importExportBtn"
-                        aria-haspopup="menu" aria-expanded="false"
-                        title="Exporter les annonces ou le suivi, ou en importer un">
-                    Import&nbsp;/&nbsp;Export <span class="caret" aria-hidden="true">▾</span>
-                </button>
-
-                <div class="dropdown-menu" id="importExportMenu" hidden>
-
-                    <button type="button" id="exportCsvBtn"
-                            title="Exporter les annonces visibles en CSV">
-                        Exporter CSV
-                    </button>
-
-                    <button type="button" id="exportTrackingBtn"
-                            title="Sauvegarder statuts, remarques, favoris et relances en fichier JSON">
-                        Exporter le suivi
-                    </button>
-
-                    <label for="importTrackingInput"
-                           title="Restaurer un fichier de suivi exporté depuis un autre PC">
-                        Importer le suivi
-                    </label>
-
-                    <input type="file" id="importTrackingInput"
-                           accept=".json,application/json" hidden>
-
-                </div>
-
-            </div>
 
             <span class="export-message" id="exportMessage"></span>
             <span class="export-message" id="trackingMessage"></span>
@@ -345,6 +322,7 @@
 
 </section>
 
+<script src="suivi-io.js?v=1"></script>
 <script src="script.js?v=28"></script>
 
 <div class="modal" id="searchModal" role="dialog" aria-modal="true" aria-labelledby="searchModalTitle">
