@@ -23,6 +23,33 @@ function setActiveScraping(baseName) {
     activeBaseName = baseName || "";
 }
 
+// Migrate localStorage from old default prefix to new GUID-based prefix.
+// Runs once per browser profile.
+function migrateDefaultStorage() {
+    const MIGRATION_FLAG = "forem_migration_v2_done";
+    if (localStorage.getItem(MIGRATION_FLAG)) return;
+
+    const oldPrefix = DEFAULT_STORAGE_PREFIX; // "forem_electromecanicien_"
+    const newPrefix = "forem_fb3c1045-38215355_"; // default scrape GUIDs
+    const suffixes = [
+        "statuts", "statut_dates", "remarques", "favoris", "priorites"
+    ];
+
+    suffixes.forEach(function (suffix) {
+        const oldKey = oldPrefix + suffix;
+        const newKey = newPrefix + suffix;
+        const oldValue = localStorage.getItem(oldKey);
+        if (oldValue && !localStorage.getItem(newKey)) {
+            localStorage.setItem(newKey, oldValue);
+        }
+    });
+
+    localStorage.setItem(MIGRATION_FLAG, "1");
+}
+
+// Run migration immediately so it's done before any UI uses the keys.
+migrateDefaultStorage();
+
 const STATUS_OPTIONS = [
     { value: "", label: "—" },
     { value: "interesse", label: "Intéressé" },
