@@ -2018,7 +2018,9 @@ async function reloadTables() {
         renderCurrent(offers, scrapeDate);
         renderDeleted(deleted);
         applyFilters();
-        updateTitle(data);
+        // For "all" scrapes, pass the merged data object; for single, pass the scrape data
+        const titleData = (dataUrl === "all") ? { offers: offers } : data;
+        updateTitle(titleData);
         renderTrackedAlerts();
     } catch (e) {
         console.error("Rendering error", e);
