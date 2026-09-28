@@ -6,7 +6,6 @@
    ============================================================ */
 
 const DEFAULT_PREFIX = "forem_electromecanicien_";
-const DASH_SCOPE_KEY = "forem_dash_select";
 
 const INSIGHTS_STATUS = [
     ["", "Non trié"],
@@ -98,7 +97,7 @@ async function fetchJson(url) {
 
 function readScope() {
     try {
-        const raw = localStorage.getItem(DASH_SCOPE_KEY);
+        const raw = localStorage.getItem(window.ScrapingSelector.STORAGE_KEY);
         if (raw === "all") return "all";
         if (scrapings.some(s => s.name === raw)) return raw;
     } catch (e) {
@@ -123,7 +122,7 @@ function populateScopeSelect() {
                 scope = found ? found.name : "all";
             }
             try {
-                localStorage.setItem(DASH_SCOPE_KEY, scope);
+                localStorage.setItem(window.ScrapingSelector.STORAGE_KEY, scope);
             } catch (e) {
                 // ignore
             }

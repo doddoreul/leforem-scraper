@@ -1957,6 +1957,7 @@ async function reloadTables() {
     let offers = [];
     let deleted = [];
     let scrapeDate = "";
+    let data = null;
 
     if (dataUrl === "all") {
         // Fetch all scrapes and merge
@@ -1965,18 +1966,21 @@ async function reloadTables() {
             const allData = await Promise.all(scrapings.map(async s => {
                 const d = await fetchJson(s.file);
                 const h = await fetchJson(s.history);
-                return { data: d, history: h, timestamp: s.scrape_timestamp };
+                return { data: d, history: h, timestamp: s.scrape_timestamp, label: s.label };
             }));
-            allData.forEach(({ data, history, timestamp }) => {
-                if (data) {
-                    offers.push(...extractOffers(data));
+            allData.forEach(({ data: d, history, timestamp, label }) => {
+                if (d) {
+                    offers.push(...extractOffers(d));
                     if (timestamp && (!scrapeDate || timestamp > scrapeDate)) scrapeDate = timestamp;
                 }
                 if (history) deleted.push(...extractOffers(history));
             });
+            // Use label from most recent scrape for title
+            const mostRecent = allData.reduce((a, b) => a.timestamp > b.timestamp ? a : b, { label: "" });
+            data = { label: mostRecent.label || "Toutes les recherches" };
         }
     } else {
-        const data = await loadJsonWithFallback(
+        data = await loadJsonWithFallback(
             dataUrl,
             tbodyCurrent,
             "Impossible de charger " + dataUrl
@@ -2018,9 +2022,7 @@ async function reloadTables() {
         renderCurrent(offers, scrapeDate);
         renderDeleted(deleted);
         applyFilters();
-        // For "all" scrapes, pass the merged data object; for single, pass the scrape data
-        const titleData = (dataUrl === "all") ? { offers: offers } : data;
-        updateTitle(titleData);
+        updateTitle(data);
         renderTrackedAlerts();
     } catch (e) {
         console.error("Rendering error", e);
