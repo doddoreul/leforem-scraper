@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shutil
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
@@ -48,6 +49,9 @@ DATA_FILES = {
 }
 
 CLEAN_FILE_NAME = re.compile(r"(data|details)_[A-Za-z0-9_-]+\.json")
+
+TRASH_DIR = os.path.join(DATA_DIR, "trash")
+os.makedirs(TRASH_DIR, exist_ok=True)
 
 MAX_EDIT_BODY = 8 * 1024 * 1024
 
@@ -142,13 +146,10 @@ class Handler(BaseHTTPRequestHandler):
         self._serve_file(path)
 
     def do_POST(self):
-        """Save the employer index edited from the web interface.
-
-        Only `data/companies.json` can be written, only from a page of
-        this local server (Origin/Host check), and the body must be a
-        JSON object holding an `employers` map.
-        """
         parsed = urlparse(self.path)
+        if parsed.path == "/delete-scraping":
+            self._handle_delete_scraping()
+            return
         if parsed.path != "/companies.json":
             self.send_error(404)
             return
@@ -265,6 +266,72 @@ class Handler(BaseHTTPRequestHandler):
             if isinstance(item, dict) and item.get("gufid")
         ]
         self._send_json(200, results)
+
+    def _handle_delete_scraping(self):
+        """Move all files for a scraping to trash."""
+        parsed = urlparse(self.path)
+        if parsed.path != "/delete-scraping":
+            self.send_error(404)
+            return
+
+        origin = self.headers.get("Origin")
+        host = self.headers.get("Host") or ""
+        if origin and urlparse(origin).netloc != host:
+            self._send_json(403, {"error": "origin refused"})
+            return
+
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        if length <= 0 or length > MAX_EDIT_BODY:
+            self._send_json(400, {"error": "invalid body size"})
+            return
+
+        raw = self.rfile.read(length)
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            self._send_json(400, {"error": "invalid JSON"})
+            return
+
+        if not isinstance(payload, dict) or "name" not in payload:
+            self._send_json(400, {"error": "missing name"})
+            return
+
+        name = payload["name"]
+        if not name or not isinstance(name, str):
+            self._send_json(400, {"error": "invalid name"})
+            return
+
+        # Sanitize name to prevent path traversal
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+            self._send_json(400, {"error": "invalid name format"})
+            return
+
+        data_file = f"data_{name}.json"
+        history_file = f"historique_{name}.json"
+        details_file = f"details_{name}.json"
+
+        moved = []
+        errors = []
+
+        for fname in (data_file, history_file, details_file):
+            src = os.path.join(DATA_DIR, fname)
+            if os.path.exists(src):
+                dst = os.path.join(TRASH_DIR, fname)
+                try:
+                    shutil.move(src, dst)
+                    moved.append(fname)
+                except OSError as e:
+                    errors.append(f"{fname}: {e}")
+            # If file doesn't exist, that's okay - just skip
+
+        if errors:
+            self._send_json(500, {"error": "partial failure", "moved": moved, "errors": errors})
+            return
+
+        self._send_json(200, {"ok": True, "moved": moved})
 
     def log_message(self, format, *args):
         sys.stderr.write(

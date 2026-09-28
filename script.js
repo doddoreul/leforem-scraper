@@ -1888,6 +1888,9 @@ function maybeShowStaleAlert(data, scrapeDate) {
         cmdBox.style.display = "none";
         if (label) label.style.display = "none";
         copyBtn.style.display = "none";
+        // Hide delete button for "all"
+        const deleteBtn = document.getElementById("deleteScrapingBtn");
+        if (deleteBtn) deleteBtn.style.display = "none";
         document.querySelector("#staleModal .modal-hint").innerHTML =
             'Le dernier scraping date de <strong id="staleAge">' +
             timeAgoLabel(scrapeDate) +
@@ -1904,6 +1907,13 @@ function maybeShowStaleAlert(data, scrapeDate) {
             timeAgoLabel(scrapeDate) +
             '</strong>. De nouvelles annonces ont peut-être été publiées depuis. ' +
             'Lance le scraping pour les afficher :';
+
+        // Show delete button for individual scrapes
+        const deleteBtn = document.getElementById("deleteScrapingBtn");
+        if (deleteBtn) {
+            deleteBtn.style.display = "";
+            deleteBtn.dataset.scrapingName = data.name || "";
+        }
     }
 
     document.getElementById("staleStatus").textContent = "";
@@ -2113,6 +2123,76 @@ async function init() {
         staleModal.addEventListener("keydown", function (e) {
             if (e.key === "Escape") closeStaleAlert();
         });
+    }
+
+    // Delete scraping button in stale modal
+    const deleteScrapingBtn = document.getElementById("deleteScrapingBtn");
+    if (deleteScrapingBtn) {
+        deleteScrapingBtn.addEventListener("click", function () {
+            closeStaleAlert();
+            openDeleteConfirm(this.dataset.scrapingName);
+        });
+    }
+
+    // Delete confirmation modal
+    const deleteConfirmModal = document.getElementById("deleteConfirmModal");
+    const closeDeleteConfirmBtn = document.getElementById("closeDeleteConfirmBtn");
+    const cancelDeleteBtn = document.getElementById("cancelDeleteBtn");
+    const confirmDeleteBtn = document.getElementById("confirmDeleteBtn");
+
+    function closeDeleteConfirm() {
+        if (deleteConfirmModal) deleteConfirmModal.classList.remove("visible");
+    }
+
+    function openDeleteConfirm(scrapingName) {
+        document.getElementById("deleteScrapingName").textContent = scrapingName;
+        if (deleteConfirmModal) deleteConfirmModal.classList.add("visible");
+    }
+
+    if (closeDeleteConfirmBtn) closeDeleteConfirmBtn.addEventListener("click", closeDeleteConfirm);
+    if (cancelDeleteBtn) cancelDeleteBtn.addEventListener("click", closeDeleteConfirm);
+    if (confirmDeleteBtn) {
+        confirmDeleteBtn.addEventListener("click", async function () {
+            const nameEl = document.getElementById("deleteScrapingName");
+            const name = nameEl ? nameEl.textContent : "";
+            if (!name) return;
+            closeDeleteConfirm();
+            await deleteScraping(name);
+        });
+    }
+
+    if (deleteConfirmModal) {
+        deleteConfirmModal.querySelector(".modal-backdrop")
+            .addEventListener("click", closeDeleteConfirm);
+        deleteConfirmModal.addEventListener("keydown", function (e) {
+            if (e.key === "Escape") closeDeleteConfirm();
+        });
+    }
+
+    async function deleteScraping(name) {
+        try {
+            const resp = await fetch("/delete-scraping", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: name })
+            });
+            const result = await resp.json();
+            if (!resp.ok) throw new Error(result.error || "Erreur lors de la suppression");
+            showSuiviToast("Scraping supprimé : " + result.moved.join(", "));
+            // Refresh scraping selector
+            await setupScrapingSelector();
+            // If we were viewing the deleted scrape, switch to "all"
+            if (dataUrl === "data_" + name + ".json") {
+                const select = document.getElementById("scrapingSelect");
+                if (select) select.value = "all";
+                dataUrl = "all";
+                historyUrl = "";
+                setActiveScraping("");
+                reloadTables();
+            }
+        } catch (e) {
+            showSuiviToast("Erreur : " + e.message);
+        }
     }
 
     const trackedAlertDismissBtn = document.getElementById("trackedAlertDismissBtn");

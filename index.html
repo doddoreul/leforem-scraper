@@ -404,7 +404,33 @@
 
         <div class="modal-footer">
             <button class="btn-secondary" type="button" id="closeStaleFooterBtn">Plus tard</button>
+            <button class="btn-danger" type="button" id="deleteScrapingBtn" style="display: none;">Supprimer ce scraping</button>
             <button class="btn-primary" type="button" id="copyStaleBtn">Copier la commande</button>
+        </div>
+
+    </div>
+
+</div>
+
+<div class="modal" id="deleteConfirmModal" role="dialog" aria-modal="true" aria-labelledby="deleteConfirmTitle">
+
+    <div class="modal-backdrop"></div>
+
+    <div class="modal-box" style="max-width: 480px;">
+
+        <div class="modal-header">
+            <h2 id="deleteConfirmTitle">Supprimer ce scraping</h2>
+            <button class="modal-close" type="button" id="closeDeleteConfirmBtn" aria-label="Fermer">✕</button>
+        </div>
+
+        <p class="modal-hint">
+            Cette action va déplacer tous les fichiers du scraping <strong id="deleteScrapingName">—</strong>
+            vers le dossier <code>data/trash/</code>. Cette action est irréversible.
+        </p>
+
+        <div class="modal-footer">
+            <button class="btn-secondary" type="button" id="cancelDeleteBtn">Annuler</button>
+            <button class="btn-danger" type="button" id="confirmDeleteBtn">Supprimer définitivement</button>
         </div>
 
     </div>
