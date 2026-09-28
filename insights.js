@@ -96,7 +96,7 @@ async function fetchJson(url) {
     return response.json();
 }
 
-function readScope() {
+function readScopeFile() {
     try {
         const raw = localStorage.getItem(window.ScrapingSelector.STORAGE_KEY);
         if (raw === "all") return "all";
@@ -106,6 +106,14 @@ function readScope() {
         // ignore
     }
     return "all";
+}
+
+function readScope() {
+    // Backward compatibility: returns name for prefix
+    const file = readScopeFile();
+    if (file === "all") return "all";
+    const found = window.ScrapingSelector.getScrapingByKey(scrapings, file);
+    return found ? found.name : "all";
 }
 
 function populateScopeSelect() {
@@ -697,7 +705,21 @@ async function init() {
         showEmpty();
         return;
     }
-    scope = readScope();
+    // Initialize both scope (name for prefix) and scopeFile (file for filtering)
+    const stored = readScopeFile();
+    if (stored === "all") {
+        scope = "all";
+        scopeFile = "all";
+    } else {
+        const found = window.ScrapingSelector.getScrapingByKey(scrapings, stored);
+        if (found) {
+            scope = found.name;
+            scopeFile = found.file;
+        } else {
+            scope = "all";
+            scopeFile = "all";
+        }
+    }
     await populateScopeSelect();
     await refresh();
 
