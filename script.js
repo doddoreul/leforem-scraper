@@ -1876,7 +1876,36 @@ function maybeShowStaleAlert(data, scrapeDate) {
 
     staleAlertShown = true;
     document.getElementById("staleAge").textContent = timeAgoLabel(scrapeDate);
-    document.getElementById("staleCommandBox").value = buildScrapeCommand(data);
+
+    const isAll = dataUrl === "all";
+    const cmdBox = document.getElementById("staleCommandBox");
+    const copyBtn = document.getElementById("copyStaleBtn");
+    const label = document.querySelector('label[for="staleCommandBox"]');
+
+    if (isAll) {
+        // "Toutes les recherches" : no command, just a warning
+        cmdBox.value = "";
+        cmdBox.style.display = "none";
+        if (label) label.style.display = "none";
+        copyBtn.style.display = "none";
+        document.querySelector("#staleModal .modal-hint").innerHTML =
+            'Le dernier scraping date de <strong id="staleAge">' +
+            timeAgoLabel(scrapeDate) +
+            '</strong>. Certaines données sont peut-être obsolètes. ' +
+            'Sélectionnez un scraping précis pour voir la commande de mise à jour.';
+    } else {
+        // Single scrape: show normal command
+        cmdBox.style.display = "";
+        if (label) label.style.display = "";
+        copyBtn.style.display = "";
+        cmdBox.value = buildScrapeCommand(data);
+        document.querySelector("#staleModal .modal-hint").innerHTML =
+            'Le dernier scraping date de <strong id="staleAge">' +
+            timeAgoLabel(scrapeDate) +
+            '</strong>. De nouvelles annonces ont peut-être été publiées depuis. ' +
+            'Lance le scraping pour les afficher :';
+    }
+
     document.getElementById("staleStatus").textContent = "";
     document.getElementById("staleModal").classList.add("visible");
 }
