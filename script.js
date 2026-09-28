@@ -1554,22 +1554,25 @@ function setupScrapingSelector() {
             updateDeleteGearButtonVisibility();
         }
     }).then(function (result) {
-        // If we had a stored selection that was a specific scrape, ensure dataUrl/historyUrl are set
-        const stored = localStorage.getItem("forem_scraping_select");
-        if (stored === "all") {
-            dataUrl = "all";
-            historyUrl = "";
-            setActiveScraping("");
-        } else if (stored) {
-            const scrape = result.scrapings.find(function (s) { return s.file === stored; });
-            if (scrape) {
-                dataUrl = scrape.file;
-                historyUrl = scrape.history;
-                setActiveScraping(scrape.name || "");
+        try {
+            const stored = localStorage.getItem("forem_scraping_select");
+            if (stored === "all") {
+                dataUrl = "all";
+                historyUrl = "";
+                setActiveScraping("");
+            } else if (stored) {
+                const scrape = result.scrapings.find(function (s) { return s.file === stored; });
+                if (scrape) {
+                    dataUrl = scrape.file;
+                    historyUrl = scrape.history;
+                    setActiveScraping(scrape.name || "");
+                }
             }
+            updateDeleteGearButtonVisibility();
+            reloadTables();
+        } catch (e) {
+            console.error("Error restoring scrape selection:", e);
         }
-        updateDeleteGearButtonVisibility();
-        reloadTables();
     });
 }
 

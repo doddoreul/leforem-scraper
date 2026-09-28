@@ -35,6 +35,7 @@ async function createScrapingSelector(options) {
         if (response.ok) scrapings = await response.json();
     } catch (e) {
         console.error("Unable to list scrapings", e);
+        scrapings = [];
     }
 
     // Build options
