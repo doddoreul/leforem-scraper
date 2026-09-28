@@ -50,12 +50,13 @@ function gearActionMarkup(action) {
     const id = escapeAttribute(action.id);
     const label = escapeAttribute(action.label);
     const title = action.title ? ' title="' + escapeAttribute(action.title) + '"' : "";
+    const extraClass = action.id === "deleteScrapingGearBtn" ? " theme-action--danger" : "";
     if (action.type === "file") {
         const accept = action.accept ? ' accept="' + escapeAttribute(action.accept) + '"' : "";
         return '<input type="file" id="' + id + '"' + accept + " hidden>" +
-            '<label class="theme-action" for="' + id + '"' + title + ">" + label + "</label>";
+            '<label class="theme-action' + extraClass + '" for="' + id + '"' + title + ">" + label + "</label>";
     }
-    return '<button type="button" class="theme-action" id="' + id + '"' + title + ">" + label + "</button>";
+    return '<button type="button" class="theme-action' + extraClass + '" id="' + id + '"' + title + ">" + label + "</button>";
 }
 
 function renderGearActions() {

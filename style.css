@@ -2816,3 +2816,16 @@ th.col-forem-id {
     outline: none;
     box-shadow: 0 0 0 3px var(--focus-ring);
 }
+
+.theme-action--danger {
+    color: var(--danger);
+}
+
+.theme-action--danger:hover {
+    background: var(--danger-bg);
+    color: var(--danger-text);
+}
+
+.theme-action--danger:focus-visible {
+    box-shadow: 0 0 0 3px var(--danger);
+}
