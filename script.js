@@ -1536,7 +1536,7 @@ function setupScrapingSelector() {
         allowCreate: true,   // "Creer un nouveau scrap" option
         onChange: function (key, scrapings) {
             if (key === "all") {
-                dataUrl = "";
+                dataUrl = "all";
                 historyUrl = "";
                 setActiveScraping("");
             } else {
@@ -1948,38 +1948,57 @@ async function reloadTables() {
     const tbodyCurrent = document.getElementById("currentRows");
     const tbodyDeleted = document.getElementById("deletedRows");
 
-    if (!dataUrl) {
+    if (!dataUrl && dataUrl !== "all") {
         tbodyCurrent.innerHTML = "<tr><td colspan='8' class='no-scraping'>Aucun scraping sélectionné. Choisissez-en un dans le menu.</td></tr>";
         tbodyDeleted.innerHTML = "";
         return;
     }
 
-    const data = await loadJsonWithFallback(
-        dataUrl,
-        tbodyCurrent,
-        "Impossible de charger " + dataUrl
-    );
+    let offers = [];
+    let deleted = [];
+    let scrapeDate = "";
 
-    const history = await loadJsonWithFallback(
-        historyUrl,
-        tbodyDeleted,
-        "Impossible de charger " + historyUrl,
-        7
-    );
+    if (dataUrl === "all") {
+        // Fetch all scrapes and merge
+        const scrapings = await fetchJson("/api/scrapings");
+        if (scrapings && scrapings.length) {
+            const allData = await Promise.all(scrapings.map(async s => {
+                const d = await fetchJson(s.file);
+                const h = await fetchJson(s.history);
+                return { data: d, history: h, timestamp: s.scrape_timestamp };
+            }));
+            allData.forEach(({ data, history, timestamp }) => {
+                if (data) {
+                    offers.push(...extractOffers(data));
+                    if (timestamp && (!scrapeDate || timestamp > scrapeDate)) scrapeDate = timestamp;
+                }
+                if (history) deleted.push(...extractOffers(history));
+            });
+        }
+    } else {
+        const data = await loadJsonWithFallback(
+            dataUrl,
+            tbodyCurrent,
+            "Impossible de charger " + dataUrl
+        );
+        const history = await loadJsonWithFallback(
+            historyUrl,
+            tbodyDeleted,
+            "Impossible de charger " + historyUrl,
+            7
+        );
 
-    if (!data) {
-        return;
+        if (!data) return;
+
+        offers = extractOffers(data);
+        deleted = history ? extractOffers(history) : [];
+        scrapeDate = data && data.scrape_timestamp ? data.scrape_timestamp : "";
     }
-
-    const offers = extractOffers(data);
-    const deleted = history ? extractOffers(history) : [];
-    const scrapeDate = data && data.scrape_timestamp
-        ? data.scrape_timestamp : "";
 
     currentOffers = offers;
     deletedOffers = deleted;
     lastScrapeDate = scrapeDate;
-    lastData = data;
+    lastData = { offers };
 
     const currentNumbers = new Set(offers.map(o => String(o.number)));
     const keepNumbers = new Set(currentNumbers);

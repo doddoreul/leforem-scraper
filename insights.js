@@ -657,6 +657,10 @@ function showEmpty() {
     document.getElementById("dashEmpty").classList.remove("hidden");
 }
 
+function scopeEntries() {
+    return window.ScrapingSelector.filterScrapings(scrapings, scope);
+}
+
 async function refresh() {
     const entries = scopeEntries();
     dataSets = await Promise.all(entries.map(async entry => {
