@@ -1584,11 +1584,17 @@ document.addEventListener("foremCreateScrape", function () {
 function updateTitle(data) {
     const label = data && typeof data.label === "string"
         ? data.label.trim() : "";
-    const title = label
+    const fullTitle = label
         ? "Offres Forem — " + label
         : "Offres Forem — Électromécanicien industriel";
-    document.getElementById("mainTitle").textContent = title;
-    document.title = title;
+    const maxLen = 50;
+    const displayTitle = fullTitle.length > maxLen
+        ? fullTitle.slice(0, maxLen - 1) + "…"
+        : fullTitle;
+    const titleEl = document.getElementById("mainTitle");
+    titleEl.textContent = displayTitle;
+    titleEl.title = fullTitle;
+    document.title = fullTitle;
 }
 
 
