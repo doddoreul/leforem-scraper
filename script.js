@@ -2006,7 +2006,14 @@ async function reloadTables() {
     currentOffers = offers;
     deletedOffers = deleted;
     lastScrapeDate = scrapeDate;
-    lastData = { offers };
+    // Store metadata needed for stale alert command generation
+    lastData = {
+        offers: offers,
+        occupation_guid: data && data.occupation_guid,
+        location_guid: data && data.location_guid,
+        name: data && data.name,
+        label: data && data.label
+    };
 
     const currentNumbers = new Set(offers.map(o => String(o.number)));
     const keepNumbers = new Set(currentNumbers);
