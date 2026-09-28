@@ -40,6 +40,8 @@ STATIC_FILES = {
     "/companies.js": ("companies.js", "application/javascript; charset=utf-8"),
     "/detail.js": ("detail.js", "application/javascript; charset=utf-8"),
     "/scraping-selector.js": ("scraping-selector.js", "application/javascript; charset=utf-8"),
+    "/navbar-loader.js": ("navbar-loader.js", "application/javascript; charset=utf-8"),
+    "/navbar_include.html": ("navbar_include.html", "text/html; charset=utf-8"),
 }
 
 DATA_FILES = {
