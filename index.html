@@ -27,7 +27,8 @@
     window.FOREM_GEAR_ACTIONS = [
         { id: "exportCsvBtn", label: "Exporter CSV", title: "Exporter les annonces visibles en CSV" },
         { id: "exportTrackingBtn", label: "Exporter le suivi", title: "Sauvegarder statuts, remarques, favoris et relances en fichier JSON" },
-        { id: "importTrackingInput", label: "Importer le suivi", title: "Restaurer un fichier de suivi exporté depuis un autre PC", type: "file", accept: ".json,application/json" }
+        { id: "importTrackingInput", label: "Importer le suivi", title: "Restaurer un fichier de suivi exporté depuis un autre PC", type: "file", accept: ".json,application/json" },
+        { id: "deleteScrapingGearBtn", label: "Supprimer ce scraping", title: "Supprimer le scraping actuellement sélectionné (déplace les fichiers vers data/trash/)" }
     ];
 </script>
 
@@ -404,7 +405,6 @@
 
         <div class="modal-footer">
             <button class="btn-secondary" type="button" id="closeStaleFooterBtn">Plus tard</button>
-            <button class="btn-danger" type="button" id="deleteScrapingBtn" style="display: none;">Supprimer ce scraping</button>
             <button class="btn-primary" type="button" id="copyStaleBtn">Copier la commande</button>
         </div>
 

@@ -1551,6 +1551,7 @@ function setupScrapingSelector() {
             resetGroupFilter();
             resetSort();
             reloadTables();
+            updateDeleteGearButtonVisibility();
         }
     }).then(function (result) {
         // If we had a stored selection that was a specific scrape, ensure dataUrl/historyUrl are set
@@ -1567,6 +1568,7 @@ function setupScrapingSelector() {
                 setActiveScraping(scrape.name || "");
             }
         }
+        updateDeleteGearButtonVisibility();
     });
 }
 
@@ -1888,9 +1890,6 @@ function maybeShowStaleAlert(data, scrapeDate) {
         cmdBox.style.display = "none";
         if (label) label.style.display = "none";
         copyBtn.style.display = "none";
-        // Hide delete button for "all"
-        const deleteBtn = document.getElementById("deleteScrapingBtn");
-        if (deleteBtn) deleteBtn.style.display = "none";
         document.querySelector("#staleModal .modal-hint").innerHTML =
             'Le dernier scraping date de <strong id="staleAge">' +
             timeAgoLabel(scrapeDate) +
@@ -1907,13 +1906,6 @@ function maybeShowStaleAlert(data, scrapeDate) {
             timeAgoLabel(scrapeDate) +
             '</strong>. De nouvelles annonces ont peut-être été publiées depuis. ' +
             'Lance le scraping pour les afficher :';
-
-        // Show delete button for individual scrapes
-        const deleteBtn = document.getElementById("deleteScrapingBtn");
-        if (deleteBtn) {
-            deleteBtn.style.display = "";
-            deleteBtn.dataset.scrapingName = data.name || "";
-        }
     }
 
     document.getElementById("staleStatus").textContent = "";
@@ -2102,6 +2094,28 @@ async function init() {
     if (exportBtn) {
         exportBtn.addEventListener("click", exportCsv);
     }
+    const deleteScrapingGearBtn = document.getElementById("deleteScrapingGearBtn");
+    if (deleteScrapingGearBtn) {
+        deleteScrapingGearBtn.addEventListener("click", function () {
+            if (!dataUrl || dataUrl === "all" || !activeBaseName) {
+                showSuiviToast("Sélectionnez un scraping précis pour le supprimer.");
+                return;
+            }
+            openDeleteConfirm(activeBaseName);
+        });
+    }
+
+    function updateDeleteGearButtonVisibility() {
+        const btn = document.getElementById("deleteScrapingGearBtn");
+        if (!btn) return;
+        // Show only when a specific scrape is selected (not "all")
+        if (dataUrl && dataUrl !== "all" && activeBaseName) {
+            btn.style.display = "";
+        } else {
+            btn.style.display = "none";
+        }
+    }
+
     setupSuiviActions();
 
     const closeStaleBtn = document.getElementById("closeStaleBtn");
@@ -2122,15 +2136,6 @@ async function init() {
             .addEventListener("click", closeStaleAlert);
         staleModal.addEventListener("keydown", function (e) {
             if (e.key === "Escape") closeStaleAlert();
-        });
-    }
-
-    // Delete scraping button in stale modal
-    const deleteScrapingBtn = document.getElementById("deleteScrapingBtn");
-    if (deleteScrapingBtn) {
-        deleteScrapingBtn.addEventListener("click", function () {
-            closeStaleAlert();
-            openDeleteConfirm(this.dataset.scrapingName);
         });
     }
 
