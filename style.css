@@ -241,6 +241,18 @@ body {
     border-color: var(--accent-fill-hover);
 }
 
+.btn-danger {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: var(--accent-text);
+}
+
+.btn-danger:hover {
+    background: var(--danger-bg);
+    border-color: var(--danger-border);
+    color: var(--danger-text);
+}
+
 .btn-outline {
     background: transparent;
     border-color: var(--border);
