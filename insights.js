@@ -99,7 +99,8 @@ function readScope() {
     try {
         const raw = localStorage.getItem(window.ScrapingSelector.STORAGE_KEY);
         if (raw === "all") return "all";
-        if (scrapings.some(s => s.name === raw)) return raw;
+        const found = window.ScrapingSelector.getScrapingByKey(scrapings, raw);
+        if (found) return found.name;
     } catch (e) {
         // ignore
     }
