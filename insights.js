@@ -27,6 +27,7 @@ const STATE_TXT = {
 
 let scrapings = [];
 let scope = "all";
+let scopeFile = "all";
 let dataSets = [];
 let lastScrapeHistory = null;
 
@@ -100,7 +101,7 @@ function readScope() {
         const raw = localStorage.getItem(window.ScrapingSelector.STORAGE_KEY);
         if (raw === "all") return "all";
         const found = window.ScrapingSelector.getScrapingByKey(scrapings, raw);
-        if (found) return found.name;
+        if (found) return found.file;
     } catch (e) {
         // ignore
     }
@@ -113,23 +114,34 @@ function populateScopeSelect() {
 
     return window.ScrapingSelector.createScrapingSelector({
         selectId: "dashScope",
-        allowAll: true,      // "Toutes les recherches"
-        allowCreate: false,  // no "create new" in insights
+        allowAll: true,       // "Toutes les recherches"
+        allowCreate: true,    // "Créer un nouveau scrap"
         onChange: function (key) {
             if (key === "all") {
                 scope = "all";
+                scopeFile = "all";
             } else {
                 const found = scrapings.find(function (s) { return s.file === key; });
-                scope = found ? found.name : "all";
+                if (found) {
+                    scope = found.name;
+                    scopeFile = found.file;
+                } else {
+                    scope = "all";
+                    scopeFile = "all";
+                }
             }
             try {
-                localStorage.setItem(window.ScrapingSelector.STORAGE_KEY, scope);
+                localStorage.setItem(window.ScrapingSelector.STORAGE_KEY, scopeFile);
             } catch (e) {
                 // ignore
             }
             refresh();
         }
     });
+}
+
+function scopeEntries() {
+    return window.ScrapingSelector.filterScrapings(scrapings, scopeFile);
 }
 
 function offerState(offer) {
@@ -688,6 +700,11 @@ async function init() {
     scope = readScope();
     await populateScopeSelect();
     await refresh();
+
+    // Handle "Créer un nouveau scrap" from shared selector
+    document.addEventListener("foremCreateScrape", function () {
+        window.open("index.html", "_blank");
+    });
 }
 
 document.addEventListener("DOMContentLoaded", init);
