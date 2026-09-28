@@ -38,6 +38,7 @@ STATIC_FILES = {
     "/insights.js": ("insights.js", "application/javascript; charset=utf-8"),
     "/companies.js": ("companies.js", "application/javascript; charset=utf-8"),
     "/detail.js": ("detail.js", "application/javascript; charset=utf-8"),
+    "/scraping-selector.js": ("scraping-selector.js", "application/javascript; charset=utf-8"),
 }
 
 DATA_FILES = {
