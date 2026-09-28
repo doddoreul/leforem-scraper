@@ -2178,6 +2178,74 @@ async function init() {
         });
     }
 
+    // Scrape command modal
+    const scrapeCommandModal = document.getElementById("scrapeCommandModal");
+    const closeScrapeCommandBtn = document.getElementById("closeScrapeCommandBtn");
+    const closeScrapeCommandFooterBtn = document.getElementById("closeScrapeCommandFooterBtn");
+    const copyScrapeCommandBtn = document.getElementById("copyScrapeCommandBtn");
+    const scrapeCommandBox = document.getElementById("scrapeCommandBox");
+    const scrapeCommandStatus = document.getElementById("scrapeCommandStatus");
+
+    function closeScrapeCommandModal() {
+        if (scrapeCommandModal) scrapeCommandModal.classList.remove("visible");
+    }
+
+    function openScrapeCommandModal() {
+        if (!dataUrl || dataUrl === "all" || !activeBaseName) {
+            showSuiviToast("Sélectionnez un scraping précis pour voir la commande.");
+            return;
+        }
+        const parts = ["python", "scraper.py"];
+        if (lastData.occupation_guid) parts.push("--occupation-guid " + lastData.occupation_guid);
+        if (lastData.location_guid) parts.push("--location-guid " + lastData.location_guid);
+        if (lastData.name) parts.push("--base " + lastData.name);
+        if (lastData.label) parts.push("--label \"" + lastData.label + "\"");
+        const command = parts.join(" ");
+        scrapeCommandBox.value = command;
+        scrapeCommandStatus.textContent = "";
+        if (scrapeCommandModal) scrapeCommandModal.classList.add("visible");
+    }
+
+    function closeScrapeCommandModal() {
+        if (scrapeCommandModal) scrapeCommandModal.classList.remove("visible");
+    }
+
+    async function copyScrapeCommand() {
+        if (!scrapeCommandBox.value) return;
+        try {
+            await navigator.clipboard.writeText(scrapeCommandBox.value);
+            scrapeCommandStatus.textContent = "Commande copiée.";
+        } catch (e) {
+            scrapeCommandBox.select();
+            document.execCommand("copy");
+            scrapeCommandStatus.textContent = "Commande copiée.";
+        }
+    }
+
+    // Stat date click handler
+    const statDateEl = document.getElementById("statDate");
+    if (statDateEl) {
+        statDateEl.addEventListener("click", function () {
+            if (dataUrl && dataUrl !== "all" && activeBaseName) {
+                openScrapeCommandModal();
+            } else {
+                showSuiviToast("Sélectionnez un scraping précis pour voir la commande.");
+            }
+        });
+    }
+
+    // Scrape command modal event listeners
+    if (closeScrapeCommandBtn) closeScrapeCommandBtn.addEventListener("click", closeScrapeCommandModal);
+    if (closeScrapeCommandFooterBtn) closeScrapeCommandFooterBtn.addEventListener("click", closeScrapeCommandModal);
+    if (copyScrapeCommandBtn) copyScrapeCommandBtn.addEventListener("click", copyScrapeCommand);
+    if (scrapeCommandModal) {
+        scrapeCommandModal.querySelector(".modal-backdrop")
+            .addEventListener("click", closeScrapeCommandModal);
+        scrapeCommandModal.addEventListener("keydown", function (e) {
+            if (e.key === "Escape") closeScrapeCommandModal();
+        });
+    }
+
     async function deleteScraping(name) {
         try {
             const resp = await fetch("/delete-scraping", {

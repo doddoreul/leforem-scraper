@@ -1740,6 +1740,17 @@ th.sortable.sort-desc::after {
     font-size: 12px;
 }
 
+.stat-date-clickable {
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+}
+
+.stat-date-clickable:hover {
+    color: var(--accent);
+}
+
 .stat-filter {
     cursor: pointer;
     user-select: none;

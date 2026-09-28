@@ -117,7 +117,7 @@
             </button>
 
             <div class="stat stat-date">
-                Dernier scraping&nbsp;: <span id="statDate">—</span>
+                Dernier scraping&nbsp;: <span id="statDate" class="stat-date-clickable" title="Cliquer pour voir la commande de scraping">—</span>
             </div>
 
         </div>
@@ -431,6 +431,34 @@
         <div class="modal-footer">
             <button class="btn-secondary" type="button" id="cancelDeleteBtn">Annuler</button>
             <button class="btn-danger" type="button" id="confirmDeleteBtn">Supprimer définitivement</button>
+        </div>
+
+    </div>
+
+</div>
+
+<div class="modal" id="scrapeCommandModal" role="dialog" aria-modal="true" aria-labelledby="scrapeCommandTitle">
+
+    <div class="modal-backdrop"></div>
+
+    <div class="modal-box" style="max-width: 640px;">
+
+        <div class="modal-header">
+            <h2 id="scrapeCommandTitle">Commande de scraping</h2>
+            <button class="modal-close" type="button" id="closeScrapeCommandBtn" aria-label="Fermer">✕</button>
+        </div>
+
+        <p class="modal-hint">
+            Copiez cette commande pour relancer le scraping actuel :
+        </p>
+
+        <label class="command-label" for="scrapeCommandBox">Commande à coller dans le terminal</label>
+        <textarea id="scrapeCommandBox" class="command-box" rows="4" readonly spellcheck="false"></textarea>
+        <p class="confirmation-status" id="scrapeCommandStatus"></p>
+
+        <div class="modal-footer">
+            <button class="btn-primary" type="button" id="copyScrapeCommandBtn">Copier la commande</button>
+            <button class="btn-secondary" type="button" id="closeScrapeCommandFooterBtn">Fermer</button>
         </div>
 
     </div>
