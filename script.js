@@ -1569,6 +1569,7 @@ function setupScrapingSelector() {
             }
         }
         updateDeleteGearButtonVisibility();
+        reloadTables();
     });
 }
 
