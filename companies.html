@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Employeurs — Suivi Forem</title>
+
+<link rel="stylesheet" href="style.css?v=38">
+
+<script>
+    (function () {
+        var saved;
+        try {
+            saved = localStorage.getItem("forem_theme");
+        } catch (e) {
+            saved = null;
+        }
+        if (saved !== "light" && saved !== "dark") {
+            saved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.setAttribute("data-theme", saved);
+    })();
+</script>
+
+<script>
+    window.FOREM_GEAR_ACTIONS = [
+        { id: "exportTrackingBtn", label: "Exporter le suivi", title: "Sauvegarder statuts, remarques, favoris et relances en fichier JSON" },
+        { id: "importTrackingInput", label: "Importer le suivi", title: "Restaurer un fichier de suivi exporté depuis un autre PC", type: "file", accept: ".json,application/json" }
+    ];
+</script>
+
+<script src="theme.js?v=4" defer></script>
+
+</head>
+<body>
+
+<nav class="page-nav" aria-label="Navigation entre pages">
+
+    <div class="page-nav-inner">
+
+        <a class="page-link" href="index.html">Offres</a>
+
+        <a class="page-link" href="insights.html">Dashboard</a>
+
+        <a class="page-link active" href="companies.html" aria-current="page">Employeurs</a>
+
+    </div>
+
+</nav>
+
+<main class="dashboard">
+
+    <header class="page-head">
+
+        <div class="page-head-titles">
+
+            <h1 class="page-title">Employeurs</h1>
+            <p class="page-sub">
+                Un employeur par nom, avec ses contacts trouvés dans les offres.
+            </p>
+
+        </div>
+
+        <div class="page-head-tools">
+
+            <label class="search" for="companySearch">
+                <span>🔎</span>
+                <input type="search" id="companySearch" placeholder="Rechercher… (nom, email, lieu)">
+            </label>
+
+            <label class="filter" for="companyContact">
+                <span>Contact :</span>
+                <select id="companyContact">
+                    <option value="">Tous</option>
+                    <option value="email">Avec email</option>
+                    <option value="phone">Avec téléphone</option>
+                    <option value="address">Avec adresse</option>
+                    <option value="any">Au moins un contact</option>
+                    <option value="all">Coordonnées complètes</option>
+                    <option value="active">Offres en cours</option>
+                </select>
+            </label>
+
+        </div>
+
+    </header>
+
+    <section class="dash-kpis" id="kpiRow" aria-label="Indicateurs clés"></section>
+
+    <p class="dash-note" id="companiesNote"></p>
+
+    <div class="table-container company-table-wrap" id="companiesTable">
+        <table class="dash-table company-table">
+            <thead>
+            <tr>
+                <th scope="col">Société</th>
+                <th scope="col">Offres</th>
+                <th scope="col">E-mails</th>
+                <th scope="col">Contacts</th>
+                <th scope="col">Détails</th>
+            </tr>
+            </thead>
+            <tbody id="companyRows"></tbody>
+        </table>
+    </div>
+
+    <p class="dash-empty hidden" id="companiesEmpty">
+        Aucune donnée : lance <code>python companies.py</code> puis recharge cette page.
+    </p>
+
+</main>
+
+<script src="suivi-io.js?v=1"></script>
+<script src="companies.js?v=5"></script>
+
+</body>
+</html>

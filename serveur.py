@@ -1,15 +1,18 @@
 import json
 import os
 import re
+import shutil
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 import requests
 
+import companies
 import scraper
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
 
 PORT = 8123
 
@@ -26,24 +29,45 @@ STATIC_FILES = {
     "": ("index.html", "text/html; charset=utf-8"),
     "/": ("index.html", "text/html; charset=utf-8"),
     "/index.html": ("index.html", "text/html; charset=utf-8"),
+    "/insights.html": ("insights.html", "text/html; charset=utf-8"),
+    "/companies.html": ("companies.html", "text/html; charset=utf-8"),
+    "/detail.html": ("detail.html", "text/html; charset=utf-8"),
     "/style.css": ("style.css", "text/css; charset=utf-8"),
+    "/theme.js": ("theme.js", "application/javascript; charset=utf-8"),
+    "/suivi-io.js": ("suivi-io.js", "application/javascript; charset=utf-8"),
     "/script.js": ("script.js", "application/javascript; charset=utf-8"),
-    "/data.json": ("data.json", "application/json; charset=utf-8"),
-    "/historique_supprimees.json": (
-        "historique_supprimees.json", "application/json; charset=utf-8"
-    ),
+    "/insights.js": ("insights.js", "application/javascript; charset=utf-8"),
+    "/companies.js": ("companies.js", "application/javascript; charset=utf-8"),
+    "/detail.js": ("detail.js", "application/javascript; charset=utf-8"),
+    "/scraping-selector.js": ("scraping-selector.js", "application/javascript; charset=utf-8"),
 }
 
-CLEAN_FILE_NAME = re.compile(r"data_[A-Za-z0-9_-]+\.json")
+DATA_FILES = {
+    "/historique_scrapes.json": "historique_scrapes.json",
+    "/historique_modifications.json": "historique_modifications.json",
+    "/companies.json": "companies.json",
+}
+
+CLEAN_FILE_NAME = re.compile(r"(data|details)_[A-Za-z0-9_-]+\.json")
+
+TRASH_DIR = os.path.join(DATA_DIR, "trash")
+os.makedirs(TRASH_DIR, exist_ok=True)
+
+MAX_EDIT_BODY = 8 * 1024 * 1024
 
 SESSION = requests.Session()
 SESSION.headers.update(scraper.HEADERS)
 
 
 def scrape_files_for(name):
-    if name:
-        return f"data_{name}.json", f"historique_{name}.json"
-    return "data.json", "historique_supprimees.json"
+    return (
+        f"data_{name}.json",
+        f"historique_{name}.json",
+    )
+
+
+def details_file_for(name):
+    return f"details_{name}.json"
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -59,24 +83,32 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _serve_file(self, path):
-        if path in STATIC_FILES:
+        if path in DATA_FILES:
+            file_name = DATA_FILES[path]
+            file_root = DATA_DIR
+            mime_type = "application/json; charset=utf-8"
+        elif path in STATIC_FILES:
             file_name, mime_type = STATIC_FILES[path]
+            file_root = BASE_DIR
         else:
             base_name = os.path.basename(path)
-            if CLEAN_FILE_NAME.fullmatch(base_name):
-                file_name = base_name
-                mime_type = "application/json; charset=utf-8"
-            elif base_name.startswith("historique_") and base_name.endswith(
-                ".json"
+            if (
+                CLEAN_FILE_NAME.fullmatch(base_name)
+                or (
+                    base_name.startswith("historique_")
+                    and base_name.endswith(".json")
+                )
             ):
                 file_name = base_name
+                file_root = DATA_DIR
                 mime_type = "application/json; charset=utf-8"
             else:
                 self.send_error(404)
                 return
 
-        file_path = os.path.join(BASE_DIR, file_name)
-        if os.path.dirname(file_path) != BASE_DIR:
+        file_dir = os.path.normpath(file_root)
+        file_path = os.path.normpath(os.path.join(file_dir, file_name))
+        if os.path.dirname(file_path) != file_dir:
             self.send_error(404)
             return
         try:
@@ -95,7 +127,6 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
-
         if path == "/api/scrapings":
             self._handle_scrapings()
             return
@@ -114,17 +145,70 @@ class Handler(BaseHTTPRequestHandler):
 
         self._serve_file(path)
 
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        if parsed.path == "/delete-scraping":
+            self._handle_delete_scraping()
+            return
+        if parsed.path != "/companies.json":
+            self.send_error(404)
+            return
+
+        origin = self.headers.get("Origin")
+        host = self.headers.get("Host") or ""
+        if origin and urlparse(origin).netloc != host:
+            self._send_json(403, {"error": "origin refused"})
+            return
+
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        if length <= 0 or length > MAX_EDIT_BODY:
+            self._send_json(400, {"error": "invalid body size"})
+            return
+
+        raw = self.rfile.read(length)
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            self._send_json(400, {"error": "invalid JSON"})
+            return
+
+        if not isinstance(payload, dict) or not isinstance(
+            payload.get("employers"), dict
+        ):
+            self._send_json(400, {"error": "missing employers map"})
+            return
+
+        payload["version"] = payload.get("version") or 1
+        payload["updated_timestamp"] = scraper.now_iso_timestamp()
+        payload["stats"] = companies.summarize(payload["employers"])
+        try:
+            scraper.write_json_atomically(
+                os.path.join(DATA_DIR, "companies.json"), payload
+            )
+        except OSError as exc:
+            self._send_json(500, {"error": str(exc)})
+            return
+
+        self._send_json(200, {
+            "ok": True,
+            "employeurs": len(payload["employers"]),
+        })
+
     def _handle_scrapings(self):
+        if not os.path.isdir(DATA_DIR):
+            self._send_json(200, [])
+            return
         results = []
-        for file_name in sorted(os.listdir(BASE_DIR)):
-            if file_name == "data.json":
-                name = ""
-            elif CLEAN_FILE_NAME.fullmatch(file_name):
+        for file_name in sorted(os.listdir(DATA_DIR)):
+            if CLEAN_FILE_NAME.fullmatch(file_name) and file_name.startswith("data_"):
                 name = file_name[len("data_"):-len(".json")]
             else:
                 continue
             try:
-                with open(os.path.join(BASE_DIR, file_name),
+                with open(os.path.join(DATA_DIR, file_name),
                           "r", encoding="utf-8") as f:
                     data = json.load(f)
             except (OSError, json.JSONDecodeError):
@@ -136,14 +220,14 @@ class Handler(BaseHTTPRequestHandler):
                 "name": name,
                 "file": file_name,
                 "history": scrape_files_for(name)[1],
+                "details": details_file_for(name),
                 "label": data.get("label", "") or "",
                 "scrape_timestamp": data.get("scrape_timestamp", "") or "",
                 "occupationGuid": data.get("occupation_guid", "") or "",
                 "locationGuid": data.get("location_guid", "") or "",
                 "offerCount": len(offers) if isinstance(offers, list) else 0,
             })
-        results.sort(key=lambda e: (e["file"] != "data.json",
-                                    e["label"] or e["name"]))
+        results.sort(key=lambda e: e["label"] or e["name"])
         self._send_json(200, results)
 
     def _handle_occupations(self, q):
@@ -182,6 +266,72 @@ class Handler(BaseHTTPRequestHandler):
             if isinstance(item, dict) and item.get("gufid")
         ]
         self._send_json(200, results)
+
+    def _handle_delete_scraping(self):
+        """Move all files for a scraping to trash."""
+        parsed = urlparse(self.path)
+        if parsed.path != "/delete-scraping":
+            self.send_error(404)
+            return
+
+        origin = self.headers.get("Origin")
+        host = self.headers.get("Host") or ""
+        if origin and urlparse(origin).netloc != host:
+            self._send_json(403, {"error": "origin refused"})
+            return
+
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        if length <= 0 or length > MAX_EDIT_BODY:
+            self._send_json(400, {"error": "invalid body size"})
+            return
+
+        raw = self.rfile.read(length)
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            self._send_json(400, {"error": "invalid JSON"})
+            return
+
+        if not isinstance(payload, dict) or "name" not in payload:
+            self._send_json(400, {"error": "missing name"})
+            return
+
+        name = payload["name"]
+        if not name or not isinstance(name, str):
+            self._send_json(400, {"error": "invalid name"})
+            return
+
+        # Sanitize name to prevent path traversal
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+            self._send_json(400, {"error": "invalid name format"})
+            return
+
+        data_file = f"data_{name}.json"
+        history_file = f"historique_{name}.json"
+        details_file = f"details_{name}.json"
+
+        moved = []
+        errors = []
+
+        for fname in (data_file, history_file, details_file):
+            src = os.path.join(DATA_DIR, fname)
+            if os.path.exists(src):
+                dst = os.path.join(TRASH_DIR, fname)
+                try:
+                    shutil.move(src, dst)
+                    moved.append(fname)
+                except OSError as e:
+                    errors.append(f"{fname}: {e}")
+            # If file doesn't exist, that's okay - just skip
+
+        if errors:
+            self._send_json(500, {"error": "partial failure", "moved": moved, "errors": errors})
+            return
+
+        self._send_json(200, {"ok": True, "moved": moved})
 
     def log_message(self, format, *args):
         sys.stderr.write(

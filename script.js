@@ -2,21 +2,13 @@
 // CONFIGURATION
 // ============================================================
 
-const DATA_URL = "data.json";
-const HISTORY_URL = "historique_supprimees.json";
-const API_SCRAPINGS = "/api/scrapings";
-
+// Base URLs for the active scraping; populated by setupScrapingSelector()
+let dataUrl = "";
+let historyUrl = "";
 const DEFAULT_STORAGE_PREFIX = "forem_electromecanicien_";
 
-const TRACKED_PLAIN_KEYS = ["forem_scraping_select"];
-const TRACKED_KEY_PATTERN = /^forem_.+_(statuts|remarques|favoris|statut_dates)$/;
-
-function isTrackedStorageKey(key) {
-    return TRACKED_KEY_PATTERN.test(key) ||
-        TRACKED_PLAIN_KEYS.indexOf(key) !== -1;
-}
-
 let storagePrefix = DEFAULT_STORAGE_PREFIX;
+let activeBaseName = "";
 
 function getStorageKey(suffix) {
     return storagePrefix + suffix;
@@ -26,7 +18,35 @@ function setActiveScraping(baseName) {
     storagePrefix = baseName
         ? "forem_" + baseName + "_"
         : DEFAULT_STORAGE_PREFIX;
+    activeBaseName = baseName || "";
 }
+
+// Migrate localStorage from old default prefix to new GUID-based prefix.
+// Runs once per browser profile.
+function migrateDefaultStorage() {
+    const MIGRATION_FLAG = "forem_migration_v2_done";
+    if (localStorage.getItem(MIGRATION_FLAG)) return;
+
+    const oldPrefix = DEFAULT_STORAGE_PREFIX; // "forem_electromecanicien_"
+    const newPrefix = "forem_fb3c1045-38215355_"; // default scrape GUIDs
+    const suffixes = [
+        "statuts", "statut_dates", "remarques", "favoris", "priorites"
+    ];
+
+    suffixes.forEach(function (suffix) {
+        const oldKey = oldPrefix + suffix;
+        const newKey = newPrefix + suffix;
+        const oldValue = localStorage.getItem(oldKey);
+        if (oldValue && !localStorage.getItem(newKey)) {
+            localStorage.setItem(newKey, oldValue);
+        }
+    });
+
+    localStorage.setItem(MIGRATION_FLAG, "1");
+}
+
+// Run migration immediately so it's done before any UI uses the keys.
+migrateDefaultStorage();
 
 const STATUS_OPTIONS = [
     { value: "", label: "—" },
@@ -36,6 +56,7 @@ const STATUS_OPTIONS = [
     { value: "contacte", label: "Contacté" },
     { value: "refuse", label: "Refusé" },
     { value: "rdv", label: "RDV prévu" },
+    { value: "generique", label: "Annonce générique" },
 ];
 
 
@@ -273,6 +294,71 @@ function cleanFavorites(currentNumbers) {
 let favorites = loadFavorites();
 
 
+// ============================================================
+// LOCAL STORAGE (personal priority)
+// ============================================================
+
+const PRIORITY_OPTIONS = [
+    { value: "", label: "Aucune" },
+    { value: "haute", label: "Haute" },
+    { value: "moyenne", label: "Moyenne" },
+    { value: "faible", label: "Faible" },
+];
+
+function loadPriorities() {
+    try {
+        const value = localStorage.getItem(getStorageKey("priorites"));
+        if (!value) return {};
+        const parsed = JSON.parse(value);
+        return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (e) {
+        console.error("Unable to load priorities", e);
+        return {};
+    }
+}
+
+function savePriorities() {
+    try {
+        localStorage.setItem(getStorageKey("priorites"), JSON.stringify(priorities));
+    } catch (e) {
+        console.error("Unable to save priorities", e);
+    }
+}
+
+function getPriority(number) {
+    return priorities[String(number)] || "";
+}
+
+function setPriority(number, value) {
+    if (value) {
+        priorities[String(number)] = value;
+    } else {
+        delete priorities[String(number)];
+    }
+    savePriorities();
+}
+
+function priorityLabel(value) {
+    const option = PRIORITY_OPTIONS.find(o => o.value === value);
+    return option ? option.label : "";
+}
+
+function cleanPriorities(currentNumbers) {
+    let changed = false;
+    Object.keys(priorities).forEach(number => {
+        if (!currentNumbers.has(number)) {
+            delete priorities[number];
+            changed = true;
+        }
+    });
+    if (changed) {
+        savePriorities();
+    }
+}
+
+let priorities = loadPriorities();
+
+
 // Re-reads the in-memory maps from localStorage. Needed when the
 // active scraping changes or after an import restores the data.
 function reloadStorageMaps() {
@@ -280,6 +366,7 @@ function reloadStorageMaps() {
     remarks = loadRemarks();
     favorites = loadFavorites();
     statutDates = loadStatutDates();
+    priorities = loadPriorities();
 }
 
 
@@ -310,16 +397,45 @@ function createStatusSelect(number) {
     return select;
 }
 
+function getOfferState(offer) {
+    if (offer.offer_state) return offer.offer_state;
+    return offer.is_new === true ? "new" : "old";
+}
+
+function detailHref(number) {
+    const params = new URLSearchParams({ number: String(number) });
+    if (activeBaseName) {
+        params.set("base", activeBaseName);
+    }
+    return "detail.html?" + params.toString();
+}
+
 function createOfferLink(offer) {
     const link = document.createElement("a");
-    link.href = offer.url || "#";
+    link.href = detailHref(offer.number);
     link.target = "_blank";
     link.rel = "noopener noreferrer";
+    link.dataset.number = String(offer.number);
+    link.title = "Voir le détail de l'offre";
     link.textContent = offer.offer_title || "(Sans titre)";
     link.addEventListener("click", function () {
         markClickedRow(link);
     });
     return link;
+}
+
+const STATE_BADGE_TEXT = {
+    new: "Nouvelle",
+    reappeared: "De retour",
+    old: "Ancienne",
+    deleted: "Supprimée",
+};
+
+function createStateBadge(state) {
+    const span = document.createElement("span");
+    span.className = "state-badge state-" + state;
+    span.textContent = STATE_BADGE_TEXT[state] || state;
+    return span;
 }
 
 let clickedRowNumber = null;
@@ -352,8 +468,18 @@ function markClickedRow(link) {
 function createDescriptionBlock(offer) {
     const container = document.createElement("div");
 
+    const head = document.createElement("div");
+    head.className = "offer-head";
+
+    const state = getOfferState(offer);
+    if (state !== "unchanged" && state !== "old") {
+        head.appendChild(createStateBadge(state));
+    }
+
     const title = createOfferLink(offer);
-    container.appendChild(title);
+    head.appendChild(title);
+
+    container.appendChild(head);
 
     if (offer.description) {
         const description = document.createElement("div");
@@ -447,11 +573,15 @@ function createDetailsCell(values) {
         td.appendChild(line);
     };
 
+    const number = String(values.number);
+    const priority = getPriority(number);
+
     [
         ["Contrat", values.contract_type],
         ["Horaire", values.schedule],
         ["Rémunération", values.pay],
         ["Salaire", values.salary],
+        ["Priorité", priorityLabel(priority)],
     ].forEach(([labelText, value]) => addLine(labelText, value, ""));
 
     if (values.email) {
@@ -463,11 +593,52 @@ function createDetailsCell(values) {
     return td;
 }
 
+function relativeDays(value) {
+    const d = parseShortDate(value);
+    if (!d) return null;
+    return Math.floor((Date.now() - d.getTime()) / 86400000);
+}
+
+function expiryText(offer) {
+    const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(
+        String(offer.date_fin_diffusion || "").trim()
+    );
+    if (!m) return "";
+    const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+    if (isNaN(d.getTime())) return "";
+    const days = Math.round((d.getTime() - Date.now()) / 86400000);
+    if (days < 0) return "expirée il y a " + (-days) + " j";
+    if (days === 0) return "expire aujourd'hui";
+    return "expire dans " + days + " j";
+}
+
+function createPublishedCell(offer) {
+    const box = document.createElement("div");
+    const days = relativeDays(offer.published_on);
+    box.textContent = offer.published_on || "";
+    if (days !== null) {
+        const hint = " " + (days === 0 ? "(aujourd'hui)" : "(il y a " + days + " j)");
+        const span = document.createElement("span");
+        span.className = "date-hint";
+        span.textContent = hint;
+        box.appendChild(span);
+    }
+    const exp = expiryText(offer);
+    if (exp) {
+        const span = document.createElement("span");
+        span.className = "date-hint date-expiry";
+        span.textContent = " · " + exp;
+        box.appendChild(span);
+    }
+    return box;
+}
+
 function createCurrentRow(offer) {
     const number = String(offer.number);
     const tr = document.createElement("tr");
     tr.dataset.number = number;
     tr.dataset.isNew = offer.is_new === true ? "true" : "false";
+    tr.dataset.state = getOfferState(offer);
 
     const textCell = (nodes, className) => {
         const td = document.createElement("td");
@@ -483,7 +654,7 @@ function createCurrentRow(offer) {
     tdStatus.appendChild(createStatusSelect(number));
     tr.appendChild(tdStatus);
 
-    tr.appendChild(textCell([document.createTextNode(offer.published_on || "")], "col-published"));
+    tr.appendChild(textCell([createPublishedCell(offer)], "col-published"));
     tr.appendChild(textCell([document.createTextNode(number)], "col-forem-id"));
     tr.appendChild(textCell([createDescriptionBlock(offer)], "col-offer"));
     tr.appendChild(textCell([document.createTextNode(offer.company || "")], "col-company"));
@@ -520,9 +691,15 @@ function createDeletedRow(offer) {
         return td;
     };
 
+    const offerCell = document.createElement("div");
+    offerCell.className = "offer-head";
+    const badge = createStateBadge("deleted");
+    offerCell.appendChild(badge);
+    offerCell.appendChild(createOfferLink(offer));
+
     tr.appendChild(createStarCell(String(offer.number)));
     tr.appendChild(textCell([document.createTextNode(String(offer.number))], "col-forem-id"));
-    tr.appendChild(textCell([createOfferLink(offer)], "col-offer"));
+    tr.appendChild(textCell([offerCell], "col-offer"));
     tr.appendChild(textCell([document.createTextNode(offer.company || "")], "col-company"));
     tr.appendChild(createDetailsCell(offer));
     tr.appendChild(textCell([document.createTextNode(offer.location || "")], "col-location"));
@@ -868,20 +1045,120 @@ function updateStatusInUrl(value) {
 let groupFilter = "all";
 let groupFilterZones = [];
 
+// Offer lookup map used by the advanced filters (built on each load).
+let currentByNumber = new Map();
+
+function readFilterValue(id) {
+    const el = document.getElementById(id);
+    return el ? el.value : "";
+}
+
+function offerStateMatches(offer, value) {
+    if (!value) return true;
+    const state = getOfferState(offer);
+    if (value === "old") {
+        return state === "old" || state === "unchanged";
+    }
+    return state === value;
+}
+
+function contractMatches(offer, value) {
+    if (!value) return true;
+    const text = normalizeText(offer.contract_type || "");
+    if (value === "cdi") return text.indexOf("duree indeterminee") !== -1;
+    if (value === "cdd") return text.indexOf("duree determinee") !== -1;
+    if (value === "interim") return text.indexOf("interim") !== -1;
+    return text.indexOf("interim") === -1 && text.indexOf("duree") === -1;
+}
+
+function scheduleMatches(offer, value) {
+    if (!value) return true;
+    const text = normalizeText(offer.schedule || "");
+    switch (value) {
+        case "plein":
+            return text.indexOf("temps plein") !== -1;
+        case "partiel":
+            return text.indexOf("temps partiel") !== -1;
+        case "jour":
+            return /de jour|travail de jour/.test(text);
+        case "nuit":
+            return text.indexOf("nuit") !== -1;
+        case "weekend":
+            return text.indexOf("week-end") !== -1 || text.indexOf("week end") !== -1;
+        case "pauses":
+            return /2 pauses|3 pauses|2x8|3x8/.test(text);
+        default:
+            return true;
+    }
+}
+
+function hasSalaryInfo(offer) {
+    return Boolean(normalizeText(offer.salary) || normalizeText(offer.pay));
+}
+
+function parseShortDate(value) {
+    const m = /^(\d{1,2})-(\d{1,2})-(\d{2})$/.exec(value || "");
+    if (!m) return null;
+    const d = new Date("20" + m[3] + "-" + m[2] + "-" + m[1] + "T00:00:00");
+    return isNaN(d.getTime()) ? null : d;
+}
+
+function dateMatches(offer, value) {
+    if (!value) return true;
+    const d = parseShortDate(offer.published_on);
+    if (!d) {
+        const raw = normalizeText(offer.published_on || "");
+        let approx = null;
+        if (raw.indexOf("aujourdhui") !== -1) approx = 0;
+        else if (raw.indexOf("hier") !== -1) approx = 1;
+        if (approx === null) return false;
+        if (value === "today") return approx === 0;
+        const days = { "24h": 1, "3j": 3, "7j": 7, "30j": 30 }[value];
+        return days !== undefined && approx <= days;
+    }
+    const diffDays = (Date.now() - d.getTime()) / 86400000;
+    if (value === "today") return diffDays >= 0 && diffDays < 1;
+    const days = { "24h": 1, "3j": 3, "7j": 7, "30j": 30 }[value];
+    if (days === undefined) return true;
+    return diffDays >= 0 && diffDays <= days;
+}
+
 function applyFilters() {
-    const filter = document.getElementById("statusFilter");
-    const statusValue = filter ? filter.value : "";
+    const statusValue = readFilterValue("statusFilter");
+    const stateFilter = readFilterValue("stateFilter");
+    const contractFilter = readFilterValue("contractFilter");
+    const scheduleFilter = readFilterValue("scheduleFilter");
+    const salaryFilter = readFilterValue("salaryFilter");
+    const dateFilter = readFilterValue("dateFilter");
 
     applyFiltersToTable(
         "currentRows",
         "currentSearch",
         function (row) {
+            const number = String(row.dataset.number);
+            const offer = currentByNumber.get(number);
+
             if (groupFilter === "new" && row.dataset.isNew !== "true") return false;
             if (groupFilter === "old" && row.dataset.isNew !== "false") return false;
-            if (statusValue === "") return true;
-            const status = getStatus(String(row.dataset.number));
-            if (statusValue === "unsorted") return status === "";
-            return status === statusValue;
+
+            if (statusValue) {
+                const status = getStatus(number);
+                if (statusValue === "unsorted") {
+                    if (status !== "") return false;
+                } else if (status !== statusValue) {
+                    return false;
+                }
+            }
+
+            if (offer) {
+                if (!offerStateMatches(offer, stateFilter)) return false;
+                if (!contractMatches(offer, contractFilter)) return false;
+                if (!scheduleMatches(offer, scheduleFilter)) return false;
+                if (salaryFilter === "oui" && !hasSalaryInfo(offer)) return false;
+                if (salaryFilter === "non" && hasSalaryInfo(offer)) return false;
+                if (!dateMatches(offer, dateFilter)) return false;
+            }
+            return true;
         }
     );
 
@@ -1010,9 +1287,6 @@ function setupNewSearch() {
     const modal = document.getElementById("searchModal");
     if (!modal) return;
 
-    document.getElementById("newSearchBtn").addEventListener(
-        "click", openModal
-    );
     document.getElementById("closeModalBtn").addEventListener(
         "click", closeModal
     );
@@ -1064,6 +1338,8 @@ function setupNewSearch() {
 }
 
 function openModal() {
+    const modal = document.getElementById("searchModal");
+    if (!modal) return;
     selectedOccupation = null;
     selectedLocation = null;
     clearSuggestions("occupationSuggestions");
@@ -1074,7 +1350,6 @@ function openModal() {
     document.getElementById("commandBox").value = "";
     document.getElementById("copyCommandBtn").disabled = true;
     updateConfirmation();
-    const modal = document.getElementById("searchModal");
     modal.classList.add("visible");
     document.getElementById("occupationInput").focus();
 }
@@ -1218,7 +1493,7 @@ function buildCommand() {
     if (!selectedOccupation || !selectedLocation) return "";
     const slug = slugify(selectedOccupation.value + " " + selectedLocation.label);
     const label = selectedOccupation.value + " / " + selectedLocation.label;
-    return "python scraper.py --fresh --occupation-guid " + selectedOccupation.key +
+    return "python scraper.py --occupation-guid " + selectedOccupation.key +
         " --location-guid " + selectedLocation.key +
         " --base " + slug +
         " --label \"" + label + "\"";
@@ -1248,59 +1523,63 @@ async function copyCommand() {
 
 
 // ============================================================
-// SCRAPING SELECTOR
+// SCRAPING SELECTOR (shared component)
 // ============================================================
-
-let dataUrl = DATA_URL;
-let historyUrl = HISTORY_URL;
 
 function setupScrapingSelector() {
     const select = document.getElementById("scrapingSelect");
     if (!select) return Promise.resolve();
-    return fetch(API_SCRAPINGS, { cache: "no-store" })
-        .then(response => {
-            if (!response.ok) throw new Error("HTTP " + response.status);
-            return response.json();
-        })
-        .then(list => {
-            const stored = localStorage.getItem("forem_scraping_select");
-            list.forEach(item => {
-                const option = document.createElement("option");
-                option.value = item.file;
-                option.dataset.history = item.history;
-                option.dataset.base = item.name;
-                option.textContent = item.name !== ""
-                    ? (item.label || item.name)
-                    : (item.label || "Default (" + item.file + ")");
-                option.selected =
-                    item.file === stored || item.file === dataUrl;
-                select.appendChild(option);
-            });
-            const active = list.find(item => item.file === stored);
-            if (active) {
-                dataUrl = active.file;
-                historyUrl = active.history;
-                setActiveScraping(active.name || "");
+
+    return window.ScrapingSelector.createScrapingSelector({
+        selectId: "scrapingSelect",
+        allowAll: true,      // "Toutes les recherches" option
+        allowCreate: true,   // "Creer un nouveau scrap" option
+        onChange: function (key, scrapings) {
+            if (key === "all") {
+                dataUrl = "all";
+                historyUrl = "";
+                setActiveScraping("");
+            } else {
+                const scrape = scrapings.find(function (s) { return s.file === key; });
+                if (scrape) {
+                    dataUrl = scrape.file;
+                    historyUrl = scrape.history;
+                    setActiveScraping(scrape.name || "");
+                }
             }
-            select.addEventListener("change", switchScraping);
-        })
-        .catch(e => {
-            console.error("Unable to list scrapings", e);
-        });
+            reloadStorageMaps();
+            resetGroupFilter();
+            resetSort();
+            reloadTables();
+            updateDeleteGearButtonVisibility();
+        }
+    }).then(function (result) {
+        try {
+            const stored = localStorage.getItem("forem_scraping_select");
+            if (stored === "all") {
+                dataUrl = "all";
+                historyUrl = "";
+                setActiveScraping("");
+            } else if (stored) {
+                const scrape = result.scrapings.find(function (s) { return s.file === stored; });
+                if (scrape) {
+                    dataUrl = scrape.file;
+                    historyUrl = scrape.history;
+                    setActiveScraping(scrape.name || "");
+                }
+            }
+            updateDeleteGearButtonVisibility();
+            reloadTables();
+        } catch (e) {
+            console.error("Error restoring scrape selection:", e);
+        }
+    });
 }
 
-function switchScraping(e) {
-    const option = e.target.selectedOptions[0];
-    if (!option || !option.value) return;
-    dataUrl = option.value;
-    historyUrl = option.dataset.history || HISTORY_URL;
-    setActiveScraping(option.dataset.base || "");
-    reloadStorageMaps();
-    localStorage.setItem("forem_scraping_select", option.value);
-    resetGroupFilter();
-    resetSort();
-    reloadTables();
-}
+// Listen for "Create new scrape" event from shared component
+document.addEventListener("foremCreateScrape", function () {
+    openModal();
+});
 
 function updateTitle(data) {
     const label = data && typeof data.label === "string"
@@ -1450,13 +1729,6 @@ function csvField(value) {
     return text;
 }
 
-function localDateString(date) {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, "0");
-    const d = String(date.getDate()).padStart(2, "0");
-    return y + "-" + m + "-" + d;
-}
-
 function offerMatchesKeys(offer, inputId) {
     const input = document.getElementById(inputId);
     if (!input) return true;
@@ -1534,127 +1806,9 @@ function downloadCsv(filename, content) {
 
 
 // ============================================================
-// TRACKING EXPORT / IMPORT
-// Statuses, remarks, favorites and relance dates are exported as a
-// single JSON file so the tracking can be moved to another PC.
+// SUIVI — l'export / import du suivi est défini dans suivi-io.js
+// (partagé avec le dashboard et la fiche offre)
 // ============================================================
-
-function downloadJson(filename, content) {
-    const blob = new Blob([content], { type: "application/json;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-}
-
-function showTrackingMessage(text) {
-    const el = document.getElementById("trackingMessage");
-    if (el) {
-        el.textContent = text;
-        setTimeout(function () { el.textContent = ""; }, 6000);
-    }
-}
-
-function setupImportExportMenu() {
-    const trigger = document.getElementById("importExportBtn");
-    const menu = document.getElementById("importExportMenu");
-    if (!trigger || !menu) return;
-
-    const setOpen = function (open) {
-        menu.hidden = !open;
-        trigger.setAttribute("aria-expanded", open ? "true" : "false");
-    };
-
-    trigger.addEventListener("click", function (e) {
-        e.stopPropagation();
-        setOpen(menu.hidden);
-    });
-
-    document.addEventListener("click", function (e) {
-        if (!menu.contains(e.target)) {
-            setOpen(false);
-        }
-    });
-
-    document.addEventListener("keydown", function (e) {
-        if (e.key === "Escape") {
-            setOpen(false);
-        }
-    });
-
-    menu.addEventListener("click", function (e) {
-        if (e.target.closest("button") || e.target.closest("label")) {
-            setOpen(false);
-        }
-    });
-}
-
-function exportTracking() {
-    const data = {};
-    for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (!isTrackedStorageKey(key)) continue;
-        try {
-            data[key] = JSON.parse(localStorage.getItem(key));
-        } catch (e) {
-            data[key] = localStorage.getItem(key);
-        }
-    }
-    const payload = {
-        app: "leforem-scraper",
-        schemaVersion: 1,
-        exportDate: new Date().toISOString(),
-        data: data
-    };
-    const filename = "suivi_forem_" + localDateString(new Date()) + ".json";
-    downloadJson(filename, JSON.stringify(payload, null, 2));
-    showTrackingMessage(
-        "Suivi exporté (" + Object.keys(data).length + " jeu(x) de données)."
-    );
-}
-
-function importTrackingFile(file) {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = function () {
-        let parsed;
-        try {
-            parsed = JSON.parse(reader.result);
-        } catch (e) {
-            showTrackingMessage("Fichier invalide : JSON illisible.");
-            return;
-        }
-        const payload = parsed && typeof parsed === "object" ? parsed : {};
-        const data = payload.data && typeof payload.data === "object"
-            ? payload.data : {};
-        let imported = 0;
-        Object.keys(data).forEach(key => {
-            if (!isTrackedStorageKey(key)) return;
-            try {
-                localStorage.setItem(key, JSON.stringify(data[key]));
-                imported++;
-            } catch (e) {
-                console.error("Unable to store imported key", key, e);
-            }
-        });
-        if (imported === 0) {
-            showTrackingMessage("Aucune donnée de suivi reconnue dans ce fichier.");
-            return;
-        }
-        reloadStorageMaps();
-        backfillStatutDates();
-        rerenderTables();
-        showTrackingMessage(imported + " jeu(x) de données importé(s).");
-    };
-    reader.onerror = function () {
-        showTrackingMessage("Impossible de lire le fichier.");
-    };
-    reader.readAsText(file, "utf-8");
-}
 
 function exportCsv() {
     const offers = getOffersForExport();
@@ -1728,7 +1882,36 @@ function maybeShowStaleAlert(data, scrapeDate) {
 
     staleAlertShown = true;
     document.getElementById("staleAge").textContent = timeAgoLabel(scrapeDate);
-    document.getElementById("staleCommandBox").value = buildScrapeCommand(data);
+
+    const isAll = dataUrl === "all";
+    const cmdBox = document.getElementById("staleCommandBox");
+    const copyBtn = document.getElementById("copyStaleBtn");
+    const label = document.querySelector('label[for="staleCommandBox"]');
+
+    if (isAll) {
+        // "Toutes les recherches" : no command, just a warning
+        cmdBox.value = "";
+        cmdBox.style.display = "none";
+        if (label) label.style.display = "none";
+        copyBtn.style.display = "none";
+        document.querySelector("#staleModal .modal-hint").innerHTML =
+            'Le dernier scraping date de <strong id="staleAge">' +
+            timeAgoLabel(scrapeDate) +
+            '</strong>. Certaines données sont peut-être obsolètes. ' +
+            'Sélectionnez un scraping précis pour voir la commande de mise à jour.';
+    } else {
+        // Single scrape: show normal command
+        cmdBox.style.display = "";
+        if (label) label.style.display = "";
+        copyBtn.style.display = "";
+        cmdBox.value = buildScrapeCommand(data);
+        document.querySelector("#staleModal .modal-hint").innerHTML =
+            'Le dernier scraping date de <strong id="staleAge">' +
+            timeAgoLabel(scrapeDate) +
+            '</strong>. De nouvelles annonces ont peut-être été publiées depuis. ' +
+            'Lance le scraping pour les afficher :';
+    }
+
     document.getElementById("staleStatus").textContent = "";
     document.getElementById("staleModal").classList.add("visible");
 }
@@ -1804,41 +1987,81 @@ async function reloadTables() {
     const tbodyCurrent = document.getElementById("currentRows");
     const tbodyDeleted = document.getElementById("deletedRows");
 
-    const data = await loadJsonWithFallback(
-        dataUrl,
-        tbodyCurrent,
-        "Impossible de charger " + dataUrl
-    );
-
-    const history = await loadJsonWithFallback(
-        historyUrl,
-        tbodyDeleted,
-        "Impossible de charger " + historyUrl,
-        7
-    );
-
-    if (!data) {
+    if (!dataUrl && dataUrl !== "all") {
+        tbodyCurrent.innerHTML = "<tr><td colspan='8' class='no-scraping'>Aucun scraping sélectionné. Choisissez-en un dans le menu.</td></tr>";
+        tbodyDeleted.innerHTML = "";
         return;
     }
 
-    const offers = extractOffers(data);
-    const deleted = history ? extractOffers(history) : [];
-    const scrapeDate = data && data.scrape_timestamp
-        ? data.scrape_timestamp : "";
+    let offers = [];
+    let deleted = [];
+    let scrapeDate = "";
+    let data = null;
+
+    if (dataUrl === "all") {
+        // Fetch all scrapes and merge
+        const scrapings = await loadJson("/api/scrapings");
+        if (scrapings && scrapings.length) {
+            const allData = await Promise.all(scrapings.map(async s => {
+                const d = await loadJson(s.file);
+                const h = await loadJson(s.history);
+                return { data: d, history: h, timestamp: s.scrape_timestamp, label: s.label };
+            }));
+            allData.forEach(({ data: d, history, timestamp, label }) => {
+                if (d) {
+                    offers.push(...extractOffers(d));
+                    if (timestamp && (!scrapeDate || timestamp > scrapeDate)) scrapeDate = timestamp;
+                }
+                if (history) deleted.push(...extractOffers(history));
+            });
+            // Use label from most recent scrape for title
+            const mostRecent = allData.reduce((a, b) => a.timestamp > b.timestamp ? a : b, { label: "" });
+            data = { label: mostRecent.label || "Toutes les recherches" };
+        }
+    } else {
+        data = await loadJsonWithFallback(
+            dataUrl,
+            tbodyCurrent,
+            "Impossible de charger " + dataUrl
+        );
+        const history = await loadJsonWithFallback(
+            historyUrl,
+            tbodyDeleted,
+            "Impossible de charger " + historyUrl,
+            7
+        );
+
+        if (!data) return;
+
+        offers = extractOffers(data);
+        deleted = history ? extractOffers(history) : [];
+        scrapeDate = data && data.scrape_timestamp ? data.scrape_timestamp : "";
+    }
 
     currentOffers = offers;
     deletedOffers = deleted;
     lastScrapeDate = scrapeDate;
-    lastData = data;
+    // Store metadata needed for stale alert command generation
+    lastData = {
+        offers: offers,
+        occupation_guid: data && data.occupation_guid,
+        location_guid: data && data.location_guid,
+        name: data && data.name,
+        label: data && data.label
+    };
 
     const currentNumbers = new Set(offers.map(o => String(o.number)));
     const keepNumbers = new Set(currentNumbers);
     deleted.forEach(o => keepNumbers.add(String(o.number)));
 
+    currentByNumber = new Map();
+    offers.forEach(o => currentByNumber.set(String(o.number), o));
+
     cleanStatuses(keepNumbers);
     cleanRemarks(keepNumbers);
     cleanFavorites(keepNumbers);
     cleanStatutDates(keepNumbers);
+    cleanPriorities(keepNumbers);
     backfillStatutDates();
 
     try {
@@ -1875,18 +2098,29 @@ async function init() {
     if (exportBtn) {
         exportBtn.addEventListener("click", exportCsv);
     }
-    const exportTrackingBtn = document.getElementById("exportTrackingBtn");
-    if (exportTrackingBtn) {
-        exportTrackingBtn.addEventListener("click", exportTracking);
-    }
-    const importTrackingInput = document.getElementById("importTrackingInput");
-    if (importTrackingInput) {
-        importTrackingInput.addEventListener("change", function () {
-            importTrackingFile(this.files && this.files[0]);
-            this.value = "";
+    const deleteScrapingGearBtn = document.getElementById("deleteScrapingGearBtn");
+    if (deleteScrapingGearBtn) {
+        deleteScrapingGearBtn.addEventListener("click", function () {
+            if (!dataUrl || dataUrl === "all" || !activeBaseName) {
+                showSuiviToast("Sélectionnez un scraping précis pour le supprimer.");
+                return;
+            }
+            openDeleteConfirm(activeBaseName);
         });
     }
-    setupImportExportMenu();
+
+    function updateDeleteGearButtonVisibility() {
+        const btn = document.getElementById("deleteScrapingGearBtn");
+        if (!btn) return;
+        // Show only when a specific scrape is selected (not "all")
+        if (dataUrl && dataUrl !== "all" && activeBaseName) {
+            btn.style.display = "";
+        } else {
+            btn.style.display = "none";
+        }
+    }
+
+    setupSuiviActions();
 
     const closeStaleBtn = document.getElementById("closeStaleBtn");
     if (closeStaleBtn) {
@@ -1907,6 +2141,67 @@ async function init() {
         staleModal.addEventListener("keydown", function (e) {
             if (e.key === "Escape") closeStaleAlert();
         });
+    }
+
+    // Delete confirmation modal
+    const deleteConfirmModal = document.getElementById("deleteConfirmModal");
+    const closeDeleteConfirmBtn = document.getElementById("closeDeleteConfirmBtn");
+    const cancelDeleteBtn = document.getElementById("cancelDeleteBtn");
+    const confirmDeleteBtn = document.getElementById("confirmDeleteBtn");
+
+    function closeDeleteConfirm() {
+        if (deleteConfirmModal) deleteConfirmModal.classList.remove("visible");
+    }
+
+    function openDeleteConfirm(scrapingName) {
+        document.getElementById("deleteScrapingName").textContent = scrapingName;
+        if (deleteConfirmModal) deleteConfirmModal.classList.add("visible");
+    }
+
+    if (closeDeleteConfirmBtn) closeDeleteConfirmBtn.addEventListener("click", closeDeleteConfirm);
+    if (cancelDeleteBtn) cancelDeleteBtn.addEventListener("click", closeDeleteConfirm);
+    if (confirmDeleteBtn) {
+        confirmDeleteBtn.addEventListener("click", async function () {
+            const nameEl = document.getElementById("deleteScrapingName");
+            const name = nameEl ? nameEl.textContent : "";
+            if (!name) return;
+            closeDeleteConfirm();
+            await deleteScraping(name);
+        });
+    }
+
+    if (deleteConfirmModal) {
+        deleteConfirmModal.querySelector(".modal-backdrop")
+            .addEventListener("click", closeDeleteConfirm);
+        deleteConfirmModal.addEventListener("keydown", function (e) {
+            if (e.key === "Escape") closeDeleteConfirm();
+        });
+    }
+
+    async function deleteScraping(name) {
+        try {
+            const resp = await fetch("/delete-scraping", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: name })
+            });
+            const result = await resp.json();
+            if (!resp.ok) throw new Error(result.error || "Erreur lors de la suppression");
+            showSuiviToast("Scraping supprimé : " + result.moved.join(", "));
+            // Refresh scraping selector
+            await setupScrapingSelector();
+            // If we were viewing the deleted scrape, switch to "all"
+            if (dataUrl === "data_" + name + ".json") {
+                const select = document.getElementById("scrapingSelect");
+                if (select) select.value = "all";
+                dataUrl = "all";
+                historyUrl = "";
+                setActiveScraping("");
+                reloadTables();
+            }
+        } catch (e) {
+            showSuiviToast("Erreur : " + e.message);
+        }
     }
 
     const trackedAlertDismissBtn = document.getElementById("trackedAlertDismissBtn");
@@ -1950,6 +2245,16 @@ async function init() {
         });
     }
 
+    [
+        "stateFilter", "contractFilter", "scheduleFilter",
+        "salaryFilter", "dateFilter",
+    ].forEach(id => {
+        const select = document.getElementById(id);
+        if (select) {
+            select.addEventListener("change", applyFilters);
+        }
+    });
+
     ["currentSearch", "deletedSearch"].forEach(id => {
         const input = document.getElementById(id);
         if (input) {
@@ -1960,5 +2265,11 @@ async function init() {
     await reloadTables();
     maybeShowStaleAlert(lastData, lastScrapeDate);
 }
+
+document.addEventListener("foremsuiviimported", function () {
+    reloadStorageMaps();
+    backfillStatutDates();
+    rerenderTables();
+});
 
 document.addEventListener("DOMContentLoaded", init);
