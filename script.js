@@ -1965,11 +1965,11 @@ async function reloadTables() {
 
     if (dataUrl === "all") {
         // Fetch all scrapes and merge
-        const scrapings = await fetchJson("/api/scrapings");
+        const scrapings = await loadJson("/api/scrapings");
         if (scrapings && scrapings.length) {
             const allData = await Promise.all(scrapings.map(async s => {
-                const d = await fetchJson(s.file);
-                const h = await fetchJson(s.history);
+                const d = await loadJson(s.file);
+                const h = await loadJson(s.history);
                 return { data: d, history: h, timestamp: s.scrape_timestamp, label: s.label };
             }));
             allData.forEach(({ data: d, history, timestamp, label }) => {
