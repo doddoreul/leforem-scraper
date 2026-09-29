@@ -486,7 +486,8 @@ def build_offer(detail, published_on=""):
     if not core.parse_forem_date(date_publication):
         date_publication = clean_text(detail.get("dateDebutDiffusion"))
 
-    return {
+    # Build base offer data (Forem fields only)
+    offer = {
         "number": number,
         "offer_title": clean_text(detail.get("titreOffre")),
         "description": description,
@@ -504,6 +505,18 @@ def build_offer(detail, published_on=""):
         "metier": clean_text(detail.get("metier")),
         "summary": build_summary(description),
     }
+
+    # Add content hash for change detection
+    offer["content_hash"] = core.compute_content_hash(offer)
+
+    # Add timestamps - only set first_seen_at if not already present
+    now = core.now_iso_timestamp()
+    offer["last_scraped_at"] = core.now_iso_timestamp()
+    offer["last_seen_at"] = core.now_iso_timestamp()
+    # first_seen_at and modified_at will be set when the offer is first created or modified
+    # We don't set them here since we don't know if it's a new offer or existing one
+
+    return offer
 
 
 # ============================================================
@@ -973,6 +986,57 @@ def main():
     if not new_offers and not search_results:
         print("\nNo offer found.")
 
+    # Hash-based change detection and diff generation
+    for offer in new_offers:
+        if not isinstance(offer, dict):
+            continue
+        number = clean_text(offer.get("number"))
+        if not number:
+            continue
+
+        previous = previous_by_number.get(number)
+        new_hash = offer.get("content_hash")
+
+        if previous is not None:
+            # Existing offer - check for changes
+            previous_hash = previous.get("content_hash")
+            if previous_hash and new_hash != previous_hash:
+                # Content changed - compute diff
+                offer["diff"] = core.compute_diff(previous, offer)
+                offer["modified"] = True
+                offer["modified_at"] = core.now_iso_timestamp()
+                offer["content_hash"] = new_hash  # Update to new hash
+                # Preserve original first_seen_at
+                if "first_seen_at" in previous:
+                    offer["first_seen_at"] = previous["first_seen_at"]
+                # Update timestamps
+                offer["modified_at"] = core.now_iso_timestamp()
+                offer["last_seen_at"] = core.now_iso_timestamp()
+                offer["last_scraped_at"] = core.now_iso_timestamp()
+                # Preserve user data from previous offer
+                offer = core.preserve_user_data(previous, offer)
+            else:
+                # No content change
+                offer["modified"] = False
+                offer["content_hash"] = previous_hash or new_hash
+                # Preserve existing timestamps and user data
+                if "first_seen_at" in previous:
+                    offer["first_seen_at"] = previous["first_seen_at"]
+                if "modified_at" in previous:
+                    offer["modified_at"] = previous["modified_at"]
+                offer["last_seen_at"] = core.now_iso_timestamp()
+                offer["last_scraped_at"] = core.now_iso_timestamp()
+                offer = core.preserve_user_data(previous, offer)
+        else:
+            # New offer - set initial timestamps
+            if "first_seen_at" not in offer:
+                offer["first_seen_at"] = core.now_iso_timestamp()
+            offer["last_seen_at"] = core.now_iso_timestamp()
+            offer["last_scraped_at"] = core.now_iso_timestamp()
+            offer["modified"] = False
+            # No diff for new offers
+            offer["diff"] = {}
+
     # State classification.
     states, current_numbers = core.collect_states(
         previous_offers, new_offers, deleted_numbers
@@ -995,6 +1059,14 @@ def main():
         if state == "reappeared":
             offer["reappeared"] = True
 
+    # Apply 12-month temporal filter
+    new_offers = core.filter_recent_offers(new_offers, max_age_days=365)
+
+    # Build métier index for the current scrape
+    metier_index = core.build_metier_index(new_offers)
+    # Store metier index in the data for later use
+    # (could be saved to a separate file or included in the data file)
+
     update_history(
         previous_offers, new_offers, history, now
     )
@@ -1008,6 +1080,9 @@ def main():
     }
     core.record_scrape(scrapes, entry)
 
+    # Build métier index for the current scrape
+    metier_index = core.build_metier_index(new_offers)
+
     data = {
         "version": VERSION,
         "scrape_timestamp": now,
@@ -1016,6 +1091,7 @@ def main():
         "occupation_guid": args.occupation_guid,
         "location_guid": args.location_guid,
         "offers": new_offers,
+        "metier_index": metier_index,
     }
 
     write_json_atomically(history_file, history)

@@ -351,3 +351,203 @@ def note_miss(blacklist, number, timestamp):
 def note_recovery(blacklist, number):
     """A successful fetch removes the number from the blacklist."""
     blacklist.pop(number, None)
+
+
+# ============================================================
+# CONTENT HASH & CHANGE DETECTION
+# ============================================================
+
+import hashlib
+
+
+def normalize_for_hash(value):
+    """Normalize a value for deterministic hashing."""
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple)):
+        return [normalize_for_hash(v) for v in value]
+    if isinstance(value, dict):
+        return {k: normalize_for_hash(v) for k, v in sorted(value.items())}
+    if isinstance(value, str):
+        return " ".join(value.split()).strip()
+    return value
+
+
+def compute_content_hash(offer):
+    """Compute SHA-256 hash of the normalized offer content.
+    
+    Only hashes the Forem data fields, not user data or metadata.
+    """
+    # Fields that are part of the Forem data (determine content changes)
+    hash_fields = [
+        "number",
+        "offer_title",
+        "description",
+        "company",
+        "email",
+        "url",
+        "contract_type",
+        "schedule",
+        "pay",
+        "salary",
+        "location",
+        "published_on",
+        "date_publication",
+        "date_fin_diffusion",
+        "metier",
+        "summary",
+    ]
+    
+    normalized = {}
+    for field in hash_fields:
+        value = offer.get(field)
+        normalized[field] = normalize_for_hash(offer.get(field, ""))
+    
+    # Create deterministic JSON string
+    json_str = json.dumps(normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(json_str.encode("utf-8")).hexdigest()
+
+
+def compute_diff(old_offer, new_offer):
+    """Compute diff between two offer versions.
+    
+    Returns a dict mapping field names to [old_value, new_value] pairs
+    for fields that have changed.
+    """
+    # Fields to compare for diffs (all Forem data fields)
+    compare_fields = [
+        "number",
+        "offer_title",
+        "description",
+        "company",
+        "email",
+        "url",
+        "contract_type",
+        "schedule",
+        "pay",
+        "salary",
+        "location",
+        "published_on",
+        "date_publication",
+        "date_fin_diffusion",
+        "metier",
+        "summary",
+    ]
+    
+    diff = {}
+    for field in compare_fields:
+        old_val = old_offer.get(field, "")
+        new_val = new_offer.get(field, "")
+        if normalize_for_hash(old_val) != normalize_for_hash(new_val):
+            diff[field] = [old_val, new_val]
+    
+    return diff
+
+
+def get_current_timestamp():
+    """Return current ISO timestamp."""
+    return datetime.now().isoformat()
+
+
+def now_iso_timestamp():
+    """Return current ISO timestamp (alias for get_current_timestamp)."""
+    return datetime.now().isoformat()
+
+
+def is_offer_recent(offer, max_age_days=365):
+    """Check if offer is within the last N days based on published_on."""
+    published = offer.get("published_on", "")
+    if not published:
+        return True  # Unknown date, assume recent
+    
+    days = days_between(offer.get("published_on", ""))
+    if days is None:
+        return True  # Unknown date, assume recent
+    
+    return days >= -max_age_days
+
+
+def filter_recent_offers(offers, max_age_days=365):
+    """Filter offers to only those within the last N days."""
+    return [offer for offer in offers if is_offer_recent(offer, max_age_days)]
+
+
+# ============================================================
+# JOB/MÉTIER INDEXING
+# ============================================================
+
+def extract_metiers(offers):
+    """Extract all unique métiers from offers."""
+    metiers = set()
+    for offer in offers:
+        if isinstance(offer, dict):
+            metier = offer.get("metier", "").strip()
+            if metier:
+                metiers.add(metier)
+    return sorted(metiers)
+
+
+def build_metier_index(offers):
+    """Build an index mapping métiers to offer numbers."""
+    index = {}
+    for offer in offers:
+        if not isinstance(offer, dict):
+            continue
+        number = clean_number(offer.get("number"))
+        if not number:
+            continue
+        metier = offer.get("metier", "").strip()
+        if not metier:
+            continue
+        if metier not in index:
+            index[metier] = []
+        index[metier].append(number)
+    return index
+
+
+def get_offers_by_metier(offers, metier):
+    """Get all offers for a specific métier."""
+    result = []
+    for offer in offers:
+        if isinstance(offer, dict) and offer.get("metier", "").strip() == metier:
+            result.append(offer)
+    return result
+
+
+# ============================================================
+# USER DATA SEPARATION
+# ============================================================
+
+USER_DATA_FIELDS = {
+    "favorite", "status", "notes", "tags", "priority",
+    "statut_dates", "remarques", "suivi"
+}
+
+def separate_user_data(offer):
+    """Separate user data from Forem data in an offer.
+    
+    Returns (forem_data, user_data) tuple.
+    """
+    forem_data = {}
+    user_data = {}
+    
+    for key, value in offer.items():
+        if key in USER_DATA_FIELDS:
+            user_data[key] = value
+        else:
+            forem_data[key] = value
+    
+    return forem_data, user_data
+
+
+def merge_user_data(forem_data, user_data):
+    """Merge user data back into Forem data."""
+    result = dict(forem_data)
+    result.update(user_data)
+    return result
+
+
+def preserve_user_data(old_offer, new_forem_data):
+    """Update offer with new Forem data while preserving user data."""
+    _, user_data = separate_user_data(old_offer)
+    return merge_user_data(new_forem_data, user_data)

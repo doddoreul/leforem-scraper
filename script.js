@@ -639,6 +639,11 @@ function createCurrentRow(offer) {
     tr.dataset.number = number;
     tr.dataset.isNew = offer.is_new === true ? "true" : "false";
     tr.dataset.state = getOfferState(offer);
+    
+    // Add modified class for visual indication
+    if (offer.modified === true) {
+        tr.classList.add("offer-modified");
+    }
 
     const textCell = (nodes, className) => {
         const td = document.createElement("td");
@@ -655,6 +660,19 @@ function createCurrentRow(offer) {
     tr.appendChild(tdStatus);
 
     tr.appendChild(textCell([createPublishedCell(offer)], "col-published"));
+    
+    // Modified column
+    const modifiedCell = document.createElement("td");
+    modifiedCell.className = "col-modified";
+    if (offer.modified === true) {
+        const badge = document.createElement("span");
+        badge.className = "modified-badge";
+        badge.textContent = "Modifiée";
+        badge.title = "Modifiée le " + formatDate(offer.modified_at);
+        modifiedCell.appendChild(badge);
+    }
+    tr.appendChild(modifiedCell);
+
     tr.appendChild(textCell([document.createTextNode(number)], "col-forem-id"));
     tr.appendChild(textCell([createDescriptionBlock(offer)], "col-offer"));
     tr.appendChild(textCell([document.createTextNode(offer.company || "")], "col-company"));
@@ -673,7 +691,7 @@ function createSeparationRow(text, className) {
     row.dataset.separation = "true";
 
     const cell = document.createElement("td");
-    cell.colSpan = 9;
+    cell.colSpan = 10;
     cell.textContent = text;
 
     row.appendChild(cell);
@@ -735,8 +753,29 @@ function renderCurrent(offers, scrapeDate) {
 
     const favorites = offers.filter(o => isFavorite(String(o.number)));
     const favNumbers = new Set(favorites.map(o => String(o.number)));
+    const modifiedOffers = offers.filter(o => o.modified === true);
+    const modifiedNumbers = new Set(modifiedOffers.map(o => String(o.number)));
     const newOffers = allNew.filter(o => !favNumbers.has(String(o.number)));
     const olderOffers = allOld.filter(o => !favNumbers.has(String(o.number)));
+    
+    // Default sort: by modified_at descending, then published_on descending
+    if (!sortIsActive() || sortTable !== "currentRows") {
+        // Default sort by modified_at desc, then published_on desc
+        offers.sort((a, b) => {
+            const ma = parseSortDate(a.modified_at) || 0;
+            const mb = parseSortDate(b.modified_at) || 0;
+            if (mb !== ma) return mb - ma;
+            const pa = parseSortDate(a.published_on) || 0;
+            const pb = parseSortDate(b.published_on) || 0;
+            return pb - pa;
+        });
+    }
+
+    // Mises à jour section
+    if (modifiedOffers.length > 0) {
+        tbody.appendChild(createSeparationRow(`Mises à jour (${modifiedOffers.length})`, "separ-modified"));
+        modifiedOffers.forEach(offer => tbody.appendChild(createCurrentRow(offer)));
+    }
 
     if (favorites.length > 0) {
         tbody.appendChild(createSeparationRow(`Favoris (${favorites.length})`, "separ-favorites"));
@@ -1522,6 +1561,17 @@ async function copyCommand() {
 }
 
 
+function updateDeleteGearButtonVisibility() {
+    const btn = document.getElementById("deleteScrapingGearBtn");
+    if (!btn) return;
+    // Show only when a specific scrape is selected (not "all")
+    if (dataUrl && dataUrl !== "all" && activeBaseName) {
+        btn.style.display = "";
+    } else {
+        btn.style.display = "none";
+    }
+}
+
 // ============================================================
 // SCRAPING SELECTOR (shared component)
 // ============================================================
@@ -1641,6 +1691,7 @@ function getSortValue(offer, key) {
             return getStatusRank(offer);
         case "published_on":
         case "removed_on":
+        case "modified_at":
             return parseSortDate(offer[key]);
         case "number":
             return String(offer.number || "");
@@ -1950,7 +2001,7 @@ function createInfoRow(text, colSpan) {
     const tr = document.createElement("tr");
     tr.className = "info-row";
     const td = document.createElement("td");
-    td.colSpan = colSpan || 9;
+    td.colSpan = colSpan || 10;
     td.textContent = text;
     tr.appendChild(td);
     return tr;
@@ -1994,7 +2045,7 @@ async function reloadTables() {
     const tbodyDeleted = document.getElementById("deletedRows");
 
     if (!dataUrl && dataUrl !== "all") {
-        tbodyCurrent.innerHTML = "<tr><td colspan='8' class='no-scraping'>Aucun scraping sélectionné. Choisissez-en un dans le menu.</td></tr>";
+        tbodyCurrent.innerHTML = "<tr><td colspan='10' class='no-scraping'>Aucun scraping sélectionné. Choisissez-en un dans le menu.</td></tr>";
         tbodyDeleted.innerHTML = "";
         return;
     }
@@ -2100,6 +2151,11 @@ async function init() {
     setupNewSearch();
     setupGroupFilterZones();
     setupSortableColumns();
+    // Default sort by modified_at descending
+    sortTable = "currentRows";
+    sortKey = "modified_at";
+    sortDir = -1;
+    updateSortHeaders();
     const exportBtn = document.getElementById("exportCsvBtn");
     if (exportBtn) {
         exportBtn.addEventListener("click", exportCsv);
@@ -2113,17 +2169,6 @@ async function init() {
             }
             openDeleteConfirm(activeBaseName);
         });
-    }
-
-    function updateDeleteGearButtonVisibility() {
-        const btn = document.getElementById("deleteScrapingGearBtn");
-        if (!btn) return;
-        // Show only when a specific scrape is selected (not "all")
-        if (dataUrl && dataUrl !== "all" && activeBaseName) {
-            btn.style.display = "";
-        } else {
-            btn.style.display = "none";
-        }
     }
 
     setupSuiviActions();
