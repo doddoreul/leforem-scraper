@@ -7,7 +7,6 @@ import * as http from "http";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import * as url from "url";
 import * as crypto from "crypto";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -52,6 +51,9 @@ await fs.mkdir(TRASH_DIR, { recursive: true });
 
 const MAX_EDIT_BODY = 8 * 1024 * 1024;
 
+const OCCUPATIONS_ENDPOINT = "https://www.leforem.be/recherche-offres/api/Nomenclature/RechercheMetiers/{}";
+const LOCATIONS_ENDPOINT = "https://www.leforem.be/recherche-offres/api/Nomenclature/Localisations";
+
 const SESSION = {
   get: async (url: string) => {
     const response = await fetch(url);
@@ -75,6 +77,11 @@ function detailsFileFor(name: string): string {
   return `details_${name}.json`;
 }
 
+function cleanNumber(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  return String(value).trim();
+}
+
 interface HandlerRequest extends http.IncomingMessage {
   url: string;
   method: string;
@@ -87,7 +94,7 @@ interface HandlerResponse extends http.ServerResponse {
 
 class Handler extends http.Server {
   async handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    const parsed = url.parse(req.url || "/", true);
+    const parsed = new URL(req.url || "/", `http://localhost:${PORT}`);
     const path = parsed.pathname;
 
     // Add _sendJson helper
@@ -113,7 +120,7 @@ class Handler extends http.Server {
     }
 
     if (path === "/api/nomenclature/occupations") {
-      const q = parsed.query.q || "";
+      const q = parsed.searchParams.get("q") || "";
       await this.handleOccupations(q, res);
       return;
     }
@@ -137,13 +144,11 @@ class Handler extends http.Server {
       this._sendJson(res, 200, []);
       return;
     }
-
     const results = [];
     const files = await fs.readdir(DATA_DIR);
     for (const fileName of files.sort()) {
-      if (!CLEAN_FILE_NAME.test(fileName) || !fileName.startsWith("data_")) continue;
+      if (!/^(data|details)_[A-Za-z0-9_-]+\.json$/.test(fileName) || !fileName.startsWith("data_")) continue;
       const name = fileName.slice(5, -5); // remove "data_" and ".json"
-      
       try {
         const data = JSON.parse(await fs.readFile(path.join(DATA_DIR, fileName), "utf-8"));
         if (!data || typeof data !== "object") continue;
@@ -170,7 +175,7 @@ class Handler extends http.Server {
   async handleLocations(res: http.ServerResponse): Promise<void> {
     try {
       const response = await fetch(LOCATIONS_ENDPOINT);
-      response.raise_for_status();
+      if (!response.ok) throw new Error("HTTP " + response.status);
       const data = await response.json();
       const results = data.map((item: any) => ({
         gufid: item.gufid,
@@ -190,7 +195,7 @@ class Handler extends http.Server {
     }
     try {
       const response = await fetch(OCCUPATIONS_ENDPOINT.replace("{}", q), { timeout: 30000 });
-      response.raise_for_status();
+      if (!response.ok) throw new Error("HTTP " + response.status);
       const data = await response.json();
       this._sendJson(res, 200, data);
     } catch (e) {
@@ -201,14 +206,14 @@ class Handler extends http.Server {
   async handleDeleteScraping(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const origin = req.headers.origin;
     const host = req.headers.host || "";
-    if (origin && url.parse(origin).host !== host) {
+    if (origin && new URL(origin).host !== host) {
       this._sendJson(res, 403, { error: "origin refused" });
       return;
     }
 
     let body = "";
     for await (const chunk of req) body += chunk;
-    if (body.length > MAX_EDIT_BODY) {
+    if (body.length > 8 * 1024 * 1024) {
       this._sendJson(res, 400, { error: "invalid body size" });
       return;
     }
@@ -227,7 +232,7 @@ class Handler extends http.Server {
     }
 
     const name = payload.name;
-    if (!/^[A-Za-z0-9_-]+$/.test(name)) {
+    if (!name || typeof name !== "string" || !/^[A-Za-z0-9_-]+$/.test(name)) {
       this._sendJson(res, 400, { error: "invalid name format" });
       return;
     }
@@ -263,14 +268,14 @@ class Handler extends http.Server {
   async handleCompaniesPost(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const origin = req.headers.origin;
     const host = req.headers.host || "";
-    if (origin && url.parse(origin).host !== host) {
+    if (origin && new URL(origin).host !== host) {
       this._sendJson(res, 403, { error: "origin refused" });
       return;
     }
 
     let body = "";
     for await (const chunk of req) body += chunk;
-    if (body.length > MAX_EDIT_BODY) {
+    if (body.length > 8 * 1024 * 1024) {
       this._sendJson(res, 400, { error: "invalid body size" });
       return;
     }
@@ -290,7 +295,6 @@ class Handler extends http.Server {
 
     payload.version = payload.version || 1;
     payload.updated_timestamp = new Date().toISOString();
-    // stats would be computed here
 
     const companiesPath = path.join(DATA_DIR, "companies.json");
     try {
@@ -300,7 +304,7 @@ class Handler extends http.Server {
       await fs.rename(tempPath, companiesPath);
     } catch (exc) {
       this._sendJson(res, 500, { error: String(exc) });
-      return;
+      return
     }
 
     this._sendJson(res, 200, { ok: true, employeurs: Object.keys(payload.employers).length });
@@ -320,8 +324,7 @@ class Handler extends http.Server {
       mimeType = "application/json; charset=utf-8";
     } else {
       const baseName = path.split("/").pop() || "";
-      if (CLEAN_FILE_NAME.test(baseName) || 
-          (baseName.startsWith("historique_") && baseName.endsWith(".json"))) {
+      if (CLEAN_FILE_NAME.test(baseName) || (baseName.startsWith("historique_") && baseName.endsWith(".json"))) {
         fileName = baseName;
         fileRoot = DATA_DIR;
         mimeType = "application/json; charset=utf-8";
@@ -339,7 +342,6 @@ class Handler extends http.Server {
       res.end();
       return;
     }
-
     try {
       const body = await fs.readFile(filePath);
       res.writeHead(200, { "Content-Type": mimeType, "Content-Length": body.length, "Cache-Control": "no-store" });
@@ -371,8 +373,13 @@ class Handler extends http.Server {
 }
 
 async function main(): Promise<void> {
-  const server = new Handler();
-  await server.listen(PORT, "127.0.0.1");
+  const server = http.createServer((req, res) => {
+    const handler = new Handler();
+    handler.handleRequest(req, res).catch(console.error);
+  });
+  await new Promise<void>((resolve) => {
+    server.listen(PORT, "127.0.0.1", resolve);
+  });
   console.log(`Web interface on http://localhost:${PORT}`);
   console.log("(Ctrl+C to stop)");
 }

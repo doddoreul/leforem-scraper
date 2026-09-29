@@ -19,14 +19,16 @@ import {
 const DEFAULT_PREFIX = "forem_electromecanicien_";
 const DASH_SCOPE_KEY = "forem_dash_select";
 
-interface InsightsStatus {
-  [key: string]: number;
-}
-
-interface OfferState {
-  number: string;
-  is_new: boolean;
-  // ... other fields
+interface ScrapingItem {
+  name: string;
+  file: string;
+  history: string;
+  details: string;
+  label: string;
+  scrape_timestamp: string;
+  occupationGuid: string;
+  locationGuid: string;
+  offerCount: number;
 }
 
 interface DataSet {
@@ -192,14 +194,14 @@ function collectOffers() {
       offers.push(offer);
       byNumber[String(offer.number)] = offer;
     });
-  });
+  }
   return { offers, byNumber };
 }
 
 function collectiveCounts() {
   const counts = { new: 0, reappeared: 0, old: 0 };
   collectOffers().offers.forEach(offer => {
-    const state = offer.offer_state || (offer.is_new === true ? "new" : "old");
+    const state = offerState(offer);
     if (!counts[state]) counts[state] = 0;
     counts[state]++;
   });
@@ -209,7 +211,7 @@ function collectiveCounts() {
 function statusCounts() {
   const counts: Record<string, number> = {};
   dataSets.forEach(ds => {
-    const map = JSON.parse(localStorage.getItem(prefixFor(ds.entry.name) + "statuts") || "{}");
+    const map = loadPrefixedMap(prefixFor(ds.entry.name), "statuts");
     Object.values(map).forEach(value => {
       if (value) counts[value] = (counts[value] || 0) + 1;
     });
@@ -220,11 +222,11 @@ function statusCounts() {
 function trackedTotals() {
   let suivies = 0, favoris = 0, priorites = 0;
   dataSets.forEach(ds => {
-    suivies += Object.values(JSON.parse(localStorage.getItem(prefixFor(ds.entry.name) + "statuts") || "{}"))
+    suivies += Object.values(loadPrefixedMap(prefixFor(ds.entry.name), "statuts"))
       .filter(Boolean).length;
-    favoris += Object.values(JSON.parse(localStorage.getItem(prefixFor(ds.entry.name) + "favoris") || "{}"))
+    favoris += Object.values(loadPrefixedMap(prefixFor(ds.entry.name), "favoris"))
       .filter(Boolean).length;
-    priorites += Object.values(JSON.parse(localStorage.getItem(prefixFor(ds.entry.name) + "priorites") || "{}"))
+    priorites += Object.values(loadPrefixedMap(prefixFor(ds.entry.name), "priorites"))
       .filter(Boolean).length;
   });
   return { suivies, favoris, priorites };
@@ -270,7 +272,8 @@ async function refresh(): Promise<void> {
 }
 
 function render(scrapeHistory: any): void {
-  // Implementation would go here
+  // Dashboard rendering implementation would go here
+  // This is a placeholder for the full implementation
 }
 
 function showEmpty(): void {
@@ -280,7 +283,7 @@ function showEmpty(): void {
 async function init(): Promise<void> {
   scrapings = await fetchJson("/api/scrapings") || [];
   if (!scrapings.length) {
-    document.getElementById("dashEmpty")!.classList.remove("hidden");
+    showEmpty();
     return;
   }
   const stored = localStorage.getItem("forem_scraping_select");
@@ -292,6 +295,11 @@ async function init(): Promise<void> {
   }
   await populateScopeSelect();
   await refresh();
+
+  // Handle "Créer un nouveau scrap" from shared selector
+  document.addEventListener("foremCreateScrape", function () {
+    window.open("index.html", "_blank");
+  });
 }
 
 document.addEventListener("DOMContentLoaded", init);
