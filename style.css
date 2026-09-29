@@ -2088,6 +2088,27 @@ tbody tr:hover {
     background: var(--row-hover);
 }
 
+/* Modified offer row */
+tbody tr.offer-modified {
+    background: var(--warning-bg);
+}
+
+tbody tr.offer-modified:hover {
+    background: var(--warning-bg-hover);
+}
+
+/* Modified badge */
+.modified-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--warning);
+    color: var(--warning-text);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
 .info-row td {
     color: var(--text-muted);
     font-style: italic;
@@ -2204,6 +2225,13 @@ a:hover {
     border-left-color: var(--accent-text);
 }
 
+/* Modified section: warning color */
+.separation-row.separ-modified td {
+    background: var(--warning-bg);
+    color: var(--warning-text);
+    border-left-color: var(--warning);
+}
+
 /* ============================================================
    COLUMN WIDTHS
    ============================================================ */
@@ -2221,6 +2249,11 @@ a:hover {
     width: 8%;
 }
 
+.col-modified {
+    width: 7%;
+    text-align: center;
+}
+
 .col-forem-id {
     width: 8%;
     color: var(--text-muted);
@@ -2233,7 +2266,7 @@ th.col-forem-id {
 }
 
 .col-offer {
-    width: 23%;
+    width: 21%;
 }
 
 .col-company {
