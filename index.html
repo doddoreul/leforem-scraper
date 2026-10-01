@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Offres Forem — Électromécanicien industriel</title>
 
-<link rel="stylesheet" href="style.css?v=38">
+<link rel="stylesheet" href="style.css?v=40">
 
 <script>
     (function () {
@@ -107,6 +107,8 @@
 
             <div class="stat stat-date">
                 Dernier scraping&nbsp;: <span id="statDate" class="stat-date-clickable" title="Cliquer pour voir la commande de scraping">—</span>
+                <button class="stat-refresh" type="button" id="refreshScrapeBtn"
+                        title="Relancer le scraping de la recherche sélectionnée">Actualiser</button>
             </div>
 
         </div>
@@ -237,7 +239,6 @@
                 <th class="col-star" title="Favori">★</th>
                 <th class="col-status" data-sort="status">Statut</th>
                 <th class="col-published" data-sort="published_on">Publication</th>
-                <th class="col-modified" data-sort="modified_at">Modifiée</th>
                 <th class="col-forem-id" data-sort="number">ID Forem</th>
                 <th class="col-offer" data-sort="offer_title">Offre</th>
                 <th class="col-company" data-sort="company">Société</th>
@@ -317,7 +318,8 @@
 
 <script src="suivi-io.js?v=1"></script>
 <script src="scraping-selector.js?v=2"></script>
-<script src="script.js?v=30"></script>
+<script src="scraper-ui.js?v=2"></script>
+<script src="script.js?v=34"></script>
 
 <div class="modal" id="searchModal" role="dialog" aria-modal="true" aria-labelledby="searchModalTitle">
 
@@ -383,19 +385,15 @@
             <button class="modal-close" type="button" id="closeStaleBtn" aria-label="Fermer">✕</button>
         </div>
 
-        <p class="modal-hint">
-            Le dernier scraping date de <strong id="staleAge">—</strong>.
-            De nouvelles annonces ont peut-être été publiées depuis.
-            Lance le scraping pour les afficher :
+        <p class="modal-hint" id="staleHint">
+            Dernière mise à jour : <strong id="staleAge">—</strong>.
+            De nouvelles annonces ont peut-être été publiées depuis :
+            actualisez vos scrapps pour les afficher.
         </p>
-
-        <label class="command-label" for="staleCommandBox">Commande à coller dans le terminal</label>
-        <textarea id="staleCommandBox" class="command-box" rows="3" readonly spellcheck="false"></textarea>
-        <p class="confirmation-status" id="staleStatus"></p>
 
         <div class="modal-footer">
             <button class="btn-secondary" type="button" id="closeStaleFooterBtn">Plus tard</button>
-            <button class="btn-primary" type="button" id="copyStaleBtn">Copier la commande</button>
+            <button class="btn-primary" type="button" id="staleRefreshBtn">Actualiser</button>
         </div>
 
     </div>
@@ -449,6 +447,79 @@
         <div class="modal-footer">
             <button class="btn-primary" type="button" id="copyScrapeCommandBtn">Copier la commande</button>
             <button class="btn-secondary" type="button" id="closeScrapeCommandFooterBtn">Fermer</button>
+        </div>
+
+    </div>
+
+</div>
+
+<div class="modal" id="refreshConfirmModal" role="dialog" aria-modal="true" aria-labelledby="refreshConfirmTitle">
+
+    <div class="modal-backdrop"></div>
+
+    <div class="modal-box" style="max-width: 480px;">
+
+        <div class="modal-header">
+            <h2 id="refreshConfirmTitle">Actualiser les offres ?</h2>
+            <button class="modal-close" type="button" id="closeRefreshConfirmBtn" aria-label="Fermer">✕</button>
+        </div>
+
+        <p class="modal-hint">
+            Seules les nouvelles offres et celles qui avaient échoué seront
+            téléchargées : les offres déjà connues sont conservées telles
+            quelles. La synchronisation peut prendre plusieurs minutes.
+        </p>
+
+        <p class="confirmation-status" id="refreshConfirmTarget"></p>
+
+        <div class="modal-footer">
+            <button class="btn-secondary" type="button" id="cancelRefreshBtn">Annuler</button>
+            <button class="btn-primary" type="button" id="confirmRefreshBtn">Lancer le scraping</button>
+        </div>
+
+    </div>
+
+</div>
+
+<div class="modal" id="refreshRunModal" role="dialog" aria-modal="true" aria-labelledby="refreshRunTitle">
+
+    <div class="modal-backdrop"></div>
+
+    <div class="modal-box" style="max-width: 720px;">
+
+        <div class="modal-header">
+            <h2 id="refreshRunTitle">Actualisation des offres</h2>
+            <button class="modal-close scraper-hide" type="button" id="closeRefreshRunBtn" aria-label="Fermer">✕</button>
+        </div>
+
+        <p class="modal-hint" id="refreshRunHint">Scraping en cours...</p>
+
+        <div class="terminal">
+
+            <div class="terminal-bar">Actualisation des offres</div>
+
+            <div class="terminal-body" id="scrapeTerminal" role="log" aria-live="polite"></div>
+
+        </div>
+
+        <div class="confirmation scraper-hide" id="scrapeResult">
+
+            <p class="confirmation-title" id="scrapeResultTitle">Scraping terminé</p>
+
+            <dl class="confirmation-info" id="scrapeResultInfo"></dl>
+
+            <details class="scraper-details scraper-hide" id="scrapeResultDetails">
+                <summary>Détails</summary>
+                <pre class="terminal-plain" id="scrapeResultPre"></pre>
+            </details>
+
+        </div>
+
+        <p class="confirmation-status" id="scrapeRunStatus"></p>
+
+        <div class="modal-footer">
+            <button class="btn-secondary scraper-hide" type="button" id="cancelRefreshRunBtn">Annuler</button>
+            <button class="btn-primary" type="button" id="closeRefreshRunFooterBtn" disabled>Scraping en cours...</button>
         </div>
 
     </div>

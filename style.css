@@ -2097,16 +2097,25 @@ tbody tr.offer-modified:hover {
     background: var(--warning-bg-hover);
 }
 
-/* Modified badge */
-.modified-badge {
-    display: inline-block;
-    padding: 2px 6px;
-    border-radius: 4px;
+.modified-tag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-left: 6px;
+    border-radius: 50%;
+    background: var(--warning-bg);
+    color: var(--warning);
+    font-size: 11px;
+    line-height: 1;
+    cursor: help;
+    vertical-align: middle;
+}
+
+.modified-tag:hover {
     background: var(--warning);
     color: var(--warning-text);
-    font-size: 11px;
-    font-weight: 600;
-    white-space: nowrap;
 }
 
 .info-row td {
@@ -2247,11 +2256,6 @@ a:hover {
 
 .col-published {
     width: 8%;
-}
-
-.col-modified {
-    width: 7%;
-    text-align: center;
 }
 
 .col-forem-id {
@@ -2672,6 +2676,116 @@ th.col-forem-id {
 .btn-primary:disabled {
     opacity: 0.55;
     cursor: not-allowed;
+}
+
+/* ============================================================
+   BOUTON « ACTUALISER » + FAUX TERMINAL DU SCRAPING
+   ============================================================ */
+
+.scraper-hide {
+    display: none;
+}
+
+.stat-refresh {
+    padding: 3px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.15s ease, color 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.stat-refresh:hover:not(:disabled) {
+    background: var(--row-hover);
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+}
+
+.stat-refresh:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.terminal {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-page);
+    overflow: hidden;
+}
+
+.terminal-bar {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-surface-soft);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.terminal-body {
+    margin: 0;
+    padding: 10px 12px;
+    height: 260px;
+    overflow-y: auto;
+    color: var(--text-secondary);
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.terminal-line-progress {
+    color: var(--accent);
+}
+
+.terminal-line-warn {
+    color: var(--warning);
+}
+
+.terminal-line-error {
+    color: var(--danger);
+}
+
+.terminal-line-done {
+    color: var(--success);
+}
+
+.terminal-plain {
+    margin: 8px 0 0;
+    padding: 10px 12px;
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-page);
+    color: var(--text-secondary);
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.scraper-details {
+    margin-top: 10px;
+}
+
+.scraper-details summary {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.scraper-details[open] summary {
+    margin-bottom: 2px;
 }
 
 /* ============================================================

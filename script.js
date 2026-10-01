@@ -9,6 +9,7 @@ const DEFAULT_STORAGE_PREFIX = "forem_electromecanicien_";
 
 let storagePrefix = DEFAULT_STORAGE_PREFIX;
 let activeBaseName = "";
+let activeScrapings = [];
 
 function getStorageKey(suffix) {
     return storagePrefix + suffix;
@@ -360,13 +361,80 @@ let priorities = loadPriorities();
 
 
 // Re-reads the in-memory maps from localStorage. Needed when the
-// active scraping changes or after an import restores the data.
+// active scraping changes, after an import, or when another tab
+// (detail.html) wrote one of the shared keys.
 function reloadStorageMaps() {
     statuses = loadStatuses();
     remarks = loadRemarks();
     favorites = loadFavorites();
     statutDates = loadStatutDates();
     priorities = loadPriorities();
+}
+
+
+// ============================================================
+// CROSS-TAB SYNC
+// detail.html writes the same keys from its own tab. The `storage`
+// event only reaches the other tabs, so it is the only way to see
+// those changes without reloading the page.
+// ============================================================
+
+const SYNCED_STORAGE_SUFFIXES = [
+    "statuts", "statut_dates", "remarques", "favoris", "priorites"
+];
+
+let storageSyncTimer = null;
+
+function isSyncedStorageKey(key) {
+    return SYNCED_STORAGE_SUFFIXES.some(function (suffix) {
+        return key === storagePrefix + suffix;
+    });
+}
+
+function syncFromOtherTab() {
+    const tbody = document.getElementById("currentRows");
+    const focused = document.activeElement;
+    const editingRemark = focused && focused.tagName === "TEXTAREA"
+        && tbody && tbody.contains(focused);
+    const editing = editingRemark
+        ? { number: focused.dataset.number, start: focused.selectionStart, end: focused.selectionEnd }
+        : null;
+
+    reloadStorageMaps();
+    rerenderTables();
+
+    if (!editing || !editing.number || !tbody) return;
+    const restored = tbody.querySelector('textarea[data-number="' + editing.number + '"]');
+    if (!restored) return;
+    restored.style.height = "auto";
+    restored.style.height = restored.scrollHeight + "px";
+    restored.focus();
+    try {
+        restored.setSelectionRange(editing.start, editing.end);
+    } catch (e) {
+        // Some browsers refuse a selection range on a hidden element.
+    }
+}
+
+function scheduleStorageSync() {
+    if (storageSyncTimer) clearTimeout(storageSyncTimer);
+    // detail.js writes the status and its date one after the other.
+    storageSyncTimer = setTimeout(function () {
+        storageSyncTimer = null;
+        syncFromOtherTab();
+    }, 120);
+}
+
+function setupStorageSync() {
+    window.addEventListener("storage", function (event) {
+        if (event.key === null || isSyncedStorageKey(event.key)) {
+            scheduleStorageSync();
+        }
+    });
+    window.addEventListener("focus", scheduleStorageSync);
+    document.addEventListener("visibilitychange", function () {
+        if (!document.hidden) scheduleStorageSync();
+    });
 }
 
 
@@ -479,6 +547,18 @@ function createDescriptionBlock(offer) {
     const title = createOfferLink(offer);
     head.appendChild(title);
 
+    if (offer.modified === true) {
+        const tag = document.createElement("span");
+        tag.className = "modified-tag";
+        tag.textContent = "\u270E";
+        tag.title = "Offre modifiée" + (offer.modified_at
+            ? " le " + formatDate(offer.modified_at)
+            : "");
+        tag.setAttribute("aria-label", "Offre modifiée");
+        tag.setAttribute("role", "img");
+        head.appendChild(tag);
+    }
+
     container.appendChild(head);
 
     if (offer.description) {
@@ -530,9 +610,10 @@ function createNotesCell(number) {
     const td = document.createElement("td");
     td.className = "notes-cell";
 
-    const textarea = document.createElement("textarea");
+const textarea = document.createElement("textarea");
     textarea.rows = 5;
-    textarea.placeholder = "…";
+    textarea.placeholder = ".";
+    textarea.dataset.number = String(number);
     textarea.value = getRemark(String(number));
     textarea.title = "Remarque personnelle";
     textarea.addEventListener("input", function () {
@@ -660,18 +741,6 @@ function createCurrentRow(offer) {
     tr.appendChild(tdStatus);
 
     tr.appendChild(textCell([createPublishedCell(offer)], "col-published"));
-    
-    // Modified column
-    const modifiedCell = document.createElement("td");
-    modifiedCell.className = "col-modified";
-    if (offer.modified === true) {
-        const badge = document.createElement("span");
-        badge.className = "modified-badge";
-        badge.textContent = "Modifiée";
-        badge.title = "Modifiée le " + formatDate(offer.modified_at);
-        modifiedCell.appendChild(badge);
-    }
-    tr.appendChild(modifiedCell);
 
     tr.appendChild(textCell([document.createTextNode(number)], "col-forem-id"));
     tr.appendChild(textCell([createDescriptionBlock(offer)], "col-offer"));
@@ -691,7 +760,7 @@ function createSeparationRow(text, className) {
     row.dataset.separation = "true";
 
     const cell = document.createElement("td");
-    cell.colSpan = 10;
+    cell.colSpan = 9;
     cell.textContent = text;
 
     row.appendChild(cell);
@@ -1572,6 +1641,45 @@ function updateDeleteGearButtonVisibility() {
     }
 }
 
+
+// ============================================================
+// BOUTON « ACTUALISER » (scraping manuel, synchrone)
+// ============================================================
+
+function currentScrapingTarget() {
+    if (!dataUrl || dataUrl === "all" || !activeBaseName) return null;
+    const scrape = activeScrapings.find(function (s) {
+        return s.name === activeBaseName;
+    }) || {};
+    return {
+        name: activeBaseName,
+        label: scrape.label || (lastData && lastData.label) || activeBaseName,
+        occupation_guid: scrape.occupationGuid
+            || (lastData && lastData.occupation_guid) || "",
+        location_guid: scrape.locationGuid
+            || (lastData && lastData.location_guid) || ""
+    };
+}
+
+function setupScraperRefresh() {
+    if (!window.ForemScraperUi) return;
+    window.ForemScraperUi.attach({
+        getTarget: currentScrapingTarget,
+        onScraped: function () {
+            // « Dernier scraping », statistiques et tableaux sont rechargés
+            // depuis les fichiers écrits par le scraper.
+            reloadStorageMaps();
+            reloadTables();
+        }
+    });
+}
+
+function refreshScraperButtonTarget() {
+    if (window.ForemScraperUi) {
+        window.ForemScraperUi.setTarget(currentScrapingTarget());
+    }
+}
+
 // ============================================================
 // SCRAPING SELECTOR (shared component)
 // ============================================================
@@ -1585,6 +1693,7 @@ function setupScrapingSelector() {
         allowAll: true,      // "Toutes les recherches" option
         allowCreate: true,   // "Creer un nouveau scrap" option
         onChange: function (key, scrapings) {
+            activeScrapings = scrapings;
             if (key === "all") {
                 dataUrl = "all";
                 historyUrl = "";
@@ -1602,9 +1711,11 @@ function setupScrapingSelector() {
             resetSort();
             reloadTables();
             updateDeleteGearButtonVisibility();
+            refreshScraperButtonTarget();
         }
     }).then(function (result) {
         try {
+            activeScrapings = result.scrapings;
             const stored = localStorage.getItem("forem_scraping_select");
             if (stored === "all") {
                 dataUrl = "all";
@@ -1619,6 +1730,8 @@ function setupScrapingSelector() {
                 }
             }
             updateDeleteGearButtonVisibility();
+            refreshScraperButtonTarget();
+            reloadStorageMaps();
             reloadTables();
         } catch (e) {
             console.error("Error restoring scrape selection:", e);
@@ -1900,24 +2013,6 @@ function exportCsv() {
 
 const STALE_AFTER_HOURS = 12;
 
-function buildScrapeCommand(data) {
-    if (!data) return "";
-    const parts = ["python", "scraper.py"];
-    if (data.occupation_guid) {
-        parts.push("--occupation-guid " + data.occupation_guid);
-    }
-    if (data.location_guid) {
-        parts.push("--location-guid " + data.location_guid);
-    }
-    if (data.name) {
-        parts.push("--base " + data.name);
-    }
-    if (data.label) {
-        parts.push("--label \"" + data.label + "\"");
-    }
-    return parts.join(" ");
-}
-
 function timeAgoLabel(timestamp) {
     if (!timestamp) return "date inconnue";
     const hours = Math.floor(
@@ -1926,7 +2021,8 @@ function timeAgoLabel(timestamp) {
     if (hours < 1) return "il y a moins d'une heure";
     if (hours < 24) return "il y a " + hours + " h";
     const days = Math.floor(hours / 24);
-    return "il y a " + days + " jour(s)";
+    if (days < 2) return "il y a 1 jour";
+    return "il y a " + days + " jours";
 }
 
 function maybeShowStaleAlert(data, scrapeDate) {
@@ -1938,39 +2034,28 @@ function maybeShowStaleAlert(data, scrapeDate) {
     if (!tooOld) return;
 
     staleAlertShown = true;
-    document.getElementById("staleAge").textContent = timeAgoLabel(scrapeDate);
 
+    // « Toutes les recherches » cannot be refreshed as a whole: the scraper
+    // works on one search at a time, so the alert only invites the user to
+    // pick one.
     const isAll = dataUrl === "all";
-    const cmdBox = document.getElementById("staleCommandBox");
-    const copyBtn = document.getElementById("copyStaleBtn");
-    const label = document.querySelector('label[for="staleCommandBox"]');
-
-    if (isAll) {
-        // "Toutes les recherches" : no command, just a warning
-        cmdBox.value = "";
-        cmdBox.style.display = "none";
-        if (label) label.style.display = "none";
-        copyBtn.style.display = "none";
-        document.querySelector("#staleModal .modal-hint").innerHTML =
-            'Le dernier scraping date de <strong id="staleAge">' +
-            timeAgoLabel(scrapeDate) +
-            '</strong>. Certaines données sont peut-être obsolètes. ' +
-            'Sélectionnez un scraping précis pour voir la commande de mise à jour.';
-    } else {
-        // Single scrape: show normal command
-        cmdBox.style.display = "";
-        if (label) label.style.display = "";
-        copyBtn.style.display = "";
-        cmdBox.value = buildScrapeCommand(data);
-        document.querySelector("#staleModal .modal-hint").innerHTML =
-            'Le dernier scraping date de <strong id="staleAge">' +
-            timeAgoLabel(scrapeDate) +
-            '</strong>. De nouvelles annonces ont peut-être été publiées depuis. ' +
-            'Lance le scraping pour les afficher :';
+    const age = timeAgoLabel(scrapeDate);
+    const hint = document.getElementById("staleHint");
+    if (hint) {
+        hint.innerHTML = isAll
+            ? "Dernière mise à jour : <strong>" + age + "</strong>. " +
+              "Certaines données sont peut-être obsolètes : sélectionnez un " +
+              "scraping précis puis actualisez-le."
+            : "Dernière mise à jour : <strong>" + age + "</strong>. " +
+              "De nouvelles annonces ont peut-être été publiées depuis : " +
+              "actualisez vos scrapps pour les afficher.";
     }
 
-    document.getElementById("staleStatus").textContent = "";
-    document.getElementById("staleModal").classList.add("visible");
+    const refreshBtn = document.getElementById("staleRefreshBtn");
+    if (refreshBtn) refreshBtn.style.display = isAll ? "none" : "";
+
+    const modal = document.getElementById("staleModal");
+    if (modal) modal.classList.add("visible");
 }
 
 function closeStaleAlert() {
@@ -1978,18 +2063,12 @@ function closeStaleAlert() {
     if (modal) modal.classList.remove("visible");
 }
 
-async function copyStaleCommand() {
-    const box = document.getElementById("staleCommandBox");
-    const status = document.getElementById("staleStatus");
-    if (!box.value) return;
-    try {
-        await navigator.clipboard.writeText(box.value);
-        status.textContent = "Commande copiée.";
-    } catch (e) {
-        box.select();
-        document.execCommand("copy");
-        status.textContent = "Commande copiée.";
-    }
+function refreshFromStaleAlert() {
+    // Same path as the « Actualiser » button next to the last scrape date:
+    // confirmation, then the scraping itself.
+    closeStaleAlert();
+    const button = document.getElementById("refreshScrapeBtn");
+    if (button) button.click();
 }
 
 
@@ -2001,7 +2080,7 @@ function createInfoRow(text, colSpan) {
     const tr = document.createElement("tr");
     tr.className = "info-row";
     const td = document.createElement("td");
-    td.colSpan = colSpan || 10;
+    td.colSpan = colSpan || 9;
     td.textContent = text;
     tr.appendChild(td);
     return tr;
@@ -2045,7 +2124,7 @@ async function reloadTables() {
     const tbodyDeleted = document.getElementById("deletedRows");
 
     if (!dataUrl && dataUrl !== "all") {
-        tbodyCurrent.innerHTML = "<tr><td colspan='10' class='no-scraping'>Aucun scraping sélectionné. Choisissez-en un dans le menu.</td></tr>";
+        tbodyCurrent.innerHTML = "<tr><td colspan='9' class='no-scraping'>Aucun scraping sélectionné. Choisissez-en un dans le menu.</td></tr>";
         tbodyDeleted.innerHTML = "";
         return;
     }
@@ -2151,6 +2230,8 @@ async function init() {
     setupNewSearch();
     setupGroupFilterZones();
     setupSortableColumns();
+    setupScraperRefresh();
+    setupStorageSync();
     // Default sort by modified_at descending
     sortTable = "currentRows";
     sortKey = "modified_at";
@@ -2181,9 +2262,9 @@ async function init() {
     if (closeStaleFooterBtn) {
         closeStaleFooterBtn.addEventListener("click", closeStaleAlert);
     }
-    const copyStaleBtn = document.getElementById("copyStaleBtn");
-    if (copyStaleBtn) {
-        copyStaleBtn.addEventListener("click", copyStaleCommand);
+    const staleRefreshBtn = document.getElementById("staleRefreshBtn");
+    if (staleRefreshBtn) {
+        staleRefreshBtn.addEventListener("click", refreshFromStaleAlert);
     }
     const staleModal = document.getElementById("staleModal");
     if (staleModal) {
