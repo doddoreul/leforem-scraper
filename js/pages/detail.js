@@ -4,55 +4,29 @@
    stocké dans data/details*.json, + suivi personnel.
    ============================================================ */
 
-const DETAIL_STATUS_OPTIONS = [
-    { value: "", label: "Non trié" },
-    { value: "interesse", label: "Intéressé" },
-    { value: "pas_interesse", label: "Pas intéressé" },
-    { value: "postule", label: "Postulé" },
-    { value: "contacte", label: "Contacté" },
-    { value: "refuse", label: "Refusé" },
-    { value: "rdv", label: "RDV prévu" },
-    { value: "generique", label: "Annonce générique" },
-];
-
-const DETAIL_PRIORITY_OPTIONS = [
-    { value: "", label: "Aucune" },
-    { value: "haute", label: "Haute" },
-    { value: "moyenne", label: "Moyenne" },
-    { value: "faible", label: "Faible" },
-];
-
-const DEFAULT_PREFIX = "forem_electromecanicien_";
+import { fetchJsonOrNull } from "../shared/api.js";
+import { formatLongDate, parseForemDate } from "../shared/dates.js";
+import { el } from "../shared/dom.js";
+import { offerUrl } from "../shared/links.js";
+import { PRIORITY_OPTIONS, STATUS_OPTIONS } from "../shared/statuses.js";
+import { readTrackedMap, storagePrefixFor, writeTrackedMap } from "../shared/storage.js";
+import { SUIVI_EVENT, TRACKING_GEAR_ACTIONS, setupSuiviActions } from "../shared/suivi.js";
+import { initTheme } from "../shared/theme.js";
+import "../shared/navbar.js";
 
 const params = new URLSearchParams(window.location.search);
 const numberStr = (params.get("number") || "").trim();
 const baseName = (params.get("base") || "").trim();
 
-const storagePrefix = baseName ? "forem_" + baseName + "_" : DEFAULT_PREFIX;
+const storagePrefix = storagePrefixFor(baseName);
 
-function storageGet(suffix) {
-    try {
-        const raw = localStorage.getItem(storagePrefix + suffix);
-        return raw ? JSON.parse(raw) : {};
-    } catch (e) {
-        return {};
-    }
-}
+initTheme(TRACKING_GEAR_ACTIONS);
 
-function storageSet(suffix, value) {
-    try {
-        localStorage.setItem(storagePrefix + suffix, JSON.stringify(value));
-    } catch (e) {
-        console.error("Unable to write localStorage", e);
-    }
-}
-
-function statusesValue() { return storageGet("statuts") || {}; }
-function remarksValue() { return storageGet("remarques") || {}; }
-function favoritesValue() { return storageGet("favoris") || {}; }
-function prioritiesValue() { return storageGet("priorites") || {}; }
-function statutDatesValue() { return storageGet("statut_dates") || {}; }
-
+function statusesValue() { return readTrackedMap(storagePrefix, "statuts"); }
+function remarksValue() { return readTrackedMap(storagePrefix, "remarques"); }
+function favoritesValue() { return readTrackedMap(storagePrefix, "favoris"); }
+function prioritiesValue() { return readTrackedMap(storagePrefix, "priorites"); }
+function statutDatesValue() { return readTrackedMap(storagePrefix, "statut_dates"); }
 function str(value) {
     if (value === undefined || value === null) return "";
     if (typeof value === "string") return value.trim();
@@ -81,27 +55,6 @@ function itemLabel(item) {
     return "";
 }
 
-function parseForemDate(value) {
-    if (!value) return null;
-    const text = String(value).trim();
-    let m = /^(\d{1,2})-(\d{1,2})-(\d{2})$/.exec(text);
-    if (m) {
-        const d = new Date("20" + m[3] + "-" + m[2] + "-" + m[1] + "T00:00:00");
-        return isNaN(d.getTime()) ? null : d;
-    }
-    m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text);
-    if (m) {
-        const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
-        return isNaN(d.getTime()) ? null : d;
-    }
-    m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(text);
-    if (m) {
-        const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-        return isNaN(d.getTime()) ? null : d;
-    }
-    return null;
-}
-
 function formatRelative(date) {
     if (!date) return "";
     const n = Math.round((date.getTime() - Date.now()) / 86400000);
@@ -111,23 +64,6 @@ function formatRelative(date) {
         return q === 1 ? "hier" : "il y a " + q + " jours";
     }
     return n === 1 ? "demain" : "dans " + n + " jours";
-}
-
-function formatDate(date) {
-    if (!date) return "";
-    return date.toLocaleDateString("fr-BE", { year: "numeric", month: "long", day: "numeric" });
-}
-
-function offerUrl(number) {
-    return "https://www.leforem.be/recherche-offres/offre-detail/" +
-        encodeURIComponent(number) + "?originPostuler=RECHOFFRE";
-}
-
-function el(tag, className, text) {
-    const node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined && text !== null) node.textContent = text;
-    return node;
 }
 
 function chip(text, tone) {
@@ -157,8 +93,7 @@ function main() {
         return;
     }
 
-    fetch("/api/scrapings")
-        .then(r => r.json())
+    fetchJsonOrNull("/api/scrapings")
         .then(scrapings => {
             const entries = Array.isArray(scrapings) ? scrapings : [];
             const entry = entries.find(e => e.name === baseName)
@@ -181,8 +116,7 @@ function main() {
 }
 
 function loadEntry(entry, root) {
-    const detailsPromise = fetch(entry.details).then(r => r.json())
-        .catch(() => null);
+    const detailsPromise = fetchJsonOrNull(entry.details);
 
     detailsPromise
         .then(detailsData => {
@@ -312,18 +246,18 @@ function renderFiche(root, payload) {
     const dates = el("div", "detail-dates");
     if (published) dates.appendChild(el(
         "span", "date-hint",
-        "Publié le " + formatDate(published) + " (" + formatRelative(published) + ")"
+        "Publié le " + formatLongDate(published) + " (" + formatRelative(published) + ")"
     ));
     if (debut && !published) dates.appendChild(el(
         "span", "date-hint",
-        "Diffusion débutée le " + formatDate(debut)
+        "Diffusion débutée le " + formatLongDate(debut)
     ));
     if (fin) dates.appendChild(el(
         "span", "date-hint date-expiry",
-        "Expire le " + formatDate(fin) + " (" + formatRelative(fin) + ")"
+        "Expire le " + formatLongDate(fin) + " (" + formatRelative(fin) + ")"
     ));
     if (modif) dates.appendChild(el(
-        "span", "date-hint", "Modifiée le " + formatDate(modif)
+        "span", "date-hint", "Modifiée le " + formatLongDate(modif)
     ));
     heroMain.appendChild(dates);
 
@@ -639,7 +573,7 @@ function buildTracking(number) {
         } else {
             delete favorites[number];
         }
-        storageSet("favoris", favorites);
+        writeTrackedMap(storagePrefix, "favoris", favorites);
         star.textContent = active ? "★" : "☆";
         star.classList.toggle("active", active);
         star.setAttribute("aria-pressed", active ? "true" : "false");
@@ -651,17 +585,17 @@ function buildTracking(number) {
 
     const statusField = makeField(
         "Statut",
-        DETAIL_STATUS_OPTIONS,
+        STATUS_OPTIONS,
         statuses[number] || "",
         value => {
             statuses[number] = value;
-            storageSet("statuts", statuses);
+            writeTrackedMap(storagePrefix, "statuts", statuses);
             if (value) {
                 statutDates[number] = new Date().toISOString();
-                storageSet("statut_dates", statutDates);
+                writeTrackedMap(storagePrefix, "statut_dates", statutDates);
             } else {
                 delete statutDates[number];
-                storageSet("statut_dates", statutDates);
+                writeTrackedMap(storagePrefix, "statut_dates", statutDates);
             }
         }
     );
@@ -669,7 +603,7 @@ function buildTracking(number) {
 
     const priorityField = makeField(
         "Priorité",
-        DETAIL_PRIORITY_OPTIONS,
+        PRIORITY_OPTIONS,
         priorities[number] || "",
         value => {
             if (value) {
@@ -677,7 +611,7 @@ function buildTracking(number) {
             } else {
                 delete priorities[number];
             }
-            storageSet("priorites", priorities);
+            writeTrackedMap(storagePrefix, "priorites", priorities);
         }
     );
     card.appendChild(priorityField);
@@ -693,7 +627,7 @@ function buildTracking(number) {
         } else {
             delete remarks[number];
         }
-        storageSet("remarques", remarks);
+        writeTrackedMap(storagePrefix, "remarques", remarks);
     });
     const remarkLabel = el("label", "field");
     remarkLabel.appendChild(el("span", "field-label", "Remarque"));
@@ -721,6 +655,6 @@ function makeField(labelText, options, current, onChange) {
 
 document.addEventListener("DOMContentLoaded", main);
 
-document.addEventListener("foremsuiviimported", function () {
+document.addEventListener(SUIVI_EVENT, function () {
     main();
 });

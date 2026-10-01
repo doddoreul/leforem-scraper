@@ -1,9 +1,10 @@
 /* ============================================================
-   THÈME — cogwheel + réglages (mode sombre, import / export)
+   THÈME — cogwheel + réglages (mode sombre, données)
    ============================================================ */
 
-const THEME_KEY = "forem_theme";
-const THEME_EVENT = "foremthemechange";
+export const THEME_KEY = "forem_theme";
+export const THEME_EVENT = "foremthemechange";
+
 const GEAR_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" ' +
     'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
     '<circle cx="12" cy="12" r="3.2"></circle>' +
@@ -17,7 +18,7 @@ function storedTheme() {
     try {
         const saved = localStorage.getItem(THEME_KEY);
         return saved === "light" || saved === "dark" ? saved : null;
-    } catch (e) {
+    } catch (error) {
         return null;
     }
 }
@@ -27,16 +28,16 @@ function systemTheme() {
         ? "dark" : "light";
 }
 
-function currentTheme() {
+export function currentTheme() {
     return storedTheme() || systemTheme();
 }
 
-function applyTheme(theme) {
+export function applyTheme(theme) {
     const next = theme === "dark" ? "dark" : "light";
     document.documentElement.setAttribute("data-theme", next);
     try {
         localStorage.setItem(THEME_KEY, next);
-    } catch (e) {
+    } catch (error) {
         /* stockage indisponible : le thème reste appliqué pour la session */
     }
     document.dispatchEvent(new CustomEvent(THEME_EVENT, { detail: { theme: next } }));
@@ -59,12 +60,17 @@ function gearActionMarkup(action) {
     return '<button type="button" class="theme-action' + extraClass + '" id="' + id + '"' + title + ">" + label + "</button>";
 }
 
-function renderGearActions() {
+/**
+ * Fill (or empty) the "Données" section of the cogwheel menu.
+ * @param {Array<{id: string, label: string, title?: string,
+ *                type?: string, accept?: string}>} actions
+ */
+export function renderGearActions(actions) {
     const menu = document.getElementById("themeMenu");
     if (!menu) return;
-    const actions = Array.isArray(window.FOREM_GEAR_ACTIONS) ? window.FOREM_GEAR_ACTIONS : [];
+    const list = Array.isArray(actions) ? actions : [];
     let section = menu.querySelector(".theme-actions");
-    if (actions.length === 0) {
+    if (list.length === 0) {
         if (section) section.remove();
         return;
     }
@@ -74,7 +80,7 @@ function renderGearActions() {
         menu.appendChild(section);
     }
     section.innerHTML = '<p class="theme-menu-label">Données</p>' +
-        actions.map(gearActionMarkup).join("");
+        list.map(gearActionMarkup).join("");
 }
 
 function syncThemeSwitch() {
@@ -101,7 +107,6 @@ function buildThemeSettings() {
         '</div>';
 
     document.body.appendChild(wrap);
-    renderGearActions();
 
     const gear = document.getElementById("themeGear");
     const menu = document.getElementById("themeMenu");
@@ -142,9 +147,15 @@ function buildThemeSettings() {
     syncThemeSwitch();
 }
 
-function initTheme() {
+/**
+ * Build the cogwheel and follow the system theme until the user picks one.
+ * @param {Array} [gearActions] entries of the "Données" section, page specific
+ */
+export function initTheme(gearActions) {
     document.documentElement.setAttribute("data-theme", currentTheme());
     buildThemeSettings();
+    renderGearActions(gearActions);
+
     if (!storedTheme() && window.matchMedia) {
         const query = window.matchMedia("(prefers-color-scheme: dark)");
         const onChange = function () {
@@ -153,10 +164,4 @@ function initTheme() {
         if (query.addEventListener) query.addEventListener("change", onChange);
         else if (query.addListener) query.addListener(onChange);
     }
-}
-
-if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initTheme);
-} else {
-    initTheme();
 }

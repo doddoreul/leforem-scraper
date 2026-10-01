@@ -2,12 +2,51 @@
 // CONFIGURATION
 // ============================================================
 
+import {
+    API_DELETE_SCRAPING,
+    fetchJson,
+    fetchScrapings,
+    postJson,
+} from "../shared/api.js";
+import { formatDateTime } from "../shared/dates.js";
+import { detailHref } from "../shared/links.js";
+import { ScraperUi } from "../shared/scraper-ui.js";
+import {
+    STORAGE_KEY,
+    createScrapingSelector,
+    refreshScrapingSelector,
+} from "../shared/scraping-selector.js";
+import {
+    STATUS_OPTIONS as CANONICAL_STATUS_OPTIONS,
+    statusRank,
+} from "../shared/statuses.js";
+import {
+    TRACKED_SUFFIXES,
+    migrateLegacyStorage,
+    storagePrefixFor,
+} from "../shared/storage.js";
+import {
+    SUIVI_EVENT,
+    TRACKING_GEAR_ACTIONS,
+    setupSuiviActions,
+    showSuiviToast,
+} from "../shared/suivi.js";
+import { initTheme } from "../shared/theme.js";
+import { normalizeText } from "../shared/text.js";
+import "../shared/navbar.js";
+
+// Actions shown in the theme gear dropdown.
+const GEAR_ACTIONS = [
+    { id: "exportCsvBtn", label: "Exporter CSV", title: "Exporter les annonces visibles en CSV" },
+    ...TRACKING_GEAR_ACTIONS,
+    { id: "deleteScrapingGearBtn", label: "Supprimer ce scraping", title: "Supprimer le scraping actuellement sélectionné (déplace les fichiers vers data/trash/)" }
+];
+
 // Base URLs for the active scraping; populated by setupScrapingSelector()
 let dataUrl = "";
 let historyUrl = "";
-const DEFAULT_STORAGE_PREFIX = "forem_electromecanicien_";
 
-let storagePrefix = DEFAULT_STORAGE_PREFIX;
+let storagePrefix = storagePrefixFor("");
 let activeBaseName = "";
 let activeScrapings = [];
 
@@ -16,49 +55,21 @@ function getStorageKey(suffix) {
 }
 
 function setActiveScraping(baseName) {
-    storagePrefix = baseName
-        ? "forem_" + baseName + "_"
-        : DEFAULT_STORAGE_PREFIX;
+    storagePrefix = storagePrefixFor(baseName);
     activeBaseName = baseName || "";
 }
 
-// Migrate localStorage from old default prefix to new GUID-based prefix.
-// Runs once per browser profile.
-function migrateDefaultStorage() {
-    const MIGRATION_FLAG = "forem_migration_v2_done";
-    if (localStorage.getItem(MIGRATION_FLAG)) return;
-
-    const oldPrefix = DEFAULT_STORAGE_PREFIX; // "forem_electromecanicien_"
-    const newPrefix = "forem_fb3c1045-38215355_"; // default scrape GUIDs
-    const suffixes = [
-        "statuts", "statut_dates", "remarques", "favoris", "priorites"
-    ];
-
-    suffixes.forEach(function (suffix) {
-        const oldKey = oldPrefix + suffix;
-        const newKey = newPrefix + suffix;
-        const oldValue = localStorage.getItem(oldKey);
-        if (oldValue && !localStorage.getItem(newKey)) {
-            localStorage.setItem(newKey, oldValue);
-        }
-    });
-
-    localStorage.setItem(MIGRATION_FLAG, "1");
-}
+// The offers table shows an em dash for untrielled offers, where the offer
+// sheet and the dashboard spell out "Non trié".
+const STATUS_OPTIONS = CANONICAL_STATUS_OPTIONS.map(option =>
+    option.value === "" ? { value: "", label: "—" } : option
+);
 
 // Run migration immediately so it's done before any UI uses the keys.
-migrateDefaultStorage();
+migrateLegacyStorage();
 
-const STATUS_OPTIONS = [
-    { value: "", label: "—" },
-    { value: "interesse", label: "Intéressé" },
-    { value: "pas_interesse", label: "Pas intéressé" },
-    { value: "postule", label: "Postulé" },
-    { value: "contacte", label: "Contacté" },
-    { value: "refuse", label: "Refusé" },
-    { value: "rdv", label: "RDV prévu" },
-    { value: "generique", label: "Annonce générique" },
-];
+initTheme(GEAR_ACTIONS);
+
 
 
 // ============================================================
@@ -379,14 +390,10 @@ function reloadStorageMaps() {
 // those changes without reloading the page.
 // ============================================================
 
-const SYNCED_STORAGE_SUFFIXES = [
-    "statuts", "statut_dates", "remarques", "favoris", "priorites"
-];
-
 let storageSyncTimer = null;
 
 function isSyncedStorageKey(key) {
-    return SYNCED_STORAGE_SUFFIXES.some(function (suffix) {
+    return TRACKED_SUFFIXES.some(function (suffix) {
         return key === storagePrefix + suffix;
     });
 }
@@ -418,7 +425,7 @@ function syncFromOtherTab() {
 
 function scheduleStorageSync() {
     if (storageSyncTimer) clearTimeout(storageSyncTimer);
-    // detail.js writes the status and its date one after the other.
+    // detail.html writes the status and its date one after the other.
     storageSyncTimer = setTimeout(function () {
         storageSyncTimer = null;
         syncFromOtherTab();
@@ -470,17 +477,9 @@ function getOfferState(offer) {
     return offer.is_new === true ? "new" : "old";
 }
 
-function detailHref(number) {
-    const params = new URLSearchParams({ number: String(number) });
-    if (activeBaseName) {
-        params.set("base", activeBaseName);
-    }
-    return "detail.html?" + params.toString();
-}
-
 function createOfferLink(offer) {
     const link = document.createElement("a");
-    link.href = detailHref(offer.number);
+    link.href = detailHref(offer.number, activeBaseName);
     link.target = "_blank";
     link.rel = "noopener noreferrer";
     link.dataset.number = String(offer.number);
@@ -552,7 +551,7 @@ function createDescriptionBlock(offer) {
         tag.className = "modified-tag";
         tag.textContent = "\u270E";
         tag.title = "Offre modifiée" + (offer.modified_at
-            ? " le " + formatDate(offer.modified_at)
+            ? " le " + formatDateTime(offer.modified_at)
             : "");
         tag.setAttribute("aria-label", "Offre modifiée");
         tag.setAttribute("role", "img");
@@ -790,7 +789,7 @@ function createDeletedRow(offer) {
     tr.appendChild(textCell([document.createTextNode(offer.company || "")], "col-company"));
     tr.appendChild(createDetailsCell(offer));
     tr.appendChild(textCell([document.createTextNode(offer.location || "")], "col-location"));
-    tr.appendChild(textCell([document.createTextNode(formatDate(offer.removed_on))], "col-removed-on"));
+    tr.appendChild(textCell([document.createTextNode(formatDateTime(offer.removed_on))], "col-removed-on"));
     tr.appendChild(createNotesCell(String(offer.number)));
 
     return tr;
@@ -803,7 +802,7 @@ function renderCurrent(offers, scrapeDate) {
     document.getElementById("statTotal").textContent = offers.length;
     document.getElementById("statNew").textContent = allNew.length;
     document.getElementById("statOld").textContent = allOld.length;
-    document.getElementById("statDate").textContent = scrapeDate ? formatDate(scrapeDate) : "—";
+    document.getElementById("statDate").textContent = scrapeDate ? formatDateTime(scrapeDate) : "—";
 
     const tbody = document.getElementById("currentRows");
     tbody.innerHTML = "";
@@ -913,7 +912,7 @@ function buildTrackedAlertItem(kind, offer, removedOn) {
     const message = document.createElement("span");
     message.appendChild(createOfferLink(offer));
     const company = offer.company ? " (" + offer.company + ")" : "";
-    const date = formatDate(removedOn);
+    const date = formatDateTime(removedOn);
     message.appendChild(document.createTextNode(
         kind === "gone"
             ? company + " — passée dans les annonces supprimées (" + date + ")."
@@ -990,14 +989,6 @@ function renderDeleted(offers) {
 // ============================================================
 // DISPLAY HELPERS
 // ============================================================
-
-function formatDate(value) {
-    if (!value) return "—";
-    const d = new Date(value);
-    if (isNaN(d.getTime())) return value;
-    const p = n => String(n).padStart(2, "0");
-    return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${p(d.getFullYear())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-}
 
 
 // ============================================================
@@ -1122,13 +1113,6 @@ function markAllFollowedUp() {
 // ============================================================
 // FILTERS (STATUS + SEARCH)
 // ============================================================
-
-function normalizeText(text) {
-    return (text || "")
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLowerCase();
-}
 
 function getKeywords(value) {
     return normalizeText(value).split(/\s+/).filter(Boolean);
@@ -1625,13 +1609,8 @@ function launchNewScraping() {
         status.textContent = "Choisis un métier et un lieu qui contiennent des lettres.";
         return;
     }
-    if (!window.ForemScraperUi) {
-        status.textContent = "Le module de scraping est introuvable. Recharge la page.";
-        return;
-    }
-
     closeModal();
-    window.ForemScraperUi.runNewScraping({
+    ScraperUi.runNewScraping({
         name: name,
         label: newScrapingLabel(),
         occupation_guid: selectedOccupation.key,
@@ -1645,20 +1624,13 @@ function launchNewScraping() {
 // rechargée et la nouvelle recherche devient la sélection courante.
 function selectCreatedScraping(name) {
     localStorage.setItem(
-        window.ScrapingSelector.STORAGE_KEY, "data_" + name + ".json"
+        STORAGE_KEY, "data_" + name + ".json"
     );
     refreshScrapingSelector();
 }
 
 // Recharge la liste des recherches sans perdre l'écouteur du <select> ni la
 // sélection courante.
-function refreshScrapingSelector() {
-    if (!window.ScrapingSelector || !window.ScrapingSelector.refreshScrapingSelector) {
-        location.reload();
-        return Promise.resolve(null);
-    }
-    return window.ScrapingSelector.refreshScrapingSelector("scrapingSelect");
-}
 
 
 function updateDeleteGearButtonVisibility() {
@@ -1693,8 +1665,7 @@ function currentScrapingTarget() {
 }
 
 function setupScraperRefresh() {
-    if (!window.ForemScraperUi) return;
-    window.ForemScraperUi.attach({
+    ScraperUi.attach({
         getTarget: currentScrapingTarget,
         onScraped: function () {
             // « Dernier scraping », statistiques et tableaux sont rechargés
@@ -1706,9 +1677,7 @@ function setupScraperRefresh() {
 }
 
 function refreshScraperButtonTarget() {
-    if (window.ForemScraperUi) {
-        window.ForemScraperUi.setTarget(currentScrapingTarget());
-    }
+    ScraperUi.setTarget(currentScrapingTarget());
 }
 
 // ============================================================
@@ -1719,7 +1688,7 @@ function setupScrapingSelector() {
     const select = document.getElementById("scrapingSelect");
     if (!select) return Promise.resolve();
 
-    return window.ScrapingSelector.createScrapingSelector({
+    return createScrapingSelector({
         selectId: "scrapingSelect",
         allowAll: true,      // "Toutes les recherches" option
         allowCreate: true,   // "Creer un nouveau scrap" option
@@ -1824,9 +1793,7 @@ function parseSortDate(value) {
 }
 
 function getStatusRank(offer) {
-    const value = getStatus(String(offer.number)) || "";
-    const idx = STATUS_OPTIONS.findIndex(o => o.value === value);
-    return idx === -1 ? STATUS_OPTIONS.length : idx;
+    return statusRank(getStatus(String(offer.number)) || "");
 }
 
 function getSortValue(offer, key) {
@@ -2007,7 +1974,7 @@ function downloadCsv(filename, content) {
 
 
 // ============================================================
-// SUIVI — l'export / import du suivi est défini dans suivi-io.js
+// SUIVI — l'export / import du suivi est défini dans shared/suivi.js
 // (partagé avec le dashboard et la fiche offre)
 // ============================================================
 
@@ -2117,14 +2084,6 @@ function createInfoRow(text, colSpan) {
     return tr;
 }
 
-async function loadJson(url) {
-    const response = await fetch(url, { cache: "no-store" });
-    if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${url}`);
-    }
-    return response.json();
-}
-
 function extractOffers(data) {
     if (Array.isArray(data)) return data;
     if (data && Array.isArray(data.offers)) return data.offers;
@@ -2142,7 +2101,7 @@ function showError(tbody, message, colSpan) {
 
 async function loadJsonWithFallback(url, tbody, failureMessage, colSpan) {
     try {
-        return await loadJson(url);
+        return await fetchJson(url);
     } catch (e) {
         console.error(e);
         showError(tbody, `${failureMessage} (${e.message})`, colSpan);
@@ -2167,11 +2126,11 @@ async function reloadTables() {
 
     if (dataUrl === "all") {
         // Fetch all scrapes and merge
-        const scrapings = await loadJson("/api/scrapings");
+        const scrapings = await fetchScrapings();
         if (scrapings && scrapings.length) {
             const allData = await Promise.all(scrapings.map(async s => {
-                const d = await loadJson(s.file);
-                const h = await loadJson(s.history);
+                const d = await fetchJson(s.file);
+                const h = await fetchJson(s.history);
                 return { data: d, history: h, timestamp: s.scrape_timestamp, label: s.label };
             }));
             allData.forEach(({ data: d, history, timestamp, label }) => {
@@ -2349,24 +2308,18 @@ async function init() {
                 showSuiviToast("Sélectionnez un scraping précis pour l'actualiser.");
                 return;
             }
-            if (window.ForemScraperUi) {
-                window.ForemScraperUi.openConfirm();
-            } else {
-                showSuiviToast("Le module de scraping est introuvable. Recharge la page.");
-            }
+            ScraperUi.openConfirm();
         });
     }
 
     async function deleteScraping(name) {
         try {
-            const resp = await fetch("/delete-scraping", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: name })
-            });
-            const result = await resp.json();
-            if (!resp.ok) throw new Error(result.error || "Erreur lors de la suppression");
-            showSuiviToast("Scraping supprimé : " + result.moved.join(", "));
+            const result = await postJson(API_DELETE_SCRAPING, { name: name });
+            if (!result.ok) {
+                throw new Error((result.data && result.data.error)
+                    || "Erreur lors de la suppression");
+            }
+            showSuiviToast("Scraping supprimé : " + result.data.moved.join(", "));
             // Refresh scraping selector
             await refreshScrapingSelector();
             // If we were viewing the deleted scrape, switch to "all"
@@ -2445,7 +2398,7 @@ async function init() {
     maybeShowStaleAlert(lastData, lastScrapeDate);
 }
 
-document.addEventListener("foremsuiviimported", function () {
+document.addEventListener(SUIVI_EVENT, function () {
     reloadStorageMaps();
     backfillStatutDates();
     rerenderTables();

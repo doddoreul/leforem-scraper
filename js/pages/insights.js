@@ -5,18 +5,22 @@
    nouvelles offres.
    ============================================================ */
 
-const DEFAULT_PREFIX = "forem_electromecanicien_";
-
-const INSIGHTS_STATUS = [
-    ["", "Non trié"],
-    ["interesse", "Intéressé"],
-    ["pas_interesse", "Pas intéressé"],
-    ["postule", "Postulé"],
-    ["contacte", "Contacté"],
-    ["refuse", "Refusé"],
-    ["rdv", "RDV prévu"],
-    ["generique", "Annonce générique"],
-];
+import { fetchJsonOrNull, fetchScrapings } from "../shared/api.js";
+import { parseForemDate } from "../shared/dates.js";
+import { el } from "../shared/dom.js";
+import { detailHref } from "../shared/links.js";
+import {
+    STORAGE_KEY,
+    createScrapingSelector,
+    filterScrapings,
+    getScrapingByKey,
+} from "../shared/scraping-selector.js";
+import { STATUS_OPTIONS, statusLabel } from "../shared/statuses.js";
+import { migrateLegacyStorage, readTrackedMap, storagePrefixFor } from "../shared/storage.js";
+import { SUIVI_EVENT, TRACKING_GEAR_ACTIONS, setupSuiviActions } from "../shared/suivi.js";
+import { THEME_EVENT, initTheme } from "../shared/theme.js";
+import { normalizeText } from "../shared/text.js";
+import "../shared/navbar.js";
 
 const STATE_TXT = {
     new: "Nouvelle",
@@ -31,76 +35,16 @@ let scopeFile = "all";
 let dataSets = [];
 let lastScrapeHistory = null;
 
-function el(tag, className, text) {
-    const node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined && text !== null) node.textContent = text;
-    return node;
-}
-
-function normalizeText(value) {
-    return String(value || "")
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "");
-}
-
-function statusLabel(value) {
-    const item = INSIGHTS_STATUS.find(s => s[0] === value);
-    return item ? item[1] : value || "Non trié";
-}
-
-function prefixFor(name) {
-    return name ? "forem_" + name + "_" : DEFAULT_PREFIX;
-}
-
-// Migrate localStorage from old default prefix to new GUID-based prefix.
-// Runs once per browser profile.
-function migrateDefaultStorage() {
-    const MIGRATION_FLAG = "forem_migration_v2_done";
-    if (localStorage.getItem(MIGRATION_FLAG)) return;
-
-    const oldPrefix = DEFAULT_PREFIX; // "forem_electromecanicien_"
-    const newPrefix = "forem_fb3c1045-38215355_"; // default scrape GUIDs
-    const suffixes = [
-        "statuts", "statut_dates", "remarques", "favoris", "priorites"
-    ];
-
-    suffixes.forEach(function (suffix) {
-        const oldKey = oldPrefix + suffix;
-        const newKey = newPrefix + suffix;
-        const oldValue = localStorage.getItem(oldKey);
-        if (oldValue && !localStorage.getItem(newKey)) {
-            localStorage.setItem(newKey, oldValue);
-        }
-    });
-
-    localStorage.setItem(MIGRATION_FLAG, "1");
-}
-
 // Run migration immediately so it's done before any UI uses the keys.
-migrateDefaultStorage();
+migrateLegacyStorage();
 
-function loadPrefixedMap(prefix, suffix) {
-    try {
-        const raw = localStorage.getItem(prefix + suffix);
-        return raw ? JSON.parse(raw) : {};
-    } catch (e) {
-        return {};
-    }
-}
-
-async function fetchJson(url) {
-    const response = await fetch(url);
-    if (!response.ok) return null;
-    return response.json();
-}
+initTheme(TRACKING_GEAR_ACTIONS);
 
 function readScopeFile() {
     try {
-        const raw = localStorage.getItem(window.ScrapingSelector.STORAGE_KEY);
+        const raw = localStorage.getItem(STORAGE_KEY);
         if (raw === "all") return "all";
-        const found = window.ScrapingSelector.getScrapingByKey(scrapings, raw);
+        const found = getScrapingByKey(scrapings, raw);
         if (found) return found.file;
     } catch (e) {
         // ignore
@@ -112,7 +56,7 @@ function readScope() {
     // Backward compatibility: returns name for prefix
     const file = readScopeFile();
     if (file === "all") return "all";
-    const found = window.ScrapingSelector.getScrapingByKey(scrapings, file);
+    const found = getScrapingByKey(scrapings, file);
     return found ? found.name : "all";
 }
 
@@ -120,7 +64,7 @@ function populateScopeSelect() {
     const select = document.getElementById("dashScope");
     if (!select) return Promise.resolve();
 
-    return window.ScrapingSelector.createScrapingSelector({
+    return createScrapingSelector({
         selectId: "dashScope",
         allowAll: true,       // "Toutes les recherches"
         allowCreate: true,    // "Créer un nouveau scrap"
@@ -139,7 +83,7 @@ function populateScopeSelect() {
                 }
             }
             try {
-                localStorage.setItem(window.ScrapingSelector.STORAGE_KEY, scopeFile);
+                localStorage.setItem(STORAGE_KEY, scopeFile);
             } catch (e) {
                 // ignore
             }
@@ -149,33 +93,12 @@ function populateScopeSelect() {
 }
 
 function scopeEntries() {
-    return window.ScrapingSelector.filterScrapings(scrapings, scopeFile);
+    return filterScrapings(scrapings, scopeFile);
 }
 
 function offerState(offer) {
     if (offer.offer_state) return offer.offer_state;
     return offer.is_new === true ? "new" : "old";
-}
-
-function parseForemDate(value) {
-    if (!value) return null;
-    const text = String(value).trim();
-    let m = /^(\d{1,2})-(\d{1,2})-(\d{2})$/.exec(text);
-    if (m) {
-        const d = new Date("20" + m[3] + "-" + m[2] + "-" + m[1] + "T00:00:00");
-        return isNaN(d.getTime()) ? null : d;
-    }
-    m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text);
-    if (m) {
-        const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
-        return isNaN(d.getTime()) ? null : d;
-    }
-    m = /^(\d{4})-/.exec(text);
-    if (m) {
-        const d = new Date(text);
-        return isNaN(d.getTime()) ? null : d;
-    }
-    return null;
 }
 
 function formatDay(value) {
@@ -198,10 +121,8 @@ function formatRelative(value) {
     return n === 1 ? "dans 1 jour" : "dans " + n + " jours";
 }
 
-function detailHref(entryName, number) {
-    const params = new URLSearchParams({ number: String(number) });
-    if (entryName) params.set("base", entryName);
-    return "detail.html?" + params.toString();
+function offerDetailHref(entryName, number) {
+    return detailHref(number, entryName);
 }
 
 // ============================================================
@@ -233,7 +154,7 @@ function collectiveCounts() {
 function statusCounts() {
     const counts = {};
     dataSets.forEach(ds => {
-        const map = loadPrefixedMap(ds.prefix, "statuts");
+        const map = readTrackedMap(ds.prefix, "statuts");
         Object.values(map).forEach(value => {
             if (value) counts[value] = (counts[value] || 0) + 1;
         });
@@ -246,11 +167,11 @@ function trackedTotals() {
     let favoris = 0;
     let priorites = 0;
     dataSets.forEach(ds => {
-        suivies += Object.values(loadPrefixedMap(ds.prefix, "statuts"))
+        suivies += Object.values(readTrackedMap(ds.prefix, "statuts"))
             .filter(Boolean).length;
-        favoris += Object.values(loadPrefixedMap(ds.prefix, "favoris"))
+        favoris += Object.values(readTrackedMap(ds.prefix, "favoris"))
             .filter(Boolean).length;
-        priorites += Object.values(loadPrefixedMap(ds.prefix, "priorites"))
+        priorites += Object.values(readTrackedMap(ds.prefix, "priorites"))
             .filter(Boolean).length;
     });
     return { suivies, favoris, priorites };
@@ -343,7 +264,7 @@ function renderStatusBars() {
     const counts = statusCounts();
     const max = Math.max(1, ...Object.values(counts));
     root.innerHTML = "";
-    INSIGHTS_STATUS.forEach(([value, label]) => {
+    STATUS_OPTIONS.forEach(({ value, label }) => {
         const count = counts[value] || 0;
         const row = el("div", "dash-bar-row");
         const lab = el("span", "dash-bar-label", label);
@@ -382,7 +303,7 @@ function renderNewList() {
         li.appendChild(el("span", "dash-list-date", date));
         const link = el("a", "dash-list-link",
             offer.offer_title || "(Sans titre)");
-        link.href = detailHref(ds.entry.name, offer.number);
+        link.href = offerDetailHref(ds.entry.name, offer.number);
         link.target = "_blank";
         li.appendChild(link);
         const badge = el(
@@ -680,23 +601,23 @@ function showEmpty() {
 async function refresh() {
     const entries = scopeEntries();
     dataSets = await Promise.all(entries.map(async entry => {
-        const data = await fetchJson(entry.file);
-        const hist = await fetchJson(entry.history);
+        const data = await fetchJsonOrNull(entry.file);
+        const hist = await fetchJsonOrNull(entry.history);
         return {
             entry,
-            prefix: prefixFor(entry.name),
+            prefix: storagePrefixFor(entry.name),
             offers: data && Array.isArray(data.offers) ? data.offers : [],
             deleted: hist && Array.isArray(hist.offers) ? hist.offers : [],
         };
     }));
-    const scrapeHistory = await fetchJson("/historique_scrapes.json");
+    const scrapeHistory = await fetchJsonOrNull("/historique_scrapes.json");
     lastScrapeHistory = scrapeHistory;
     render(scrapeHistory);
 }
 
 async function init() {
     setupSuiviActions();
-    scrapings = await fetchJson("/api/scrapings") || [];
+    scrapings = await fetchScrapings();
     if (!scrapings.length) {
         showEmpty();
         return;
@@ -707,7 +628,7 @@ async function init() {
         scope = "all";
         scopeFile = "all";
     } else {
-        const found = window.ScrapingSelector.getScrapingByKey(scrapings, stored);
+        const found = getScrapingByKey(scrapings, stored);
         if (found) {
             scope = found.name;
             scopeFile = found.file;
@@ -727,10 +648,8 @@ async function init() {
 
 document.addEventListener("DOMContentLoaded", init);
 
-document.addEventListener("foremthemechange", function () {
+document.addEventListener(THEME_EVENT, function () {
     if (lastScrapeHistory) render(lastScrapeHistory);
 });
 
-document.addEventListener("foremsuiviimported", function () {
-    refresh();
-});
+document.addEventListener(SUIVI_EVENT, refresh);

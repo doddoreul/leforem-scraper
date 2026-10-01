@@ -5,16 +5,22 @@
    le suivi sur un autre PC.
    ============================================================ */
 
-const SUIVI_EVENT = "foremsuiviimported";
+import { isTrackedStorageKey } from "./storage.js";
+
+export const SUIVI_EVENT = "foremsuiviimported";
+
+/**
+ * The "Données" entries of the cogwheel menu, identical on every page.
+ * @type {Array<{id: string, label: string, title: string,
+ *               type?: string, accept?: string}>}
+ */
+export const TRACKING_GEAR_ACTIONS = [
+    { id: "exportTrackingBtn", label: "Exporter le suivi", title: "Sauvegarder statuts, remarques, favoris et relances en fichier JSON" },
+    { id: "importTrackingInput", label: "Importer le suivi", title: "Restaurer un fichier de suivi exporté depuis un autre PC", type: "file", accept: ".json,application/json" }
+];
+
 const SUIVI_APP = "leforem-scraper";
 const SUIVI_SCHEMA_VERSION = 1;
-const TRACKED_PLAIN_KEYS = ["forem_scraping_select"];
-const TRACKED_KEY_PATTERN = /^forem_.+_(statuts|remarques|favoris|statut_dates|priorites)$/;
-
-function isTrackedStorageKey(key) {
-    return TRACKED_KEY_PATTERN.test(key) ||
-        TRACKED_PLAIN_KEYS.indexOf(key) !== -1;
-}
 
 function localDateString(date) {
     const d = date || new Date();
@@ -35,7 +41,7 @@ function downloadJson(filename, content) {
     URL.revokeObjectURL(url);
 }
 
-function showSuiviToast(text) {
+export function showSuiviToast(text) {
     let toast = document.getElementById("suiviToast");
     if (!toast) {
         toast = document.createElement("div");
@@ -52,24 +58,24 @@ function showSuiviToast(text) {
     }, 6000);
 }
 
-function showTrackingMessage(text) {
-    const el = document.getElementById("trackingMessage");
-    if (!el) {
+export function showTrackingMessage(text) {
+    const message = document.getElementById("trackingMessage");
+    if (!message) {
         showSuiviToast(text);
         return;
     }
-    el.textContent = text;
-    setTimeout(function () { el.textContent = ""; }, 6000);
+    message.textContent = text;
+    setTimeout(function () { message.textContent = ""; }, 6000);
 }
 
-function exportTracking() {
+export function exportTracking() {
     const data = {};
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (!isTrackedStorageKey(key)) continue;
         try {
             data[key] = JSON.parse(localStorage.getItem(key));
-        } catch (e) {
+        } catch (error) {
             data[key] = localStorage.getItem(key);
         }
     }
@@ -79,21 +85,23 @@ function exportTracking() {
         exportDate: new Date().toISOString(),
         data: data
     };
-    const filename = "suivi_forem_" + localDateString(new Date()) + ".json";
-    downloadJson(filename, JSON.stringify(payload, null, 2));
+    downloadJson(
+        "suivi_forem_" + localDateString(new Date()) + ".json",
+        JSON.stringify(payload, null, 2)
+    );
     showTrackingMessage(
         "Suivi exporté (" + Object.keys(data).length + " jeu(x) de données)."
     );
 }
 
-function importTrackingFile(file) {
+export function importTrackingFile(file) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = function () {
         let parsed;
         try {
             parsed = JSON.parse(reader.result);
-        } catch (e) {
+        } catch (error) {
             showTrackingMessage("Fichier invalide : JSON illisible.");
             return;
         }
@@ -101,13 +109,13 @@ function importTrackingFile(file) {
         const data = payload.data && typeof payload.data === "object"
             ? payload.data : {};
         let imported = 0;
-        Object.keys(data).forEach(key => {
+        Object.keys(data).forEach(function (key) {
             if (!isTrackedStorageKey(key)) return;
             try {
                 localStorage.setItem(key, JSON.stringify(data[key]));
                 imported++;
-            } catch (e) {
-                console.error("Unable to store imported key", key, e);
+            } catch (error) {
+                console.error("Unable to store imported key", key, error);
             }
         });
         if (imported === 0) {
@@ -123,7 +131,7 @@ function importTrackingFile(file) {
     reader.readAsText(file, "utf-8");
 }
 
-function setupSuiviActions() {
+export function setupSuiviActions() {
     const exportBtn = document.getElementById("exportTrackingBtn");
     if (exportBtn) {
         exportBtn.addEventListener("click", exportTracking);

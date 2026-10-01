@@ -53,17 +53,14 @@ STATIC_FILES = {
     "/companies.html": ("companies.html", "text/html; charset=utf-8"),
     "/detail.html": ("detail.html", "text/html; charset=utf-8"),
     "/style.css": ("style.css", "text/css; charset=utf-8"),
-    "/theme.js": ("theme.js", "application/javascript; charset=utf-8"),
-    "/suivi-io.js": ("suivi-io.js", "application/javascript; charset=utf-8"),
-    "/script.js": ("script.js", "application/javascript; charset=utf-8"),
-    "/insights.js": ("insights.js", "application/javascript; charset=utf-8"),
-    "/companies.js": ("companies.js", "application/javascript; charset=utf-8"),
-    "/detail.js": ("detail.js", "application/javascript; charset=utf-8"),
-    "/scraping-selector.js": ("scraping-selector.js", "application/javascript; charset=utf-8"),
-    "/scraper-ui.js": ("scraper-ui.js", "application/javascript; charset=utf-8"),
-    "/navbar-loader.js": ("navbar-loader.js", "application/javascript; charset=utf-8"),
     "/navbar_include.html": ("navbar_include.html", "text/html; charset=utf-8"),
 }
+
+# The pages are plain ES modules: one entry per page in js/pages/ and the
+# modules they share in js/shared/ and js/boot/.
+JS_DIR = os.path.join(BASE_DIR, "js")
+JS_PATH = re.compile(r"^/js/(?:boot|shared|pages)/[A-Za-z0-9_-]+\.js$")
+JAVASCRIPT_MIME = "application/javascript; charset=utf-8"
 
 DATA_FILES = {
     "/historique_scrapes.json": config.SCRAPES_FILE_NAME,
@@ -147,6 +144,10 @@ class Handler(BaseHTTPRequestHandler):
             file_name = DATA_FILES[path]
             file_root = config.DATA_DIR
             mime_type = "application/json; charset=utf-8"
+        elif JS_PATH.match(path):
+            file_name = path[len("/js/"):]
+            file_root = JS_DIR
+            mime_type = JAVASCRIPT_MIME
         elif path in STATIC_FILES:
             file_name, mime_type = STATIC_FILES[path]
             file_root = BASE_DIR
@@ -168,7 +169,8 @@ class Handler(BaseHTTPRequestHandler):
 
         file_dir = os.path.normpath(file_root)
         file_path = os.path.normpath(os.path.join(file_dir, file_name))
-        if os.path.dirname(file_path) != file_dir:
+        # The modules live in sub-directories: only their own tree is served.
+        if os.path.commonpath([file_dir, file_path]) != file_dir:
             self.send_error(404)
             return
         try:

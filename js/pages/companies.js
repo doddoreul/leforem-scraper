@@ -10,6 +10,15 @@
    qui écrit data/companies.json.
    ============================================================ */
 
+import { fetchJson, postJson } from "../shared/api.js";
+import { parseForemDate, formatSlashDay } from "../shared/dates.js";
+import { el } from "../shared/dom.js";
+import { detailHref as offerDetailHref } from "../shared/links.js";
+import { normalizeText } from "../shared/text.js";
+import { SUIVI_EVENT, TRACKING_GEAR_ACTIONS, showSuiviToast } from "../shared/suivi.js";
+import { initTheme } from "../shared/theme.js";
+import "../shared/navbar.js";
+
 const COMPANY_DATA_URL = "companies.json";
 const COMPANY_SAVE_URL = "companies.json";
 const COMPANY_SORT_KEY = "forem_company_sort";
@@ -74,22 +83,8 @@ let draftKey = "";
 // Helpers
 // ============================================================
 
-function el(tag, className, text) {
-    const node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined && text !== null) node.textContent = text;
-    return node;
-}
-
 function list(value) {
     return Array.isArray(value) ? value : [];
-}
-
-function normalizeText(value) {
-    return String(value || "")
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "");
 }
 
 function contactCount(record) {
@@ -113,19 +108,12 @@ function formatAgo(value) {
 
 function formatDate(value) {
     if (!value) return "";
-    const parts = String(value).split("-");
-    if (parts.length !== 3) return String(value);
-    return parts[2] + "/" + parts[1] + "/" + parts[0];
+    const date = parseForemDate(value);
+    return date ? formatSlashDay(date) : String(value);
 }
 
 function telHref(value) {
     return "tel:" + String(value).replace(/[^\d+]/g, "");
-}
-
-function detailHref(entry) {
-    const params = new URLSearchParams({ number: String(entry.number || "") });
-    if (entry.base) params.set("base", entry.base);
-    return "detail.html?" + params.toString();
 }
 
 function clone(value) {
@@ -495,7 +483,7 @@ function offerList(field, label, linked) {
         row.appendChild(el("span", "company-offer-location", entry.location || ""));
         if (linked && entry.number) {
             const link = el("a", "company-offer-button", "Détails");
-            link.href = detailHref(entry);
+            link.href = offerDetailHref(entry.number, entry.base);
             link.target = "_blank";
             link.rel = "noopener noreferrer";
             row.appendChild(link);
@@ -637,16 +625,10 @@ async function saveModal() {
     }
     status.textContent = "Enregistrement…";
     try {
-        const response = await fetch(COMPANY_SAVE_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(built.index),
-        });
-        if (!response.ok) {
-            const detail = await response.json().catch(function () {
-                return {};
-            });
-            throw new Error(detail.error || ("HTTP " + response.status));
+        const answer = await postJson(COMPANY_SAVE_URL, built.index);
+        if (!answer.ok) {
+            const detail = answer.data || {};
+            throw new Error(detail.error || ("HTTP " + answer.status));
         }
         const savedName = built.name;
         closeModal();
@@ -688,9 +670,7 @@ function applyData(payload) {
 
 async function load() {
     try {
-        const response = await fetch(COMPANY_DATA_URL, { cache: "no-store" });
-        if (!response.ok) throw new Error("HTTP " + response.status);
-        applyData(await response.json());
+        applyData(await fetchJson(COMPANY_DATA_URL));
     } catch (error) {
         console.error("Unable to load companies.json", error);
         applyData(null);
@@ -721,10 +701,9 @@ function setupControls() {
     }
 }
 
-document.addEventListener("foremsuiviimported", function () {
-    load();
-});
+document.addEventListener(SUIVI_EVENT, load);
 
+initTheme(TRACKING_GEAR_ACTIONS);
 buildModal();
 setupControls();
 load();

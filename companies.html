@@ -8,35 +8,12 @@
 
 <link rel="stylesheet" href="style.css?v=40">
 
-<script>
-    (function () {
-        var saved;
-        try {
-            saved = localStorage.getItem("forem_theme");
-        } catch (e) {
-            saved = null;
-        }
-        if (saved !== "light" && saved !== "dark") {
-            saved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-        }
-        document.documentElement.setAttribute("data-theme", saved);
-    })();
-</script>
-
-<script>
-    window.FOREM_GEAR_ACTIONS = [
-        { id: "exportTrackingBtn", label: "Exporter le suivi", title: "Sauvegarder statuts, remarques, favoris et relances en fichier JSON" },
-        { id: "importTrackingInput", label: "Importer le suivi", title: "Restaurer un fichier de suivi exporté depuis un autre PC", type: "file", accept: ".json,application/json" }
-    ];
-</script>
-
-<script src="theme.js?v=4" defer></script>
+<script src="js/boot/theme-boot.js"></script>
 
 </head>
 <body>
 
 <div id="navbar-placeholder"></div>
-<script src="navbar-loader.js"></script>
 
 <main class="dashboard">
 
@@ -100,8 +77,7 @@
 
 </main>
 
-<script src="suivi-io.js?v=1"></script>
-<script src="companies.js?v=5"></script>
+<script type="module" src="js/pages/companies.js"></script>
 
 </body>
 </html>

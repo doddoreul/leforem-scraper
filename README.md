@@ -110,17 +110,17 @@ en haut de la page, ou sur la date de dernier scraping.
 ## Les trois morceaux
 
 ```
-   terminal                     navigateur
-┌──────────────┐            ┌────────────────────────┐
-│ scraper.py   │  écrit     │ index.html + script.js  │
-│ (télécharge) ├───────────►│ (tableau, filtres)      │
-└──────┬───────┘  data/     │ detail.html (fiche)     │
-       │ import             └───────────┬─────────────┘
-       │                               │ lit /api/…
-┌──────▼───────┐  lit  data/           │
-│ serveur.py   │◄─────────────────────┤
-│ (serveur web)│  POST /api/scraper/run
-└──────────────┘       (actualiser)
+terminal                     navigateur
+ ┌──────────────┐            ┌────────────────────────┐
+ │ scraper.py   │  écrit     │ index.html + js/pages/  │
+ │ (télécharge) ├───────────►│ (tableau, filtres)      │
+ └──────┬───────┘  data/     │ detail.html (fiche)     │
+        │ import             └───────────┬─────────────┘
+        │                               │ lit /api/…
+ ┌──────▼───────┐  lit  data/           │
+ │ serveur.py   │◄─────────────────────┤
+ │ (serveur web)│  POST /api/scraper/run
+ └──────────────┘       (actualiser)
 ```
 
 1. **`leforem_scraper/scraper.py`** — le programme qui parle au site du Forem et
@@ -132,8 +132,8 @@ en haut de la page, ou sur la date de dernier scraping.
    depuis la page (`python serveur.py`).
 3. **`leforem_scraper/employers.py`** — construit `data/companies.json` à partir
    des offres déjà téléchargées (`python companies.py`).
-4. **L'interface** (`index.html`, `style.css`, `script.js`, `scraper-ui.js`,
-   `scraping-selector.js`, `detail.html`, `detail.js`) — le tableau des offres,
+4. **L'interface** (`index.html`, `detail.html`, `insights.html`,
+   `companies.html`, `style.css` et les modules `js/`) — le tableau des offres,
    les filtres, la fiche d'une offre. Elle ne scrape jamais elle-même : elle
    demande au serveur ou lit les fichiers.
 
@@ -248,20 +248,20 @@ La barre de navigation en haut de page relie trois écrans :
 |---|---|
 | `scraper.py`, `serveur.py`, `companies.py`, `core.py` | points d'entrée : `python scraper.py …`, `python serveur.py`, `python companies.py` |
 | `leforem_scraper/` | le code : `config.py` (chemins), `jsonio.py` (lecture/écriture JSON), `core.py` (logique pure), `scraper.py`, `employers.py`, `server.py` |
-| `script.js`, `style.css`, `index.html` | le tableau des offres et son style |
-| `detail.html`, `detail.js` | la fiche d'une offre (statut, remarque, priorité) |
-| `scraper-ui.js` | fenêtre d'actualisation : confirmation, flux en direct, résumé |
-| `scraping-selector.js` | menu « Scraping » partagé entre les pages |
-| `insights.html`, `insights.js` | le dashboard |
-| `companies.html`, `companies.js` | la page Employeurs |
-| `suivi-io.js` | export / import de tes suivis (JSON) pour changer de PC |
-| `navbar_include.html`, `navbar-loader.js` | la barre de navigation commune |
-| `theme.js` | thème clair / sombre |
+| `index.html`, `style.css`, `js/pages/index.js` | le tableau des offres, ses filtres et son style |
+| `detail.html`, `js/pages/detail.js` | la fiche d'une offre (statut, remarque, priorité) |
+| `insights.html`, `js/pages/insights.js` | le dashboard |
+| `companies.html`, `js/pages/companies.js` | la page Employeurs |
+| `js/shared/` | les modules communs : `api.js`, `dates.js`, `dom.js`, `links.js`, `navbar.js`, `scraper-ui.js`, `scraping-selector.js`, `statuses.js`, `storage.js`, `suivi.js`, `text.js`, `theme.js` |
+| `js/boot/theme-boot.js` | le thème appliqué avant le premier affichage (script classique) |
+| `navbar_include.html` | la barre de navigation commune, injectée par `js/shared/navbar.js` |
 | `tests/` | la suite de tests |
 
 Les quatre fichiers de la racine ne font que réimporter le paquet : tout le code
-vit dans `leforem_scraper/`. Le dossier des données n'a qu'une seule source de
-vérité, `leforem_scraper/config.py`.
+vit dans `leforem_scraper/`. L'interface est de même faite de modules ES natifs,
+sans build : chaque page charge son fichier dans `js/pages/` et ce qu'elle partage
+avec les autres dans `js/shared/`. Le dossier des données n'a qu'une seule source
+de vérité, `leforem_scraper/config.py`.
 
 ## Options du scraper
 
@@ -283,5 +283,6 @@ python -m unittest discover -s tests
 ```
 
 Elle couvre l'incrémental, les empreintes, le nettoyage des données, l'export
-CSV et le contrat HTTP du scraping. Ni le réseau ni le site du Forem ne sont
-utilisés.
+CSV, le contrat HTTP du scraping et les fichiers servis par le serveur (pages,
+modules ES, fichiers JSON, refus de sortir de `data/` ou de `js/`). Ni le réseau
+ni le site du Forem ne sont utilisés.

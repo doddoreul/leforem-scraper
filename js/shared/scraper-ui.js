@@ -1,17 +1,19 @@
 /* ============================================================
-   SCRAPING MANUEL — bouton « Actualiser », confirmation, faux terminal
+   SCRAPING MANUEL - bouton « Actualiser », confirmation, faux terminal
    ============================================================
    Le POST /api/scraper/run est bloquant : le serveur termine le scraping
-   avant de répondre. La réponse est néanmoins streamée ligne par ligne
-   (NDJSON) pour que le terminal affiche les vrais événements du scraper
-   au fur et à mesure. Aucune tâche de fond n'est créée. */
+   avant de repondre. La reponse est neanmoins streamee ligne par ligne
+   (NDJSON) pour que le terminal affiche les vrais evenements du scraper
+   au fur et a mesure. Aucune tache de fond n'est creee. */
 
-const API_SCRAPE_RUN = "/api/scraper/run";
+import { API_SCRAPE_RUN } from "./api.js";
+import { byId } from "./dom.js";
+import { showSuiviToast } from "./suivi.js";
 
-// Garde-fou d'affichage : le terminal ne garde que les N dernières lignes.
+// Garde-fou d'affichage : le terminal ne garde que les N dernieres lignes.
 const TERMINAL_MAX_LINES = 400;
 
-const ScraperUi = (function () {
+export const ScraperUi = (function () {
     let elements = null;
     let running = false;
     let target = null;
@@ -19,30 +21,26 @@ const ScraperUi = (function () {
     let onScraped = null;
     let pendingDone = null;
 
-    function el(id) {
-        return document.getElementById(id);
-    }
-
     function cacheElements() {
         elements = {
-            button: el("refreshScrapeBtn"),
-            confirmModal: el("refreshConfirmModal"),
-            confirmTarget: el("refreshConfirmTarget"),
-            confirmBtn: el("confirmRefreshBtn"),
-            cancelConfirmBtn: el("cancelRefreshBtn"),
-            closeConfirmBtn: el("closeRefreshConfirmBtn"),
-            runModal: el("refreshRunModal"),
-            runHint: el("refreshRunHint"),
-            terminal: el("scrapeTerminal"),
-            result: el("scrapeResult"),
-            resultTitle: el("scrapeResultTitle"),
-            resultInfo: el("scrapeResultInfo"),
-            resultDetails: el("scrapeResultDetails"),
-            resultPre: el("scrapeResultPre"),
-            runStatus: el("scrapeRunStatus"),
-            cancelRunBtn: el("cancelRefreshRunBtn"),
-            closeRunBtn: el("closeRefreshRunBtn"),
-            closeRunFooterBtn: el("closeRefreshRunFooterBtn")
+            button: byId("refreshScrapeBtn"),
+            confirmModal: byId("refreshConfirmModal"),
+            confirmTarget: byId("refreshConfirmTarget"),
+            confirmBtn: byId("confirmRefreshBtn"),
+            cancelConfirmBtn: byId("cancelRefreshBtn"),
+            closeConfirmBtn: byId("closeRefreshConfirmBtn"),
+            runModal: byId("refreshRunModal"),
+            runHint: byId("refreshRunHint"),
+            terminal: byId("scrapeTerminal"),
+            result: byId("scrapeResult"),
+            resultTitle: byId("scrapeResultTitle"),
+            resultInfo: byId("scrapeResultInfo"),
+            resultDetails: byId("scrapeResultDetails"),
+            resultPre: byId("scrapeResultPre"),
+            runStatus: byId("scrapeRunStatus"),
+            cancelRunBtn: byId("cancelRefreshRunBtn"),
+            closeRunBtn: byId("closeRefreshRunBtn"),
+            closeRunFooterBtn: byId("closeRefreshRunFooterBtn")
         };
     }
 
@@ -57,9 +55,7 @@ const ScraperUi = (function () {
     }
 
     function notify(text) {
-        if (typeof showSuiviToast === "function") {
-            showSuiviToast(text);
-        }
+        showSuiviToast(text);
     }
 
     // ------------------------------------------------------------
@@ -491,5 +487,3 @@ const ScraperUi = (function () {
         }
     };
 })();
-
-window.ForemScraperUi = ScraperUi;

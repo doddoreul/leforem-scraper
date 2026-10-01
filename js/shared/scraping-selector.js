@@ -1,24 +1,24 @@
 /* ============================================================
-   SCRAPING SELECTOR — shared component for index.html & insights.html
+   SCRAPING SELECTOR — shared component for the offers table and
+   the dashboard
    ============================================================ */
 
-const API_SCRAPINGS = "/api/scrapings";
-const STORAGE_KEY = "forem_scraping_select";
+import { fetchScrapings } from "./api.js";
+
+export const STORAGE_KEY = "forem_scraping_select";
+
+const CREATE_OPTION_VALUE = "__create_new__";
 
 // Un contexte par <select> : il permet de reconstruire la liste après la
 // création d'une recherche sans réattacher un second écouteur.
 const contexts = {};
 
-async function fetchScrapings() {
-    try {
-        const response = await fetch(API_SCRAPINGS, { cache: "no-store" });
-        if (response.ok) return await response.json();
-    } catch (e) {
-        console.error("Unable to list scrapings", e);
-    }
-    return [];
-}
-
+/**
+ * @param {HTMLElement} select
+ * @param {Array} scrapings
+ * @param {boolean} allowAll
+ * @param {boolean} allowCreate
+ */
 function buildOptions(select, scrapings, allowAll, allowCreate) {
     select.innerHTML = "";
 
@@ -43,7 +43,7 @@ function buildOptions(select, scrapings, allowAll, allowCreate) {
 
     if (allowCreate) {
         const createOpt = document.createElement("option");
-        createOpt.value = "__create_new__";
+        createOpt.value = CREATE_OPTION_VALUE;
         createOpt.textContent = "Creer un nouveau scrap";
         select.appendChild(createOpt);
     }
@@ -58,7 +58,7 @@ function buildOptions(select, scrapings, allowAll, allowCreate) {
  *   - onChange: callback(selectedScrape, allScrapes)
  * @returns {Promise<Object>} { select, scrapings, current }
  */
-async function createScrapingSelector(options) {
+export async function createScrapingSelector(options) {
     const {
         selectId,
         allowAll = true,
@@ -91,8 +91,8 @@ async function createScrapingSelector(options) {
         const option = select.selectedOptions[0];
         if (!option || !option.value) return;
 
-        if (option.value === "__create_new__") {
-            // Trigger create modal via custom event
+        if (option.value === CREATE_OPTION_VALUE) {
+            // The page opens its "new search" window.
             document.dispatchEvent(new CustomEvent("foremCreateScrape"));
             // Reset to previous
             select.value = context.current;
@@ -110,10 +110,10 @@ async function createScrapingSelector(options) {
 /**
  * Re-read the scraping list (after a scraping was created) and apply the
  * stored selection. onChange is called so the page can reload its data.
- * @param {String} selectId
+ * @param {string} selectId
  * @returns {Promise<Object|null>} { select, scrapings, current }
  */
-async function refreshScrapingSelector(selectId) {
+export async function refreshScrapingSelector(selectId) {
     const context = contexts[selectId];
     if (!context) return null;
 
@@ -144,8 +144,8 @@ async function refreshScrapingSelector(selectId) {
  * @param {string} key -- "all", "__create_new__", or a file name
  * @returns {Object|null}
  */
-function getScrapingByKey(scrapings, key) {
-    if (key === "all" || key === "__create_new__") return null;
+export function getScrapingByKey(scrapings, key) {
+    if (key === "all" || key === CREATE_OPTION_VALUE) return null;
     return scrapings.find(function (s) { return s.file === key; }) || null;
 }
 
@@ -155,16 +155,7 @@ function getScrapingByKey(scrapings, key) {
  * @param {string} scope -- "all" or a file name
  * @returns {Array}
  */
-function filterScrapings(scrapings, scope) {
+export function filterScrapings(scrapings, scope) {
     if (scope === "all") return scrapings;
     return scrapings.filter(function (s) { return s.file === scope; });
 }
-
-// Expose globally for non-module scripts
-window.ScrapingSelector = {
-    createScrapingSelector: createScrapingSelector,
-    refreshScrapingSelector: refreshScrapingSelector,
-    getScrapingByKey: getScrapingByKey,
-    filterScrapings: filterScrapings,
-    STORAGE_KEY: STORAGE_KEY
-};

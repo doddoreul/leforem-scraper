@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Quick static sanity check for the web files (no browser, no network).
 
-Verifies that the ids used by companies.js exist in companies.html and
-that the braces/parentheses of the script are balanced.
+Verifies that the ids used by js/pages/companies.js exist in companies.html
+and that the braces/parentheses of the script are balanced.
 """
 
 import io
@@ -21,7 +21,7 @@ def read(name):
 
 class TestCompaniesJs(unittest.TestCase):
     def setUp(self):
-        self.js = read("companies.js")
+        self.js = read(os.path.join("js", "pages", "companies.js"))
         self.html = read("companies.html")
 
     def test_balanced_delimiters(self):
@@ -41,8 +41,9 @@ class TestCompaniesJs(unittest.TestCase):
             self.assertIn('id="{}"'.format(name), self.html)
 
     def test_script_and_stylesheet_are_linked(self):
-        self.assertIn("companies.js", self.html)
-        self.assertIn("suivi-io.js", self.html)
+        self.assertIn('type="module"', self.html)
+        self.assertIn("js/pages/companies.js", self.html)
+        self.assertIn("js/boot/theme-boot.js", self.html)
         self.assertIn("style.css", self.html)
 
     def test_no_inner_html_with_data(self):

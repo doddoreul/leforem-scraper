@@ -8,37 +8,12 @@
 
 <link rel="stylesheet" href="style.css?v=40">
 
-<script>
-    (function () {
-        var saved;
-        try {
-            saved = localStorage.getItem("forem_theme");
-        } catch (e) {
-            saved = null;
-        }
-        if (saved !== "light" && saved !== "dark") {
-            saved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-        }
-        document.documentElement.setAttribute("data-theme", saved);
-    })();
-</script>
-
-<script>
-    window.FOREM_GEAR_ACTIONS = [
-        { id: "exportCsvBtn", label: "Exporter CSV", title: "Exporter les annonces visibles en CSV" },
-        { id: "exportTrackingBtn", label: "Exporter le suivi", title: "Sauvegarder statuts, remarques, favoris et relances en fichier JSON" },
-        { id: "importTrackingInput", label: "Importer le suivi", title: "Restaurer un fichier de suivi exporté depuis un autre PC", type: "file", accept: ".json,application/json" },
-        { id: "deleteScrapingGearBtn", label: "Supprimer ce scraping", title: "Supprimer le scraping actuellement sélectionné (déplace les fichiers vers data/trash/)" }
-    ];
-</script>
-
-<script src="theme.js?v=4" defer></script>
+<script src="js/boot/theme-boot.js"></script>
 
 </head>
 <body>
 
 <div id="navbar-placeholder"></div>
-<script src="navbar-loader.js"></script>
 
 <header class="page-head">
 
@@ -316,10 +291,7 @@
 
 </section>
 
-<script src="suivi-io.js?v=1"></script>
-<script src="scraping-selector.js?v=3"></script>
-<script src="scraper-ui.js?v=3"></script>
-<script src="script.js?v=35"></script>
+<script type="module" src="js/pages/index.js"></script>
 
 <div class="modal" id="searchModal" role="dialog" aria-modal="true" aria-labelledby="searchModalTitle">
 
