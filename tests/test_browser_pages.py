@@ -341,6 +341,25 @@ class TestPagesInBrowser(BrowserPagesTestCase):
             "Fonderie du Nord",
         ])
 
+    def test_the_offers_page_keeps_its_controls(self):
+        # Everything the offers page owns, moved or not: a split must not
+        # lose a control.
+        self.assertDrawn("", [
+            "Exporter CSV",
+            "Supprimer ce scraping",
+            "Nouvelle recherche",
+            "Intéressé",
+            "Postulé",
+            "RDV prévu",
+            "Postulé ou contacté depuis plus de 7 jours.",
+            'id="stateFilter"',
+            'id="contractFilter"',
+            'id="salaryFilter"',
+            'id="currentSearch"',
+            'id="exportCsvBtn"',
+            'id="deleteScrapingGearBtn"',
+        ])
+
     def test_the_dashboard_draws_its_kpis(self):
         self.assertDrawn("/insights.html", [
             "Electromecanicien industriel",

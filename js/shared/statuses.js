@@ -41,3 +41,12 @@ export function statusRank(value) {
     const index = STATUS_OPTIONS.findIndex(option => option.value === value);
     return index === -1 ? STATUS_OPTIONS.length : index;
 }
+
+/**
+ * @param {string} value
+ * @returns {string} the label, or "" when unknown
+ */
+export function priorityLabel(value) {
+    const option = PRIORITY_OPTIONS.find(item => item.value === value);
+    return option ? option.label : "";
+}

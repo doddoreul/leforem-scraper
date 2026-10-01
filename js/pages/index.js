@@ -18,12 +18,15 @@ import {
 } from "../shared/scraping-selector.js";
 import {
     STATUS_OPTIONS as CANONICAL_STATUS_OPTIONS,
+    priorityLabel,
     statusRank,
 } from "../shared/statuses.js";
 import {
     TRACKED_SUFFIXES,
     migrateLegacyStorage,
+    readTrackedMap,
     storagePrefixFor,
+    writeTrackedMap,
 } from "../shared/storage.js";
 import {
     SUIVI_EVENT,
@@ -50,10 +53,6 @@ let storagePrefix = storagePrefixFor("");
 let activeBaseName = "";
 let activeScrapings = [];
 
-function getStorageKey(suffix) {
-    return storagePrefix + suffix;
-}
-
 function setActiveScraping(baseName) {
     storagePrefix = storagePrefixFor(baseName);
     activeBaseName = baseName || "";
@@ -73,26 +72,34 @@ initTheme(GEAR_ACTIONS);
 
 
 // ============================================================
-// LOCAL STORAGE (statuses)
+// LOCAL STORAGE — the follow-up of the selected search: statuses,
+// status dates, remarks, favourites and personal priorities. The
+// keys are read and written by js/shared/storage.js.
 // ============================================================
 
-function loadStatuses() {
-    try {
-        const value = localStorage.getItem(getStorageKey("statuts"));
-        if (!value) return {};
-        const parsed = JSON.parse(value);
-        return parsed && typeof parsed === "object" ? parsed : {};
-    } catch (e) {
-        console.error("Unable to load statuses", e);
-        return {};
-    }
-}
+let statuses = readTrackedMap(storagePrefix, "statuts");
+let statutDates = readTrackedMap(storagePrefix, "statut_dates");
+let remarks = readTrackedMap(storagePrefix, "remarques");
+let favorites = readTrackedMap(storagePrefix, "favoris");
+let priorities = readTrackedMap(storagePrefix, "priorites");
 
-function saveStatuses() {
-    try {
-        localStorage.setItem(getStorageKey("statuts"), JSON.stringify(statuses));
-    } catch (e) {
-        console.error("Unable to save statuses", e);
+/**
+ * Drop the offers that are gone from the table, so the storage does not
+ * grow forever.
+ * @param {Object} map the in-memory map
+ * @param {string} suffix its storage key
+ * @param {Set<string>} keepNumbers the numbers still on offer
+ */
+function cleanTrackedMap(map, suffix, keepNumbers) {
+    let changed = false;
+    Object.keys(map).forEach(number => {
+        if (!keepNumbers.has(number)) {
+            delete map[number];
+            changed = true;
+        }
+    });
+    if (changed) {
+        writeTrackedMap(storagePrefix, suffix, map);
     }
 }
 
@@ -108,51 +115,10 @@ function setStatus(number, value) {
         delete statuses[number];
         delete statutDates[number];
     }
-    saveStatuses();
-    saveStatutDates();
+    writeTrackedMap(storagePrefix, "statuts", statuses);
+    writeTrackedMap(storagePrefix, "statut_dates", statutDates);
     refreshFollowUps();
     renderTrackedAlerts();
-}
-
-function cleanStatuses(currentNumbers) {
-    let changed = false;
-    Object.keys(statuses).forEach(number => {
-        if (!currentNumbers.has(number)) {
-            delete statuses[number];
-            changed = true;
-        }
-    });
-    if (changed) {
-        saveStatuses();
-    }
-}
-
-let statuses = loadStatuses();
-
-
-// ============================================================
-// LOCAL STORAGE (status dates)
-// The last date a status changed drives the "relance" reminders.
-// ============================================================
-
-function loadStatutDates() {
-    try {
-        const value = localStorage.getItem(getStorageKey("statut_dates"));
-        if (!value) return {};
-        const parsed = JSON.parse(value);
-        return parsed && typeof parsed === "object" ? parsed : {};
-    } catch (e) {
-        console.error("Unable to load status dates", e);
-        return {};
-    }
-}
-
-function saveStatutDates() {
-    try {
-        localStorage.setItem(getStorageKey("statut_dates"), JSON.stringify(statutDates));
-    } catch (e) {
-        console.error("Unable to save status dates", e);
-    }
 }
 
 function getStatutDate(number) {
@@ -165,20 +131,7 @@ function setStatutDate(number, value) {
     } else {
         delete statutDates[number];
     }
-    saveStatutDates();
-}
-
-function cleanStatutDates(currentNumbers) {
-    let changed = false;
-    Object.keys(statutDates).forEach(number => {
-        if (!currentNumbers.has(number)) {
-            delete statutDates[number];
-            changed = true;
-        }
-    });
-    if (changed) {
-        saveStatutDates();
-    }
+    writeTrackedMap(storagePrefix, "statut_dates", statutDates);
 }
 
 // First visit after this feature: treat existing statuses as fresh
@@ -193,34 +146,7 @@ function backfillStatutDates() {
         }
     });
     if (changed) {
-        saveStatutDates();
-    }
-}
-
-let statutDates = loadStatutDates();
-
-
-// ============================================================
-// LOCAL STORAGE (remarks)
-// ============================================================
-
-function loadRemarks() {
-    try {
-        const value = localStorage.getItem(getStorageKey("remarques"));
-        if (!value) return {};
-        const parsed = JSON.parse(value);
-        return parsed && typeof parsed === "object" ? parsed : {};
-    } catch (e) {
-        console.error("Unable to load remarks", e);
-        return {};
-    }
-}
-
-function saveRemarks() {
-    try {
-        localStorage.setItem(getStorageKey("remarques"), JSON.stringify(remarks));
-    } catch (e) {
-        console.error("Unable to save remarks", e);
+        writeTrackedMap(storagePrefix, "statut_dates", statutDates);
     }
 }
 
@@ -234,47 +160,7 @@ function setRemark(number, value) {
     } else {
         delete remarks[number];
     }
-    saveRemarks();
-}
-
-function cleanRemarks(currentNumbers) {
-    let changed = false;
-    Object.keys(remarks).forEach(number => {
-        if (!currentNumbers.has(number)) {
-            delete remarks[number];
-            changed = true;
-        }
-    });
-    if (changed) {
-        saveRemarks();
-    }
-}
-
-let remarks = loadRemarks();
-
-
-// ============================================================
-// LOCAL STORAGE (favorites)
-// ============================================================
-
-function loadFavorites() {
-    try {
-        const value = localStorage.getItem(getStorageKey("favoris"));
-        if (!value) return {};
-        const parsed = JSON.parse(value);
-        return parsed && typeof parsed === "object" ? parsed : {};
-    } catch (e) {
-        console.error("Unable to load favorites", e);
-        return {};
-    }
-}
-
-function saveFavorites() {
-    try {
-        localStorage.setItem(getStorageKey("favoris"), JSON.stringify(favorites));
-    } catch (e) {
-        console.error("Unable to save favorites", e);
-    }
+    writeTrackedMap(storagePrefix, "remarques", remarks);
 }
 
 function isFavorite(number) {
@@ -287,54 +173,7 @@ function setFavorite(number, active) {
     } else {
         delete favorites[number];
     }
-    saveFavorites();
-}
-
-function cleanFavorites(currentNumbers) {
-    let changed = false;
-    Object.keys(favorites).forEach(number => {
-        if (!currentNumbers.has(number)) {
-            delete favorites[number];
-            changed = true;
-        }
-    });
-    if (changed) {
-        saveFavorites();
-    }
-}
-
-let favorites = loadFavorites();
-
-
-// ============================================================
-// LOCAL STORAGE (personal priority)
-// ============================================================
-
-const PRIORITY_OPTIONS = [
-    { value: "", label: "Aucune" },
-    { value: "haute", label: "Haute" },
-    { value: "moyenne", label: "Moyenne" },
-    { value: "faible", label: "Faible" },
-];
-
-function loadPriorities() {
-    try {
-        const value = localStorage.getItem(getStorageKey("priorites"));
-        if (!value) return {};
-        const parsed = JSON.parse(value);
-        return parsed && typeof parsed === "object" ? parsed : {};
-    } catch (e) {
-        console.error("Unable to load priorities", e);
-        return {};
-    }
-}
-
-function savePriorities() {
-    try {
-        localStorage.setItem(getStorageKey("priorites"), JSON.stringify(priorities));
-    } catch (e) {
-        console.error("Unable to save priorities", e);
-    }
+    writeTrackedMap(storagePrefix, "favoris", favorites);
 }
 
 function getPriority(number) {
@@ -347,44 +186,21 @@ function setPriority(number, value) {
     } else {
         delete priorities[String(number)];
     }
-    savePriorities();
+    writeTrackedMap(storagePrefix, "priorites", priorities);
 }
-
-function priorityLabel(value) {
-    const option = PRIORITY_OPTIONS.find(o => o.value === value);
-    return option ? option.label : "";
-}
-
-function cleanPriorities(currentNumbers) {
-    let changed = false;
-    Object.keys(priorities).forEach(number => {
-        if (!currentNumbers.has(number)) {
-            delete priorities[number];
-            changed = true;
-        }
-    });
-    if (changed) {
-        savePriorities();
-    }
-}
-
-let priorities = loadPriorities();
-
 
 // Re-reads the in-memory maps from localStorage. Needed when the
 // active scraping changes, after an import, or when another tab
 // (detail.html) wrote one of the shared keys.
 function reloadStorageMaps() {
-    statuses = loadStatuses();
-    remarks = loadRemarks();
-    favorites = loadFavorites();
-    statutDates = loadStatutDates();
-    priorities = loadPriorities();
+    statuses = readTrackedMap(storagePrefix, "statuts");
+    remarks = readTrackedMap(storagePrefix, "remarques");
+    favorites = readTrackedMap(storagePrefix, "favoris");
+    statutDates = readTrackedMap(storagePrefix, "statut_dates");
+    priorities = readTrackedMap(storagePrefix, "priorites");
 }
 
 
-// ============================================================
-// CROSS-TAB SYNC
 // detail.html writes the same keys from its own tab. The `storage`
 // event only reaches the other tabs, so it is the only way to see
 // those changes without reloading the page.
@@ -2177,11 +1993,11 @@ async function reloadTables() {
     currentByNumber = new Map();
     offers.forEach(o => currentByNumber.set(String(o.number), o));
 
-    cleanStatuses(keepNumbers);
-    cleanRemarks(keepNumbers);
-    cleanFavorites(keepNumbers);
-    cleanStatutDates(keepNumbers);
-    cleanPriorities(keepNumbers);
+    cleanTrackedMap(statuses, "statuts", keepNumbers);
+    cleanTrackedMap(remarks, "remarques", keepNumbers);
+    cleanTrackedMap(favorites, "favoris", keepNumbers);
+    cleanTrackedMap(statutDates, "statut_dates", keepNumbers);
+    cleanTrackedMap(priorities, "priorites", keepNumbers);
     backfillStatutDates();
 
     try {
