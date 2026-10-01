@@ -88,6 +88,7 @@ en haut de la page, ou sur la date de dernier scraping.
 | Mettre à jour les offres | bouton **Actualiser** sur la page |
 | Tout re-télécharger | `python scraper.py --refresh …` dans le terminal |
 | Nouvelle recherche | **Nouvelle recherche**, puis **Lancer le scraping** |
+| Mettre à jour la page Employeurs | rien à faire, c'est fait à la fin de chaque scraping |
 | Transporter mes suivis sur un autre PC | export puis import du fichier JSON (page Offres) |
 | Arrêter le programme | `Ctrl + C` dans le terminal du serveur |
 
@@ -187,6 +188,21 @@ Points communs aux deux :
 - si une fenêtre « données obsolètes » s'affiche (les offres ont beaucoup
   vieilli), le bouton **Actualiser** qu'elle propose lance le même flux.
 
+À la fin d'un scraping réussi, le serveur reconstruit aussi
+`data/companies.json` : la page **Employeurs** est donc à jour sans rien lancer
+dans un terminal. L'index est fusionné avec le précédent, si bien qu'un e-mail ou
+un téléphone trouvé puis disparu de l'affichage est conservé. Si cette
+reconstruction échoue, le scraping reste considéré comme réussi (les offres sont
+bien enregistrées) ; relance `python companies.py` dans ce cas.
+
+Tu peux aussi reconstruire l'index à la main :
+
+| Je veux… | Ce que je fais |
+|---|---|
+| Reconstruire l'index des employeurs | `python companies.py` (après un scraping manuel) |
+| Repartir de zéro, sans les contacts accumulés | `python companies.py --rebuild` |
+| Voir le résumé dans le terminal | `python companies.py --stats` |
+
 ## Où sont mes données
 
 **Les offres** dans `data/`, un ensemble de fichiers par recherche
@@ -200,7 +216,7 @@ Points communs aux deux :
 | `historique_modifications.json` | la liste des offres modifiées dans le temps |
 | `historique_scrapes.json` | l'historique des scrapings et leurs statistiques |
 | `blacklist.json` | les numéros d'annonces en 404, ignorés automatiquement |
-| `companies.json` | les logos d'entreprises, mis en cache |
+| `companies.json` | l'index des employeurs (coordonnées, contacts, offres), reconstruit après chaque scraping |
 | `trash/` | les recherches supprimées depuis la page (corbeille) |
 
 **Tes suivis** (statut, favori, remarque, priorité, dates de relance) ne sont
@@ -229,7 +245,7 @@ La barre de navigation en haut de page relie trois écrans :
 | `scraper.py` | télécharge les offres, compare les empreintes, écrit `data/` |
 | `serveur.py` | serveur local (page + API + lancement d'un scraping) |
 | `core.py` | outils partagés : empreintes, lecture/écriture des historiques |
-| `companies.py` | récupère et met en cache les logos des entreprises |
+| `companies.py` | construit `data/companies.json` : l'index des employeurs et leurs coordonnées |
 | `script.js`, `style.css`, `index.html` | le tableau des offres et son style |
 | `detail.html`, `detail.js` | la fiche d'une offre (statut, remarque, priorité) |
 | `scraper-ui.js` | fenêtre d'actualisation : confirmation, flux en direct, résumé |

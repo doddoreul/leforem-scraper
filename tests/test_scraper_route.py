@@ -26,6 +26,7 @@ sys.path.insert(
     0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
+import companies
 import scraper
 import serveur
 
@@ -62,8 +63,18 @@ class ScraperRouteTestCase(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self._saved = (serveur.DATA_DIR, scraper.run_scrape)
+        # companies.DATA_DIR is bound at import time to scraper's, so it has
+        # to be pointed at the temporary directory as well: the employer
+        # index is rebuilt from the data/ files after each run.
+        self._saved = (
+            serveur.DATA_DIR,
+            scraper.run_scrape,
+            companies.DATA_DIR,
+            companies.refresh_index,
+        )
         serveur.DATA_DIR = self.tmp.name
+        scraper.DATA_DIR = self.tmp.name
+        companies.DATA_DIR = self.tmp.name
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), serveur.Handler)
         self.port = self.server.server_address[1]
@@ -76,6 +87,8 @@ class ScraperRouteTestCase(unittest.TestCase):
     def tearDown(self):
         scraper.run_scrape = self._saved[1]
         serveur.DATA_DIR = self._saved[0]
+        companies.DATA_DIR = self._saved[2]
+        companies.refresh_index = self._saved[3]
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(timeout=5)
@@ -260,6 +273,70 @@ class TestBlockingScrape(ScraperRouteTestCase):
 
         self.assertEqual(response.status_code, 404)
         self.assertEqual(self.fake.calls, [])
+
+    def seed_offers(self, offers, base="test", occupation="occ-guid",
+                    location="loc-guid", label="Metier / Ville"):
+        with open(
+            os.path.join(self.tmp.name, f"data_{base}.json"),
+            "w", encoding="utf-8",
+        ) as handle:
+            json.dump({
+                "name": base,
+                "label": label,
+                "occupation_guid": occupation,
+                "location_guid": location,
+                "offers": offers,
+            }, handle)
+
+    def read_companies(self):
+        with open(
+            os.path.join(self.tmp.name, "companies.json"), encoding="utf-8"
+        ) as handle:
+            return json.load(handle)
+
+    def test_the_employer_index_is_refreshed_after_a_scrape(self):
+        # Nobody runs companies.py by hand any more: the "Entreprises" page
+        # must already be in step when the scraping is done.
+        self.install(FakeRunScraper(summary={"status": "done"}))
+        self.seed_offers([{
+            "number": "1",
+            "company": "Acme",
+            "offer_title": "Electromecanicien",
+            "location": "Namur",
+            "date_publication": "16/09/2026",
+        }])
+
+        response = self.post({"name": "test"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.events(response)[-1]["type"], "done")
+        self.assertIn("Acme", self.read_companies()["employers"])
+
+    def test_the_employer_index_is_not_refreshed_after_a_failure(self):
+        self.seed_scraping()
+        self.install(FakeRunScraper(error=RuntimeError("Forem injoignable")))
+
+        self.post({"name": "test"})
+
+        self.assertFalse(
+            os.path.exists(os.path.join(self.tmp.name, "companies.json"))
+        )
+
+    def test_a_broken_employer_index_does_not_fail_the_scrape(self):
+        # The offers are already written at this point: an index that cannot
+        # be rebuilt is logged and the scrape still reports success.
+        self.seed_scraping()
+        self.install(FakeRunScraper(summary={"status": "done"}))
+
+        def broken(path=None):
+            raise OSError("disk full")
+
+        companies.refresh_index = broken
+
+        response = self.post({"name": "test"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.events(response)[-1]["type"], "done")
 
     def test_scrape_failure_is_reported_without_killing_the_server(self):
         self.seed_scraping()

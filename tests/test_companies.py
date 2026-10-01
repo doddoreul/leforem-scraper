@@ -596,6 +596,53 @@ class TestBuildIndex(TempDataDir):
         self.assertEqual(index["scrapes"], [])
 
 
+class TestRefreshIndex(TempDataDir):
+    """refresh_index(): what the server calls after each scraping."""
+
+    def index_path(self):
+        return os.path.join(self.data_dir, "companies.json")
+
+    def test_the_index_is_written_and_reported(self):
+        self.seed([make_offer("1", company="Acme")])
+
+        stats = companies.refresh_index(self.index_path())
+
+        self.assertEqual(stats["employeurs"], 1)
+        self.assertTrue(os.path.exists(self.index_path()))
+        with open(self.index_path(), encoding="utf-8") as handle:
+            data = json.load(handle)
+        self.assertIn("Acme", data["employers"])
+        self.assertEqual(data["scrapes"], ["test"])
+
+    def test_contacts_from_the_previous_index_are_kept(self):
+        self.seed(
+            [make_offer("1")],
+            details={"1": make_detail(email="jobs@acme.be")},
+        )
+        companies.refresh_index(self.index_path())
+
+        # The offer disappears, but the email collected earlier must remain.
+        self.seed([])
+        stats = companies.refresh_index(self.index_path())
+
+        with open(self.index_path(), encoding="utf-8") as handle:
+            data = json.load(handle)
+        record = data["employers"]["Start People"]
+        self.assertEqual(record["offerCount"], 0)
+        self.assertEqual(record["emails"], ["jobs@acme.be"])
+        self.assertEqual(stats["conserves"], 1)
+
+    def test_an_unreadable_previous_index_does_not_crash(self):
+        # A truncated file must not stop the refresh: it is simply ignored.
+        with open(self.index_path(), "w", encoding="utf-8") as handle:
+            handle.write("{ truncated")
+        self.seed([make_offer("1", company="Acme")])
+
+        stats = companies.refresh_index(self.index_path())
+
+        self.assertEqual(stats["employeurs"], 1)
+
+
 class TestGeneratedFile(unittest.TestCase):
     """Invariants on data/companies.json when it has already been built."""
 

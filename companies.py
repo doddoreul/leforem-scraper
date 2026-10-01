@@ -626,6 +626,22 @@ def count(record, field):
     return 0
 
 
+def refresh_index(path=COMPANIES_FILE):
+    """Rebuild the employer index and write it.
+
+    Called after each scraping so the "Entreprises" page stays in step with
+    the offers without anyone running the script by hand. The previous index
+    is merged in (the default behaviour of the command line), so contacts
+    gathered earlier survive.
+
+    Returns the new stats. Raises whatever the build raises: the caller
+    decides whether a failure matters.
+    """
+    index = build_index(previous=load_previous(path))
+    scraper.write_json_atomically(path, index)
+    return index["stats"]
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Indexe les employeurs des offres déjà scrapées"

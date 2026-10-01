@@ -477,6 +477,11 @@ class Handler(BaseHTTPRequestHandler):
             self._end_stream()
             return
 
+        # The employer index is rebuilt from the offers just written, so the
+        # "Entreprises" page never lags behind the scraping. A failure here
+        # must not turn a successful scrape into an error.
+        self._refresh_employer_index()
+
         self.log_message(
             "scraper run finished for %s: %s offer(s), %s new, %s modified, "
             "%s error(s) in %ss",
@@ -489,6 +494,32 @@ class Handler(BaseHTTPRequestHandler):
         )
         self._write_event({"type": "done", "result": summary})
         self._end_stream()
+
+    def _refresh_employer_index(self):
+        """Rebuild data/companies.json after a scrape.
+
+        Best effort: an unreadable or partial index is logged and the scrape
+        result is left untouched, because the offers themselves are fine and
+        the index can be rebuilt again later.
+        """
+        try:
+            stats = companies.refresh_index(
+                os.path.join(DATA_DIR, "companies.json")
+            )
+        except Exception as exc:
+            self.log_message(
+                "employer index not refreshed: %s: %s",
+                exc.__class__.__name__,
+                exc,
+            )
+            return None
+
+        self.log_message(
+            "employer index refreshed: %s employer(s), %s conserved",
+            stats.get("employeurs"),
+            stats.get("conserves"),
+        )
+        return stats
 
     def _handle_delete_scraping(self):
         """Move all files for a scraping to trash."""
