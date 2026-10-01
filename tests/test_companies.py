@@ -17,9 +17,9 @@ sys.path.insert(
     0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
-from leforem_scraper import config
-from leforem_scraper import scraper
-from leforem_scraper.employers import (
+from python import config
+from python import scraper
+from python.employers import (
     build_index,
     collapse_websites,
     company_key,

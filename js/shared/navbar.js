@@ -7,13 +7,15 @@ export async function loadNavbar() {
     if (!container) return;
 
     try {
-        const response = await fetch("navbar_include.html", { cache: "no-store" });
+        const response = await fetch("/navbar_include.html", { cache: "no-store" });
         if (!response.ok) throw new Error("HTTP " + response.status);
         container.innerHTML = await response.text();
 
-        const path = window.location.pathname.split("/").pop() || "index.html";
+        // Every page is served at the root of the server (/index.html,
+        // /insights.html…), so the file name alone identifies the current one.
+        const current = window.location.pathname.split("/").pop() || "index.html";
         container.querySelectorAll(".page-link").forEach(function (link) {
-            if (link.getAttribute("href") === path) {
+            if ((link.getAttribute("href") || "").split("/").pop() === current) {
                 link.classList.add("active");
                 link.setAttribute("aria-current", "page");
             }

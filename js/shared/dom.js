@@ -1,5 +1,5 @@
 // ============================================================
-// DOM — the three element helpers every page needs
+// DOM — the two element helpers every page needs
 // ============================================================
 
 /**
@@ -22,12 +22,4 @@ export function el(tag, className, text) {
  */
 export function byId(id) {
     return document.getElementById(id);
-}
-
-/**
- * Remove every child of a node.
- * @param {Element|null} node
- */
-export function clear(node) {
-    if (node) node.innerHTML = "";
 }

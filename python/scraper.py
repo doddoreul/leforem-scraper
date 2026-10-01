@@ -3,8 +3,8 @@
 Collects the offers of a search (occupation + location), enriches each one
 with its detail page, then keeps the offers that disappeared over time in a
 history file. Everything it needs on disk comes from
-:mod:`leforem_scraper.config`, and the pure parsing/merging logic lives in
-:mod:`leforem_scraper.core` so it can be tested without the network.
+:mod:`python.config`, and the pure parsing/merging logic lives in
+:mod:`python.core` so it can be tested without the network.
 
 Run it from the repository root::
 
@@ -23,9 +23,9 @@ from html.parser import HTMLParser
 
 import requests
 
-from leforem_scraper import config
-from leforem_scraper import core
-from leforem_scraper.jsonio import (
+from python import config
+from python import core
+from python.jsonio import (
     now_iso_timestamp,
     read_details,
     read_json,
@@ -68,7 +68,7 @@ HEADERS = {
 
 # Absolute so the scraper can also be started from the web server, whatever
 # the current working directory is. Every path is built from
-# leforem_scraper.config.DATA_DIR at call time, so pointing the tests or the
+# python.config.DATA_DIR at call time, so pointing the tests or the
 # command line at another folder is enough: there is a single source of truth.
 BASE_DIR = config.BASE_DIR
 VERSION = config.VERSION
@@ -1219,7 +1219,12 @@ def run_scrape(occupation_guid, location_guid, base="", label="", limit=None,
     core.record_scrape(scrapes, entry)
 
     # Métier index, written with the data file so the search stays able to
-    # filter offers by métier.
+    # filter offers by métier. Nothing reads it yet: the pages show the flat
+    # offer list, and the browser has no métier filter. It is kept because the
+    # index is built from the offers that were just fetched (no extra cost)
+    # and dropping it would throw away data the UI will need as soon as the
+    # filter appears. Remove it together with core.build_metier_index if the
+    # filter is never built.
     metier_index = core.build_metier_index(new_offers)
 
     data = {

@@ -2,9 +2,11 @@
 """Tests for the static files served by the local server.
 
 The pages are plain ES modules: one file per page in js/pages/ and the
-modules they share in js/shared/ and js/boot/. What is checked here is that
-the server hands them over as JavaScript, that nothing outside js/ escapes,
-and that the old root scripts are gone.
+modules they share in js/shared/ and js/boot/. The root folder holds only
+index.html and the entry points: the other pages live in html/ and the
+stylesheet in css/. What is checked here is that the server hands every file
+over with the right type, that nothing escapes those trees, and that the old
+root scripts are gone.
 
 Run from the repository root:
     python -m unittest discover -s tests -v
@@ -24,8 +26,8 @@ sys.path.insert(
     0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
-from leforem_scraper import config
-from leforem_scraper import server
+from python import config
+from python import server
 
 PAGES = ("index", "insights", "companies", "detail")
 
@@ -78,8 +80,42 @@ class TestPages(StaticFilesTestCase):
             with self.subTest(page=page):
                 body = self.get(f"/{page}.html").text
                 self.assertIn(
-                    '<script src="js/boot/theme-boot.js"></script>', body
+                    '<script src="/js/boot/theme-boot.js"></script>', body
                 )
+
+    def test_every_page_loads_the_shared_stylesheet(self):
+        for page in PAGES:
+            with self.subTest(page=page):
+                body = self.get(f"/{page}.html").text
+                self.assertIn('href="/css/style.css', body)
+
+    def test_the_navbar_partial_is_served(self):
+        response = self.get("/navbar_include.html")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('href="/index.html"', response.text)
+
+    def test_every_internal_url_is_served(self):
+        # The pages, the navbar and the modules all point at each other with
+        # root-absolute URLs. One wrong prefix and the browser silently asks
+        # for a path the server does not answer.
+        sources = [self.get(f"/{page}.html").text for page in PAGES]
+        sources.append(self.get("/navbar_include.html").text)
+        sources += [source for _path, source in modules()]
+        pattern = re.compile(r'(?:href|src|from)="(/[^"#?]+)')
+        for source in sources:
+            for url in sorted(set(pattern.findall(source))):
+                with self.subTest(url=url):
+                    self.assertEqual(self.get(url).status_code, 200, url)
+
+    def test_no_page_points_at_a_moved_file(self):
+        # The pages were reorganised into html/ and the stylesheet into css/;
+        # the URL stays flat, so a "/html/x.html" would 404.
+        for page in PAGES:
+            with self.subTest(page=page):
+                body = self.get(f"/{page}.html").text
+                for url in re.findall(r'(?:href|src)="(/[^"#?]+)', body):
+                    self.assertFalse(url.startswith("/html/"), url)
+                    self.assertFalse(url.startswith("/css/../"), url)
 
     def test_the_removed_root_scripts_are_not_served(self):
         for name in ("script.js", "insights.js", "companies.js", "detail.js",
@@ -129,6 +165,30 @@ class TestModules(StaticFilesTestCase):
         for path in ("/js/../server.py",
                      "/js/shared/../../core.py",
                      "/js/pages/../../../etc/passwd"):
+            with self.subTest(path=path):
+                self.assertEqual(self.get(path).status_code, 404)
+
+
+class TestStyles(StaticFilesTestCase):
+    def test_the_stylesheet_is_served_from_the_css_folder(self):
+        response = self.get("/css/style.css")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.headers["Content-Type"], "text/css; charset=utf-8"
+        )
+
+    def test_the_stylesheet_is_not_served_from_the_root(self):
+        self.assertEqual(self.get("/style.css").status_code, 404)
+
+    def test_an_unknown_stylesheet_is_a_404(self):
+        self.assertEqual(self.get("/css/nope.css").status_code, 404)
+
+    def test_only_css_is_served_from_the_css_folder(self):
+        self.assertEqual(self.get("/css/index.html").status_code, 404)
+        self.assertEqual(self.get("/css/server.py").status_code, 404)
+
+    def test_the_css_tree_cannot_be_left(self):
+        for path in ("/css/../core.py", "/css/../../.gitignore"):
             with self.subTest(path=path):
                 self.assertEqual(self.get(path).status_code, 404)
 

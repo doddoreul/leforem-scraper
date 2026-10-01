@@ -289,10 +289,6 @@ def median(values):
 MISS_BLACKLIST_AFTER = 2
 
 
-def empty_blacklist():
-    return {}
-
-
 def read_blacklist_data(data):
     """Accept both the legacy list format and the current dict format.
 
@@ -492,17 +488,6 @@ def filter_recent_offers(offers, max_age_days=365):
 # JOB/MÉTIER INDEXING
 # ============================================================
 
-def extract_metiers(offers):
-    """Extract all unique métiers from offers."""
-    metiers = set()
-    for offer in offers:
-        if isinstance(offer, dict):
-            metier = offer.get("metier", "").strip()
-            if metier:
-                metiers.add(metier)
-    return sorted(metiers)
-
-
 def build_metier_index(offers):
     """Build an index mapping métiers to offer numbers."""
     index = {}
@@ -519,15 +504,6 @@ def build_metier_index(offers):
             index[metier] = []
         index[metier].append(number)
     return index
-
-
-def get_offers_by_metier(offers, metier):
-    """Get all offers for a specific métier."""
-    result = []
-    for offer in offers:
-        if isinstance(offer, dict) and offer.get("metier", "").strip() == metier:
-            result.append(offer)
-    return result
 
 
 # ============================================================

@@ -16,7 +16,6 @@ Run from the repository root:
 
 import json
 import os
-import re
 import subprocess
 import sys
 import tempfile
@@ -28,8 +27,8 @@ sys.path.insert(
     0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
-from leforem_scraper import config  # noqa: E402
-from leforem_scraper import server  # noqa: E402
+from python import config  # noqa: E402
+from python import server  # noqa: E402
 
 EDGE_CANDIDATES = (
     r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",

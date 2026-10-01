@@ -1,23 +1,19 @@
-"""Compatibility entry point.
+"""Point de démarrage du programme.
 
-The server now lives in :mod:`leforem_scraper.server`. This module keeps
-``python serveur.py`` and ``import serveur`` working (the tests and the
-documentation use both), without duplicating a single line of logic.
+    python serveur.py
 
-The data folder has a single source of truth,
-:data:`leforem_scraper.config.DATA_DIR`; this module deliberately does not
-re-export it, so nobody can point one module at a temporary folder and leave
-the others reading the real one.
+Le serveur web lui-même est dans :mod:`python.server` ; ce fichier n'existe
+que pour que la commande ci-dessus marche depuis la racine du projet, sans
+demander à l'utilisateur de connaître le nom du paquet.
 """
 
-from leforem_scraper.server import *  # noqa: F401,F403
-from leforem_scraper.server import (  # noqa: F401
-    BASE_DIR,
-    PORT,
-    Handler,
-    StreamReporter,
-    main,
-)
+import sys
+from pathlib import Path
+
+# Rend le paquet importable même si le projet est lancé d'un autre dossier.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from python.server import main  # noqa: E402
 
 if __name__ == "__main__":
     main()

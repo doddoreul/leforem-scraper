@@ -24,8 +24,8 @@ sys.path.insert(
     0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
-from leforem_scraper import config
-from leforem_scraper import scraper
+from python import config
+from python import scraper
 
 
 def iso_days_ago(days):

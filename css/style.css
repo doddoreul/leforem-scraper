@@ -6,12 +6,9 @@
     /* Palette */
     --color-primary: #5289AD;
     --color-primary-dark: #243C4C;
-    --color-primary-muted: #698696;
     --color-bg: #F4FCFB;
     --color-surface: #FFFFFF;
-    --color-surface-muted: #ACBCBF;
     --color-text: #243C4C;
-    --color-text-muted: #698696;
     --color-border: #D6E1E3;
     --color-success: #4F8A78;
     --color-warning: #B28A4A;
@@ -20,7 +17,6 @@
     /* Design tokens — one scale for the whole app */
     --radius-sm: 8px;
     --radius: 12px;
-    --radius-lg: 14px;
     --radius-pill: 999px;
     --space-1: 4px;
     --space-2: 8px;
@@ -35,7 +31,6 @@
     --font-md: 13px;
     --font-base: 14px;
     --font-lg: 16px;
-    --font-title: 22px;
 
     /* Rôles — thème clair (défaut) */
     --bg-page: var(--color-bg);
@@ -45,7 +40,6 @@
     --text-secondary: #3F5F6E;
     --text-muted: #587684;
     --border: var(--color-border);
-    --border-strong: #BCCCD1;
 
     /* Accent : bleu pour les accents, marine pour structurer */
     --accent: var(--color-primary);
@@ -108,7 +102,6 @@
     --text-secondary: #C2D3DA;
     --text-muted: #9DB3BC;
     --border: #34505F;
-    --border-strong: #466473;
 
     --accent: #7FB0CB;
     --accent-strong: #A6CBE0;
@@ -879,8 +872,6 @@ body {
     --dash-green: var(--success);
     --dash-yellow: var(--warning);
     --dash-red: var(--danger);
-    --dash-line: var(--border);
-    --dash-chart-height: 200px;
 
     background: var(--dash-bg);
     color: var(--dash-text);
@@ -1371,167 +1362,6 @@ body {
     .dash-grid {
         grid-template-columns: 1fr;
     }
-}
-
-/* ============================================================
-   INSIGHTS
-   ============================================================ */
-
-.insights {
-    max-width: 1280px;
-    margin: 0 auto;
-    padding: 28px 24px 48px;
-}
-
-.insights-title {
-    font-size: 26px;
-    font-weight: 800;
-    color: var(--text-primary);
-    margin: 0 0 6px;
-}
-
-.insights-sub {
-    color: var(--text-secondary);
-    margin: 0 0 24px;
-    font-size: 14px;
-}
-
-.insights-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-    gap: 20px;
-}
-
-.insight-card {
-    background: var(--bg-surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    box-shadow: var(--shadow-card);
-    padding: 18px 20px;
-}
-
-.insight-card-wide {
-    grid-column: 1 / -1;
-}
-
-.insight-card-title {
-    font-size: 14px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--text-secondary);
-    margin: 0 0 14px;
-}
-
-.insight-bars {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.insight-bar {
-    display: grid;
-    grid-template-columns: 116px 1fr 48px;
-    align-items: center;
-    gap: 10px;
-}
-
-.insight-bar-label {
-    font-size: 13px;
-    color: var(--text-secondary);
-    text-align: right;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.insight-bar-track {
-    background: var(--row-hover);
-    border-radius: 999px;
-    height: 14px;
-    overflow: hidden;
-}
-
-.insight-bar-fill {
-    height: 100%;
-    border-radius: 999px;
-    min-width: 2px;
-    transition: width 0.4s ease;
-}
-
-.insight-bar-count {
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--text-primary);
-    text-align: right;
-}
-
-.insight-stats {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-}
-
-.insight-stat {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.insight-stat strong {
-    font-size: 26px;
-    font-weight: 800;
-    color: var(--text-primary);
-}
-
-.insight-stat span {
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--text-muted);
-}
-
-.insight-table-wrap {
-    overflow-x: auto;
-}
-
-.insight-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-}
-
-.insight-table th,
-.insight-table td {
-    padding: 9px 12px;
-    text-align: left;
-    border-bottom: 1px solid var(--border);
-    white-space: nowrap;
-}
-
-.insight-table th {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--text-muted);
-    font-weight: 700;
-}
-
-.insight-table tbody tr:hover {
-    background: var(--row-hover);
-}
-
-.insights-empty {
-    color: var(--text-secondary);
-    font-size: 14px;
-}
-
-.insights-empty.hidden {
-    display: none;
-}
-
-.insights-grid.hidden {
-    display: none;
 }
 
 h1 {

@@ -86,7 +86,7 @@ en haut de la page, ou sur la date de dernier scraping.
 | Démarrer le programme | `python serveur.py` (terminal laissé ouvert) |
 | Ouvrir la page | <http://localhost:8123> |
 | Mettre à jour les offres | bouton **Actualiser** sur la page |
-| Tout re-télécharger | `python scraper.py --refresh …` dans le terminal |
+| Tout re-télécharger | `python -m python.scraper --refresh …` dans le terminal |
 | Nouvelle recherche | **Nouvelle recherche**, puis **Lancer le scraping** |
 | Mettre à jour la page Employeurs | rien à faire, c'est fait à la fin de chaque scraping |
 | Transporter mes suivis sur un autre PC | export puis import du fichier JSON (page Offres) |
@@ -123,19 +123,19 @@ terminal                     navigateur
  └──────────────┘       (actualiser)
 ```
 
-1. **`leforem_scraper/scraper.py`** — le programme qui parle au site du Forem et
+1. **`python/scraper.py`** — le programme qui parle au site du Forem et
    écrit les fichiers de données dans `data/`. Il se lance dans le terminal
-   (`python scraper.py`).
-2. **`leforem_scraper/server.py`** — un petit serveur web local (port 8123). Il
+   (`python -m python.scraper`).
+2. **`python/server.py`** — un petit serveur web local (port 8123). Il
    sert la page, expose les fichiers de `data/`, quelques API
    (`/api/scrapings`, `/api/nomenclature/…`) et la route qui lance un scraping
    depuis la page (`python serveur.py`).
-3. **`leforem_scraper/employers.py`** — construit `data/companies.json` à partir
-   des offres déjà téléchargées (`python companies.py`).
-4. **L'interface** (`index.html`, `detail.html`, `insights.html`,
-   `companies.html`, `style.css` et les modules `js/`) — le tableau des offres,
-   les filtres, la fiche d'une offre. Elle ne scrape jamais elle-même : elle
-   demande au serveur ou lit les fichiers.
+3. **`python/employers.py`** — construit `data/companies.json` à partir
+   des offres déjà téléchargées (`python -m python.employers`).
+4. **L'interface** (`index.html`, `html/detail.html`, `html/insights.html`,
+   `html/companies.html`, `css/style.css` et les modules `js/`) — le tableau des
+   offres, les filtres, la fiche d'une offre. Elle ne scrape jamais elle-même :
+   elle demande au serveur ou lit les fichiers.
 
 ## Ce qui se passe pendant un scraping
 
@@ -197,15 +197,15 @@ Points communs aux deux :
 dans un terminal. L'index est fusionné avec le précédent, si bien qu'un e-mail ou
 un téléphone trouvé puis disparu de l'affichage est conservé. Si cette
 reconstruction échoue, le scraping reste considéré comme réussi (les offres sont
-bien enregistrées) ; relance `python companies.py` dans ce cas.
+bien enregistrées) ; relance `python -m python.employers` dans ce cas.
 
 Tu peux aussi reconstruire l'index à la main :
 
 | Je veux… | Ce que je fais |
 |---|---|
-| Reconstruire l'index des employeurs | `python companies.py` (après un scraping manuel) |
-| Repartir de zéro, sans les contacts accumulés | `python companies.py --rebuild` |
-| Voir le résumé dans le terminal | `python companies.py --stats` |
+| Reconstruire l'index des employeurs | `python -m python.employers` (après un scraping manuel) |
+| Repartir de zéro, sans les contacts accumulés | `python -m python.employers --rebuild` |
+| Voir le résumé dans le terminal | `python -m python.employers --stats` |
 
 ## Où sont mes données
 
@@ -230,7 +230,7 @@ Conséquences pratiques :
 
 - tout est locaux, rien n'est envoyé sur Internet ;
 - effacer les données du navigateur efface tes suivis ;
-- la page de détail d'une offre (`detail.html`) lit et écrit les mêmes clés :
+- la page de détail d'une offre (`html/detail.html`) lit et écrit les mêmes clés :
   un statut changé dans une fiche apparaît dans le tableau, même sans
   recharger, et inversement ;
 - les compteurs de statut, filtres et relances sont recalculés à chaque
@@ -241,27 +241,33 @@ Conséquences pratiques :
 La barre de navigation en haut de page relie trois écrans :
 
 - **Offres** (`index.html`) : le tableau, les filtres, le bouton *Actualiser* ;
-- **Dashboard** (`insights.html`) : les statistiques de tes recherches ;
-- **Employeurs** (`companies.html`) : les entreprises et leurs logos.
+- **Dashboard** (`html/insights.html`) : les statistiques de tes recherches ;
+- **Employeurs** (`html/companies.html`) : les entreprises et leurs logos.
 
 | Fichier | Rôle |
 |---|---|
-| `scraper.py`, `serveur.py`, `companies.py`, `core.py` | points d'entrée : `python scraper.py …`, `python serveur.py`, `python companies.py` |
-| `leforem_scraper/` | le code : `config.py` (chemins), `jsonio.py` (lecture/écriture JSON), `core.py` (logique pure), `scraper.py`, `employers.py`, `server.py` |
-| `index.html`, `style.css`, `js/pages/index.js` | le tableau des offres, ses filtres et son style |
-| `detail.html`, `js/pages/detail.js` | la fiche d'une offre (statut, remarque, priorité) |
-| `insights.html`, `js/pages/insights.js` | le dashboard |
-| `companies.html`, `js/pages/companies.js` | la page Employeurs |
+| `serveur.py` | le point de démarrage : `python serveur.py` |
+| `python/` | le code : `config.py` (chemins), `jsonio.py` (lecture/écriture JSON), `core.py` (logique pure), `scraper.py`, `employers.py`, `server.py` — lancés par `python -m python.scraper`, `python -m python.employers`, `python -m python.server` |
+| `index.html`, `css/style.css`, `js/pages/index.js` | le tableau des offres, ses filtres et son style |
+| `html/detail.html`, `js/pages/detail.js` | la fiche d'une offre (statut, remarque, priorité) |
+| `html/insights.html`, `js/pages/insights.js` | le dashboard |
+| `html/companies.html`, `js/pages/companies.js` | la page Employeurs |
 | `js/shared/` | les modules communs : `api.js`, `dates.js`, `dom.js`, `links.js`, `navbar.js`, `scraper-ui.js`, `scraping-selector.js`, `statuses.js`, `storage.js`, `suivi.js`, `text.js`, `theme.js` |
 | `js/boot/theme-boot.js` | le thème appliqué avant le premier affichage (script classique) |
-| `navbar_include.html` | la barre de navigation commune, injectée par `js/shared/navbar.js` |
+| `css/` | la feuille de style unique, `style.css` |
+| `html/navbar_include.html` | la barre de navigation commune, injectée par `js/shared/navbar.js` |
 | `tests/` | la suite de tests |
 
-Les quatre fichiers de la racine ne font que réimporter le paquet : tout le code
-vit dans `leforem_scraper/`. L'interface est de même faite de modules ES natifs,
+À la racine, il n'y a que `index.html` et `serveur.py`, le lanceur :
+les autres pages sont dans `html/`, le style dans `css/`, les modules dans
+`js/`, le code dans `python/`. Le scraper et l'index des employeurs n'ont pas
+de lanceur à la racine : on les lance par `python -m python.scraper` et
+`python -m python.employers`. L'interface est faite de modules ES natifs,
 sans build : chaque page charge son fichier dans `js/pages/` et ce qu'elle partage
-avec les autres dans `js/shared/`. Le dossier des données n'a qu'une seule source
-de vérité, `leforem_scraper/config.py`.
+avec les autres dans `js/shared/`. Les pages restent servies à la racine du
+serveur (`/index.html`, `/insights.html`…) même si leurs fichiers sont dans
+`html/` ; seuls les assets sont adressés par leur dossier (`/css/…`, `/js/…`).
+Le dossier des données n'a qu'une seule source de vérité, `python/config.py`.
 
 ## Options du scraper
 
@@ -284,8 +290,8 @@ python -m unittest discover -s tests
 
 Elle couvre l'incrémental, les empreintes, le nettoyage des données, l'export
 CSV, le contrat HTTP du scraping et les fichiers servis par le serveur (pages,
-modules ES, fichiers JSON, refus de sortir de `data/` ou de `js/`). Ni le réseau
-ni le site du Forem ne sont utilisés.
+modules ES, feuille de style, fichiers JSON, refus de sortir de `data/`, `js/`,
+`css/` ou `html/`). Ni le réseau ni le site du Forem ne sont utilisés.
 
 Une partie de la suite ouvre réellement les quatre pages dans un navigateur sans
 fenêtre (Edge, ou `EDGE_PATH` pour pointer un autre Chromium) et vérifie ce qui

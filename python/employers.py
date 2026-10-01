@@ -24,9 +24,9 @@ import os
 import re
 from urllib.parse import urlsplit, urlunsplit
 
-from leforem_scraper import config
-from leforem_scraper import core
-from leforem_scraper import scraper
+from python import config
+from python import core
+from python import scraper
 
 VERSION = config.VERSION
 
@@ -93,6 +93,8 @@ def normalize_url(value):
 
 
 def url_domain(value):
+    """The host of a normalized URL, e.g. ``ateliersdusud.be/jobs`` ->
+    ``ateliersdusud.be``."""
     return normalize_url(value).split("//", 1)[-1]
 
 
@@ -104,7 +106,7 @@ def collapse_websites(values):
         url = normalize_url(value)
         if not url:
             continue
-        domain = url.split("//", 1)[-1]
+        domain = url_domain(url)
         current = by_domain.get(domain)
         if current is None or len(url) < len(current):
             by_domain[domain] = url

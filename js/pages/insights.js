@@ -642,7 +642,7 @@ async function init() {
 
     // Handle "Créer un nouveau scrap" from shared selector
     document.addEventListener("foremCreateScrape", function () {
-        window.open("index.html", "_blank");
+        window.open("/index.html", "_blank");
     });
 }
 

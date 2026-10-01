@@ -12,7 +12,7 @@
 export function detailHref(number, base) {
     const params = new URLSearchParams({ number: String(number || "") });
     if (base) params.set("base", base);
-    return "detail.html?" + params.toString();
+    return "/detail.html?" + params.toString();
 }
 
 /**

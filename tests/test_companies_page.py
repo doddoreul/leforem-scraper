@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """Quick static sanity check for the web files (no browser, no network).
 
-Verifies that the ids used by js/pages/companies.js exist in companies.html
-and that the braces/parentheses of the script are balanced.
+Verifies that the ids used by js/pages/companies.js exist in
+html/companies.html and that the braces/parentheses of the script are
+balanced.
 """
 
 import io
@@ -22,7 +23,7 @@ def read(name):
 class TestCompaniesJs(unittest.TestCase):
     def setUp(self):
         self.js = read(os.path.join("js", "pages", "companies.js"))
-        self.html = read("companies.html")
+        self.html = read(os.path.join("html", "companies.html"))
 
     def test_balanced_delimiters(self):
         for opener, closer in (("{", "}"), ("(", ")"), ("[", "]")):
@@ -42,9 +43,9 @@ class TestCompaniesJs(unittest.TestCase):
 
     def test_script_and_stylesheet_are_linked(self):
         self.assertIn('type="module"', self.html)
-        self.assertIn("js/pages/companies.js", self.html)
-        self.assertIn("js/boot/theme-boot.js", self.html)
-        self.assertIn("style.css", self.html)
+        self.assertIn("/js/pages/companies.js", self.html)
+        self.assertIn("/js/boot/theme-boot.js", self.html)
+        self.assertIn("/css/style.css", self.html)
 
     def test_no_inner_html_with_data(self):
         # Company names come from the API: never injected as HTML.
@@ -84,7 +85,7 @@ class TestCompaniesJs(unittest.TestCase):
             self.assertIn(fragment, saved)
 
     def test_no_orphan_css(self):
-        css = read("style.css")
+        css = read(os.path.join("css", "style.css"))
         for block in (".company-offer-head", ".company-offer-meta",
                       ".company-offer-fields", ".company-offer-label",
                       ".company-dates-row", ".company-textarea",

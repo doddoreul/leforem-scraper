@@ -28,9 +28,9 @@ from urllib.parse import urlparse
 
 import requests
 
-from leforem_scraper import config
-from leforem_scraper import scraper
-from leforem_scraper.employers import refresh_index, summarize
+from python import config
+from python import scraper
+from python.employers import refresh_index, summarize
 
 BASE_DIR = config.BASE_DIR
 
@@ -45,15 +45,25 @@ LOCATIONS_ENDPOINT = (
     "api/Nomenclature/Localisations"
 )
 
+# The root folder holds only index.html and the entry-point scripts; the other
+# pages and the shared partial live in html/, the stylesheet in css/.
+HTML_DIR = os.path.join(BASE_DIR, "html")
+CSS_DIR = os.path.join(BASE_DIR, "css")
+
 STATIC_FILES = {
     "": ("index.html", "text/html; charset=utf-8"),
     "/": ("index.html", "text/html; charset=utf-8"),
     "/index.html": ("index.html", "text/html; charset=utf-8"),
-    "/insights.html": ("insights.html", "text/html; charset=utf-8"),
-    "/companies.html": ("companies.html", "text/html; charset=utf-8"),
-    "/detail.html": ("detail.html", "text/html; charset=utf-8"),
-    "/style.css": ("style.css", "text/css; charset=utf-8"),
-    "/navbar_include.html": ("navbar_include.html", "text/html; charset=utf-8"),
+}
+
+HTML_MIME = "text/html; charset=utf-8"
+
+# The pages served out of html/, including the partial the navbar injects.
+HTML_FILES = {
+    "/insights.html": "insights.html",
+    "/companies.html": "companies.html",
+    "/detail.html": "detail.html",
+    "/navbar_include.html": "navbar_include.html",
 }
 
 # The pages are plain ES modules: one entry per page in js/pages/ and the
@@ -62,18 +72,28 @@ JS_DIR = os.path.join(BASE_DIR, "js")
 JS_PATH = re.compile(r"^/js/(?:boot|shared|pages)/[A-Za-z0-9_-]+\.js$")
 JAVASCRIPT_MIME = "application/javascript; charset=utf-8"
 
+CSS_PATH = re.compile(r"^/css/[A-Za-z0-9_-]+\.css$")
+CSS_MIME = "text/css; charset=utf-8"
+
+JSON_MIME = "application/json; charset=utf-8"
+
+# The routes that answer a POST.
+SCRAPER_RUN_PATH = "/api/scraper/run"
+DELETE_SCRAPING_PATH = "/delete-scraping"
+COMPANIES_PATH = "/companies.json"
+
 DATA_FILES = {
-    "/historique_scrapes.json": config.SCRAPES_FILE_NAME,
-    "/historique_modifications.json": config.MODIFICATIONS_FILE_NAME,
-    "/companies.json": config.COMPANIES_FILE_NAME,
+    "/" + config.SCRAPES_FILE_NAME: config.SCRAPES_FILE_NAME,
+    "/" + config.MODIFICATIONS_FILE_NAME: config.MODIFICATIONS_FILE_NAME,
+    COMPANIES_PATH: config.COMPANIES_FILE_NAME,
 }
 
-CLEAN_FILE_NAME = re.compile(r"(data|details)_[A-Za-z0-9_-]+\.json")
+# The file names the scraper writes, e.g. data_liege.json. Anything else in
+# data/ is not ours to serve.
+CLEAN_FILE_NAME = config.SCRAPE_FILE_RE
 
-# Synchronous scraping: the browser blocks on this route until scraper.py
-# has finished writing its files.
-SCRAPER_RUN_PATH = "/api/scraper/run"
-SCRAPING_NAME = re.compile(r"[A-Za-z0-9_-]+")
+# Synchronous scraping: the browser blocks on SCRAPER_RUN_PATH until the
+# scraper has finished writing its files.
 _scraper_lock = threading.Lock()
 
 os.makedirs(config.trash_dir(), exist_ok=True)
@@ -85,14 +105,15 @@ SESSION.headers.update(scraper.HEADERS)
 
 
 def scrape_files_for(name):
+    """File names of the offers and the history of one search."""
     return (
-        f"data_{name}.json",
-        f"historique_{name}.json",
+        config.data_file_name(name),
+        config.history_file_name(name),
     )
 
 
 def details_file_for(name):
-    return f"details_{name}.json"
+    return config.details_file_name(name)
 
 
 class StreamReporter:
@@ -143,26 +164,35 @@ class Handler(BaseHTTPRequestHandler):
         if path in DATA_FILES:
             file_name = DATA_FILES[path]
             file_root = config.DATA_DIR
-            mime_type = "application/json; charset=utf-8"
+            mime_type = JSON_MIME
         elif JS_PATH.match(path):
             file_name = path[len("/js/"):]
             file_root = JS_DIR
             mime_type = JAVASCRIPT_MIME
+        elif CSS_PATH.match(path):
+            file_name = path[len("/css/"):]
+            file_root = CSS_DIR
+            mime_type = CSS_MIME
+        elif path in HTML_FILES:
+            file_name = HTML_FILES[path]
+            file_root = HTML_DIR
+            mime_type = HTML_MIME
         elif path in STATIC_FILES:
             file_name, mime_type = STATIC_FILES[path]
             file_root = BASE_DIR
         else:
+            # Per-search files, named data_<search>.json / details_<search>.json.
             base_name = os.path.basename(path)
-            if (
-                CLEAN_FILE_NAME.fullmatch(base_name)
-                or (
-                    base_name.startswith("historique_")
-                    and base_name.endswith(".json")
-                )
-            ):
+            if CLEAN_FILE_NAME.match(base_name):
                 file_name = base_name
                 file_root = config.DATA_DIR
-                mime_type = "application/json; charset=utf-8"
+                mime_type = JSON_MIME
+            # The per-search history, plus the two shared files that follow
+            # the same historique_<name>.json shape.
+            elif config.HISTORY_NAME_RE.match(base_name):
+                file_name = base_name
+                file_root = config.DATA_DIR
+                mime_type = JSON_MIME
             else:
                 self.send_error(404)
                 return
@@ -208,41 +238,28 @@ class Handler(BaseHTTPRequestHandler):
         self._serve_file(path)
 
     def do_POST(self):
-        parsed = urlparse(self.path)
-        if parsed.path == SCRAPER_RUN_PATH:
+        path = urlparse(self.path).path
+        if path == SCRAPER_RUN_PATH:
             self._handle_scraper_run()
-            return
-        if parsed.path == "/delete-scraping":
+        elif path == DELETE_SCRAPING_PATH:
             self._handle_delete_scraping()
-            return
-        if parsed.path != "/companies.json":
+        elif path == COMPANIES_PATH:
+            self._handle_companies_save()
+        else:
             self.send_error(404)
-            return
 
-        origin = self.headers.get("Origin")
-        host = self.headers.get("Host") or ""
-        if origin and urlparse(origin).netloc != host:
+    def _handle_companies_save(self):
+        """Save the employer index as edited by hand on the Employers page."""
+        if not self._origin_allowed():
             self._send_json(403, {"error": "origin refused"})
             return
 
-        try:
-            length = int(self.headers.get("Content-Length") or 0)
-        except ValueError:
-            length = 0
-        if length <= 0 or length > MAX_EDIT_BODY:
-            self._send_json(400, {"error": "invalid body size"})
+        payload, error = self._read_json_body()
+        if error:
+            self._send_json(400, {"error": error})
             return
 
-        raw = self.rfile.read(length)
-        try:
-            payload = json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            self._send_json(400, {"error": "invalid JSON"})
-            return
-
-        if not isinstance(payload, dict) or not isinstance(
-            payload.get("employers"), dict
-        ):
+        if not isinstance(payload.get("employers"), dict):
             self._send_json(400, {"error": "missing employers map"})
             return
 
@@ -268,9 +285,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         results = []
         for file_name in sorted(os.listdir(config.DATA_DIR)):
-            if CLEAN_FILE_NAME.fullmatch(file_name) and file_name.startswith("data_"):
-                name = file_name[len("data_"):-len(".json")]
-            else:
+            name = config.scrape_base(file_name) if CLEAN_FILE_NAME.match(file_name) else None
+            if not name:
                 continue
             try:
                 with open(os.path.join(config.DATA_DIR, file_name),
@@ -401,7 +417,7 @@ class Handler(BaseHTTPRequestHandler):
         stored = {}
         try:
             with open(
-                os.path.join(config.DATA_DIR, f"data_{name}.json"),
+                config.data_file(name),
                 "r",
                 encoding="utf-8",
             ) as f:
@@ -443,7 +459,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         name = str(payload.get("name") or "").strip()
-        if not SCRAPING_NAME.fullmatch(name):
+        if not config.valid_search_name(name):
             self._send_json(
                 400,
                 {"error": "Sélectionnez un scraping précis à actualiser."},
@@ -541,63 +557,42 @@ class Handler(BaseHTTPRequestHandler):
         return stats
 
     def _handle_delete_scraping(self):
-        """Move all files for a scraping to trash."""
-        parsed = urlparse(self.path)
-        if parsed.path != "/delete-scraping":
-            self.send_error(404)
-            return
+        """Move all files for a scraping to trash.
 
-        origin = self.headers.get("Origin")
-        host = self.headers.get("Host") or ""
-        if origin and urlparse(origin).netloc != host:
+        The files are moved aside rather than removed, so a mistaken deletion
+        can still be undone by hand from data/trash/.
+        """
+        if not self._origin_allowed():
             self._send_json(403, {"error": "origin refused"})
             return
 
-        try:
-            length = int(self.headers.get("Content-Length") or 0)
-        except ValueError:
-            length = 0
-        if length <= 0 or length > MAX_EDIT_BODY:
-            self._send_json(400, {"error": "invalid body size"})
+        payload, error = self._read_json_body()
+        if error:
+            self._send_json(400, {"error": error})
             return
 
-        raw = self.rfile.read(length)
-        try:
-            payload = json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            self._send_json(400, {"error": "invalid JSON"})
-            return
-
-        if not isinstance(payload, dict) or "name" not in payload:
-            self._send_json(400, {"error": "missing name"})
-            return
-
-        name = payload["name"]
+        name = payload.get("name")
         if not name or not isinstance(name, str):
             self._send_json(400, {"error": "invalid name"})
             return
 
-        # Sanitize name to prevent path traversal
-        if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+        # The allowed characters are what keeps the name from escaping data/.
+        if not config.valid_search_name(name):
             self._send_json(400, {"error": "invalid name format"})
             return
-
-        data_file = f"data_{name}.json"
-        history_file = f"historique_{name}.json"
-        details_file = f"details_{name}.json"
 
         moved = []
         errors = []
 
-        for fname in (data_file, history_file, details_file):
-            src = os.path.join(config.DATA_DIR, fname)
+        for file_name in scrape_files_for(name) + (details_file_for(name),):
+            src = os.path.join(config.DATA_DIR, file_name)
             if os.path.exists(src):
-                dst = os.path.join(config.trash_dir(), fname)
+                dst = os.path.join(config.trash_dir(), file_name)
                 try:
                     shutil.move(src, dst)
-                    moved.append(fname)
+                    moved.append(file_name)
                 except OSError as e:
-                    errors.append(f"{fname}: {e}")
+                    errors.append(f"{file_name}: {e}")
             # If file doesn't exist, that's okay - just skip
 
         if errors:
