@@ -104,8 +104,16 @@ DETAIL = {
     "dateFinDiffusion": "30-11-26",
     "dateModification": "26-09-26",
     "nombrePostes": 1,
-    "descriptionJob": "<p>Tien de poste au sein d'une equipe.</p>",
-    "descriptionEmployeur": "<p>PME industrielle.</p>",
+    "descriptionJob": (
+        '<p><span style="color:rgb(89,89,89);background-color:rgb(255,255,255);">'
+        "Une formation technique de type bachelier en electromecanique.</span>"
+        '<span style="font-family:\'Tahoma\';font-size:16px;">second bloc</span></p>'
+    ),
+    "descriptionEmployeur": (
+        '<p style="text-align: justify;">PME industrielle.'
+        '<span style="background-color:rgb(253,253,253);">coll&eacute;e</span>'
+        "</p>"
+    ),
     "experience": {"libelle": "3 ans"},
     "etudes": [{"libelle": "Bac technique"}],
     "competencies": [{"libelle": "Electricite"}],
@@ -172,11 +180,39 @@ function log(line) { lines.push(line); out.textContent = lines.join("\\n"); }
 const frame = document.getElementById("frame");
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+// The profile is reused by every test, and the choice is remembered on
+// purpose: start from a clean slate so the first state is the default one.
+try { localStorage.removeItem("forem_plain_styles"); } catch (e) {}
+frame.src = "/detail.html?number=1902&base=metier_liege&reload=1";
+
 for (let i = 0; i < 60; i += 1) {
     await sleep(250);
     const doc = frame.contentDocument;
-    const toggle = doc && doc.querySelector(".diff-toggle");
-    if (!toggle) continue;
+    if (!doc) continue;
+
+    // --- The pasted styles, before the button is used -----------------
+    const rich = doc.querySelector(".rich-html");
+    const pasted = rich && rich.querySelector("[style]");
+    log("styledBefore=" + (pasted ? pasted.getAttribute("style") : "none"));
+    const styleToggle = doc.querySelector(".style-toggle");
+    log("styleButtonBefore=" + (styleToggle
+        ? styleToggle.textContent.trim() + "/" + styleToggle.getAttribute("aria-pressed")
+        : "absent"));
+
+    if (styleToggle) {
+        styleToggle.click();
+        await sleep(120);
+        const after = rich.querySelector("[style]");
+        log("styledAfter=" + (after ? after.getAttribute("style") : "none"));
+        log("styleButtonAfter=" + styleToggle.textContent.trim() + "/"
+            + styleToggle.getAttribute("aria-pressed"));
+        log("stored=" + (frame.contentWindow.localStorage
+            .getItem("forem_plain_styles") || "absent"));
+    }
+
+    // --- The diff, before the button is used --------------------------
+    const toggle = doc.querySelector(".diff-toggle");
+    if (!toggle) { log("DIFF-NOT-FOUND"); break; }
 
     const body = doc.querySelector(".diff-body");
     log("button=" + toggle.textContent.trim());
@@ -367,6 +403,23 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         end = dom.find("</pre>", start)
         self.assertGreater(start, 0, "la sonde n'a pas rendu")
         return dom[start:end]
+
+    def test_the_pasted_styles_can_be_switched_off(self):
+        report = self.report_of("/diff-probe.html")
+
+        # The button exists because the offer carries inline styles...
+        self.assertIn("styleButtonBefore=", report)
+        self.assertIn("Styles du texte : activés/false", report)
+        # ...they are still on when the page opens...
+        self.assertIn("background-color:rgb(255,255,255)", report)
+        # ...and one click drops the colours, the fonts and the alignment
+        # while keeping the text and the tags.
+        self.assertIn("styleButtonAfter=Styles du texte : désactivés/true",
+                      report)
+        self.assertIn("stored=1", report)
+        self.assertNotIn("styledAfter=background-color", report)
+        self.assertNotIn("styledAfter=font-family", report)
+        self.assertNotIn("styledAfter=text-align", report)
 
     def test_the_diff_appears_when_asked(self):
         report = self.report_of("/diff-probe.html")

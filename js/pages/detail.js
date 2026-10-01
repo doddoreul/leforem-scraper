@@ -80,6 +80,133 @@ function richBlock(html) {
 }
 
 // ============================================================
+// STYLES COLLES PAR LE CONSEIL
+// Forem renvoie les descriptions telles que l'employeur les a saisies :
+// beaucoup viennent d'un copier-coller Word ou d'un editeur, et
+// embarquent leurs couleurs, polices et fonds. Sur fond blanc ces
+// fonds forment des taches illisibles. Le bouton « Styles du
+// texte » retire ces attributs presents sans toucher au contenu.
+// ============================================================
+
+const PRESENTATION_STYLE_PROPS = [
+    "background-color",
+    "background",
+    "color",
+    "font-family",
+    "font-size",
+    "font-weight",
+    "font-style",
+    "text-align",
+    "text-decoration",
+    "text-decoration-color",
+    "line-height",
+    "letter-spacing",
+    "word-spacing",
+    "text-shadow",
+    "mso-",
+];
+
+// Neutralised once the user asks for it, and remembered: a pasted Word
+// style is a nuisance on every visit.
+const PLAIN_STYLES_KEY = "forem_plain_styles";
+
+function plainStylesEnabled() {
+    try {
+        return localStorage.getItem(PLAIN_STYLES_KEY) === "1";
+    } catch (e) {
+        return false;
+    }
+}
+
+function rememberPlainStyles(on) {
+    try {
+        localStorage.setItem(PLAIN_STYLES_KEY, on ? "1" : "0");
+    } catch (e) {
+        // Storage unavailable: the choice just does not persist.
+    }
+}
+
+/**
+ * The button that drops the pasted presentation styles, plus its wiring.
+ * Only shown when the page really carries some.
+ * @param {HTMLElement} mainCol the column holding the rich blocks
+ */
+function setupStyleToggle(mainCol) {
+    const blocks = Array.from(mainCol.querySelectorAll(".rich-html"));
+    const styled = blocks.filter(
+        block => block.querySelector("[style]") || block.getAttribute("style")
+    );
+    if (!styled.length) return;
+
+    // aria-pressed tells whether the pasted styles are dropped; the label
+    // names what is currently applied, so both agree from the start.
+    const toggle = el("button", "btn btn-outline style-toggle",
+        "Styles du texte : activés");
+    toggle.type = "button";
+    toggle.setAttribute("aria-pressed", "false");
+    toggle.title = "Les couleurs, polices et fonds collés par l'employeur " +
+        "peuvent rendre le texte illisible.";
+
+    const apply = function (plain) {
+        styled.forEach(block => stripPresentationStyles(block));
+        toggle.textContent = plain
+            ? "Styles du texte : désactivés"
+            : "Styles du texte : activés";
+        toggle.classList.toggle("active", plain);
+        toggle.setAttribute("aria-pressed", plain ? "true" : "false");
+    };
+
+    if (plainStylesEnabled()) apply(true);
+
+    toggle.addEventListener("click", function () {
+        const plain = toggle.getAttribute("aria-pressed") !== "true";
+        apply(plain);
+        rememberPlainStyles(plain);
+    });
+
+    mainCol.insertBefore(toggle, mainCol.firstChild);
+}
+
+/**
+ * Strip the presentation attributes an employer pasted along with the text.
+ * Inline `style` attributes only: the tags themselves (<strong>, <u>, <em>)
+ * carry meaning and are left alone.
+ * @param {HTMLElement} block a node whose children carry the styles
+ * @returns {number} how many elements were cleaned
+ */
+function stripPresentationStyles(block) {
+    let cleaned = 0;
+    const nodes = [block].concat(Array.from(block.querySelectorAll("*")));
+    nodes.forEach(node => {
+        if (!node.getAttribute) return;
+        const style = node.getAttribute("style");
+        if (!style) return;
+
+        const kept = style.split(";")
+            .map(decl => decl.trim())
+            .filter(decl => {
+                const prop = decl.split(":")[0].trim().toLowerCase();
+                if (!prop) return false;
+                return !PRESENTATION_STYLE_PROPS.some(
+                    name => prop === name || prop.indexOf(name) === 0
+                );
+            });
+
+        if (kept.length === style.split(";").map(d => d.trim())
+            .filter(Boolean).length && kept.join("; ") === style) {
+            return;
+        }
+        if (kept.length) {
+            node.setAttribute("style", kept.join("; "));
+        } else {
+            node.removeAttribute("style");
+        }
+        cleaned += 1;
+    });
+    return cleaned;
+}
+
+// ============================================================
 // MAIN
 // ============================================================
 
@@ -340,6 +467,8 @@ function renderFiche(root, payload, offer) {
             "Aucune description détaillée dans cette annonce."
         ));
     }
+
+    setupStyleToggle(mainCol);
 
     // Informations pratiques
     const infoCard = el("section", "card");

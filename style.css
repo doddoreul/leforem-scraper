@@ -666,6 +666,19 @@ body {
     min-width: 0;
 }
 
+/* ----- STYLES COLLES ----- */
+
+.style-toggle {
+    align-self: flex-start;
+    font-size: var(--font-sm);
+}
+
+.style-toggle.active {
+    background: var(--accent-fill);
+    border-color: var(--accent-fill);
+    color: var(--accent-text);
+}
+
 /* ----- DIFF ----- */
 
 .diff-card {
