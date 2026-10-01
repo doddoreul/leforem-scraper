@@ -1684,6 +1684,23 @@ function refreshScraperButtonTarget() {
 // SCRAPING SELECTOR (shared component)
 // ============================================================
 
+// La recherche affichée : le composant ne déclenche pas onChange au premier
+// rendu, c'est ici qu'on décide ce que le tableau montre à l'ouverture.
+function applyScrapingSelection(key, scrapings) {
+    activeScrapings = scrapings;
+    if (key === "all") {
+        dataUrl = "all";
+        historyUrl = "";
+        setActiveScraping("");
+        return;
+    }
+    const scrape = scrapings.find(function (s) { return s.file === key; });
+    if (!scrape) return;
+    dataUrl = scrape.file;
+    historyUrl = scrape.history;
+    setActiveScraping(scrape.name || "");
+}
+
 function setupScrapingSelector() {
     const select = document.getElementById("scrapingSelect");
     if (!select) return Promise.resolve();
@@ -1693,19 +1710,7 @@ function setupScrapingSelector() {
         allowAll: true,      // "Toutes les recherches" option
         allowCreate: true,   // "Creer un nouveau scrap" option
         onChange: function (key, scrapings) {
-            activeScrapings = scrapings;
-            if (key === "all") {
-                dataUrl = "all";
-                historyUrl = "";
-                setActiveScraping("");
-            } else {
-                const scrape = scrapings.find(function (s) { return s.file === key; });
-                if (scrape) {
-                    dataUrl = scrape.file;
-                    historyUrl = scrape.history;
-                    setActiveScraping(scrape.name || "");
-                }
-            }
+            applyScrapingSelection(key, scrapings);
             reloadStorageMaps();
             resetGroupFilter();
             resetSort();
@@ -1715,20 +1720,9 @@ function setupScrapingSelector() {
         }
     }).then(function (result) {
         try {
-            activeScrapings = result.scrapings;
-            const stored = localStorage.getItem("forem_scraping_select");
-            if (stored === "all") {
-                dataUrl = "all";
-                historyUrl = "";
-                setActiveScraping("");
-            } else if (stored) {
-                const scrape = result.scrapings.find(function (s) { return s.file === stored; });
-                if (scrape) {
-                    dataUrl = scrape.file;
-                    historyUrl = scrape.history;
-                    setActiveScraping(scrape.name || "");
-                }
-            }
+            // result.current est la recherche retenue : celle du profil, ou
+            // « Toutes les recherches » si le profil n'en a aucune.
+            applyScrapingSelection(result.current, result.scrapings);
             updateDeleteGearButtonVisibility();
             refreshScraperButtonTarget();
             reloadStorageMaps();

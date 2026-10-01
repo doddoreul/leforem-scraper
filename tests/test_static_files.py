@@ -11,6 +11,7 @@ Run from the repository root:
 """
 
 import os
+import re
 import sys
 import tempfile
 import threading
@@ -146,6 +147,65 @@ class TestDataFiles(StaticFilesTestCase):
 
     def test_an_unknown_json_file_is_a_404(self):
         self.assertEqual(self.get("/data_ghost.json").status_code, 404)
+
+
+def modules():
+    """Every module of js/, as a list of (path, source)."""
+    js_root = os.path.join(server.BASE_DIR, "js")
+    found = []
+    for folder, _dirs, files in os.walk(js_root):
+        for name in sorted(files):
+            if name.endswith(".js"):
+                full = os.path.join(folder, name)
+                with open(full, encoding="utf-8") as handle:
+                    found.append((full, handle.read()))
+    return sorted(found)
+
+
+class TestPageModules(unittest.TestCase):
+    """Static checks a browser would otherwise catch the hard way."""
+
+    def test_every_import_points_to_a_file_of_the_tree(self):
+        # The server only serves js/boot, js/shared and js/pages: a module
+        # imported from anywhere else would answer 404 at load time.
+        served = ("../shared/", "./", "boot/", "shared/", "pages/")
+        for path, source in modules():
+            for specifier in re.findall(r'from "([^"]+)"', source) \
+                    + re.findall(r'import "([^"]+)"', source):
+                if specifier.startswith("/"):
+                    target = os.path.join(server.BASE_DIR, specifier[1:])
+                else:
+                    target = os.path.normpath(
+                        os.path.join(os.path.dirname(path), specifier)
+                    )
+                with self.subTest(module=os.path.basename(path), to=specifier):
+                    self.assertTrue(os.path.isfile(target), target)
+                    self.assertTrue(target.endswith(".js"), target)
+                    self.assertTrue(
+                        specifier.startswith(served) or specifier == ".",
+                        specifier,
+                    )
+
+    def test_no_page_module_publishes_a_global(self):
+        for path, source in modules():
+            if os.sep + "pages" + os.sep not in path:
+                continue
+            for name in ("window.ScrapingSelector", "window.ForemScraperUi",
+                         "window.FOREM_GEAR_ACTIONS"):
+                with self.subTest(module=os.path.basename(path), name=name):
+                    self.assertNotIn(name, source)
+
+    def test_the_offers_table_restores_the_resolved_selection(self):
+        # Without it the page opens on "Aucun scraping sélectionné" and
+        # stays empty until the selector is touched.
+        source = read_js(os.path.join("js", "pages", "index.js"))
+        self.assertIn("applyScrapingSelection(result.current, result.scrapings)",
+                      source)
+
+
+def read_js(*parts):
+    with open(os.path.join(server.BASE_DIR, *parts), encoding="utf-8") as handle:
+        return handle.read()
 
 
 if __name__ == "__main__":
