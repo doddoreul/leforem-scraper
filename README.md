@@ -6,193 +6,253 @@
 
 ---
 
-## 1) Installer Python (la première fois)
+# Partie 1 — Démarrage rapide (pour les débutants)
 
-C'est le langage utilisé par ce projet. Si tu ne sais pas si Python est déjà
-installé, on va le vérifier.
+## Étape 1 — Vérifier que Python est installé
 
-### 1.1. Ouvrir un terminal
-
-- Appuie sur la touche `Windows`, tape `powershell`, puis Entrée.
-- Une fenêtre bleue s'ouvre avec une ligne de commande.
-
-### 1.2. Vérifier si Python est déjà là
-
-Dans le terminal, tape ceci puis Entrée :
+Appuie sur la touche `Windows`, tape `powershell`, puis Entrée. Dans le terminal
+qui s'ouvre, tape :
 
 ```
 python --version
 ```
 
-- **Si tu vois un numéro** du genre `Python 3.12.x` : parfait, va directement
-  à l'étape 2.
-- **Si tu vois une erreur** (`python n'est pas reconnu…`) : essaie :
+- **Si tu vois un numéro** du genre `Python 3.12.x` : tout est bon, passe à
+  l'étape 2.
+- **Si tu vois une erreur** : essaie `py --version`. Si `py` fonctionne, remplace
+  `python` par `py` dans toutes les commandes de ce guide.
+- **Si Python n'est pas installé** : télécharge-le sur
+  <https://www.python.org/downloads/>, et **coche la case « Add python.exe to
+  PATH »** avant de cliquer sur *Install Now*. Ferme puis rouvre le terminal.
 
-```
-py --version
-```
-
-- Si `py` fonctionne, tant mieux : utilise `py` dans toutes les commandes de
-  ce guide au lieu de `python`.
-
-### 1.3. Installer Python (si absent)
-
-1. Va sur <https://www.python.org/downloads/> et clique sur
-   **Download Python**.
-2. Ouvre le fichier téléchargé.
-3. **IMPORTANT** : coche la case **« Add python.exe to PATH »** (en bas de la
-   fenêtre) AVANT de cliquer sur **Install Now**.
-4. Laisse l'installation se terminer, puis ferme le terminal et rouvre-en un.
-5. Reteste avec `python --version`. Tu dois voir un numéro de version.
-
----
-
-## 2) Récupérer le projet
-
-Le dossier du projet doit être sur ton ordinateur (il contient au minimum les
-fichiers `scraper.py`, `serveur.py`, `index.html`, `style.css`,
-`script.js`).
-
-Si tu as récupéré ce projet depuis GitHub :
-
-- clique sur le bouton vert **Code**,
-- choisis **Download ZIP**,
-- extrais l'archive, par exemple dans `Documents\leforem-scraper`.
-
----
-
-## 3) Installer la bibliothèque `requests`
-
-Ce petit module permet au scraper de parler avec le site du Forem.
-
-Dans le terminal, tape :
+## Étape 2 — Installer la seule dépendance (une fois pour toutes)
 
 ```
 python -m pip install requests
 ```
 
-Attends la fin (quelques secondes). Si tout est bon, tu verras un message du
-genre `Successfully installed requests-2.x.x`.
+## Étape 3 — Se placer dans le dossier du projet
 
----
-
-## 4) Lancer les commandes au bon endroit
-
-Toutes les commandes doivent être lancées **dans le dossier du projet**.
-
-Dans le terminal, tape :
+Toutes les commandes se lancent **dans le dossier du projet** :
 
 ```
 cd leforem-scraper
 ```
 
-(adapte le chemin selon l'endroit où tu as extrait le dossier).
-
----
-
-## 5) Récupérer les offres
-
-Tape cette commande, puis Entrée :
-
-```
-python scraper.py
-```
-
-Le programme :
-
-1. cherche les offres sur le site du Forem (mots-clés par défaut :
-   électromécanicien industriel, arrondissement de Liège),
-2. ouvre chaque offre pour récupérer le détail,
-3. écrit deux fichiers : `data.json` (les offres) et
-   `historique_supprimees.json` (les offres qui ont disparu).
-
-Ça peut prendre quelques minutes. Sois patient : les offres défilent dans le
-terminal.
-
-### Options utiles
-
-| Option | Effet | Exemple |
-|---|---|---|
-| (aucune) | Scraping normal : seules les nouvelles offres sont téléchargées, les autres sont reprises du cache | `python scraper.py` |
-| `--refresh` | Re-télécharge TOUTES les offres (utile après une longue interruption) | `python scraper.py --refresh` |
-| `--limit N` | Se limiter à N offres (utile pour tester) | `python scraper.py --limit 10` |
-
----
-
-## 6) Afficher les offres dans le navigateur
-
-Le site du Forem bloque l'ouverture des fichiers directement depuis le
-disque. Il faut donc lancer le petit serveur local :
+## Étape 4 — Lancer le serveur local
 
 ```
 python serveur.py
 ```
 
-Tu dois voir : *Web interface on http://localhost:8123*.
+Tu dois voir : *Web interface on http://localhost:8123*. **Laisse cette fenêtre
+ouverte** : c'est elle qui sert la page. Pour l'arrêter : `Ctrl + C` dans cette
+fenêtre.
 
-Ensuite, ouvre ton navigateur (Chrome, Edge, Firefox…) et va sur :
+## Étape 5 — Ouvrir la page
+
+Ouvre ton navigateur (Edge, Chrome, Firefox…) sur :
 
 ```
 http://localhost:8123
 ```
 
-**Laisse la fenêtre du terminal ouverte** tant que tu utilises la page.
-Pour arrêter le serveur plus tard : ferme la fenêtre ou appuie sur
-`Ctrl + C`.
+## Étape 6 — Créer ta première recherche
 
----
-
-## 7) Se servir de la page web
-
-La page est en français. Tout est simple :
-
-- **Annonces actuelles** : les offres actuelles. Chaque ligne a :
-  - une **étoile** pour mettre l'offre en favori,
-  - un menu **Statut** pour suivre ta candidature (Intéressé, Postulé,
-    Contacté, Refusé…),
-  - une zone **Remarque** pour écrire un commentaire,
-  - un lien vers l'offre originale sur le site du Forem.
-- **Annonces supprimées** : les offres qui ont disparu du site.
-- **Nouvelles / Anciennes annonces** : le programme affiche d'abord les
-  nouvelles offres (nouvelles = absentes du précédent scraping).
-- En haut : une **barre de recherche** pour filtrer les lignes par
-  mots-clés, et le menu **Statut** pour filtrer par statut.
-- **Nouvelle recherche** : pour changer de métier ou de lieu. Un bouton te
-  génère la commande à copier-coller dans le terminal :
+1. Clique sur **Nouvelle recherche**.
+2. Tape un métier (par exemple « électromécanicien ») et choisis-le dans la
+   liste proposée.
+3. Tape un lieu (par exemple « Liège ») et choisis-le.
+4. Clique sur **Copier la commande**.
+5. Colle cette commande dans le terminal (celui de l'étape 4) et valide avec
+   Entrée :
 
 ```
-python scraper.py --occupation-guid <id metier> --location-guid <id lieu> --base mon-scraping --label "Mon metier / Ma ville"
+python scraper.py --occupation-guid <id métier> --location-guid <id lieu>
 ```
 
-  Chaque nouveau scraping crée ses propres fichiers
-  (`data_mon-scraping.json`, etc.). Tu peux ensuite passer de l'un à l'autre
-  avec le menu **Scraping** en haut de la page.
-- Le menu **Scraping** te permet de voir les statistiques de chaque scraping.
-  Tes statuts, favoris et remarques sont enregistrés dans ton navigateur,
-  séparément pour chaque scraping.
+Le téléchargement commence. Les offres défilent dans le terminal ; le trait
+`=` indique l'avancement. Compte quelques minutes pour une première recherche.
 
----
+## Étape 7 — Revenir voir tes offres
 
-## 8) Problèmes fréquents
+Recharge la page (`F5`). Le menu **Scraping** en haut permet de choisir la
+recherche à afficher. Pour la mettre à jour plus tard, clique sur **Actualiser**
+en haut de la page : tu n'as plus besoin du terminal.
+
+### Petit aide-mémoire
+
+| Je veux… | Ce que je fais |
+|---|---|
+| Démarrer le programme | `python serveur.py` (terminal laissé ouvert) |
+| Ouvrir la page | <http://localhost:8123> |
+| Mettre à jour les offres | bouton **Actualiser** sur la page |
+| Tout re-télécharger | `python scraper.py --refresh …` dans le terminal |
+| Nouvelle recherche | **Nouvelle recherche**, puis commande à coller |
+| Transporter mes suivis sur un autre PC | export puis import du fichier JSON (page Offres) |
+| Arrêter le programme | `Ctrl + C` dans le terminal du serveur |
+
+### Si ça ne marche pas
 
 | Problème | Solution |
 |---|---|
-| `python n'est pas reconnu…` | Python n'est pas installé ou pas dans le PATH. Relis l'étape 1, ou utilise `py` à la place de `python`. |
-| `No module named requests` | La bibliothèque manque : `python -m pip install requests`. |
-| La page affiche une erreur | Le serveur est-il bien lancé (`python serveur.py`) et la fenêtre du terminal toujours ouverte ? |
-| `Ctrl + C` ne fonctionne pas | Clique d'abord dans la fenêtre du terminal (pour qu'elle soit active) puis réessaie. |
+| `python n'est pas reconnu…` | Python absent ou hors du PATH : relis l'étape 1, ou utilise `py`. |
+| `No module named requests` | `python -m pip install requests` |
+| `error: the following arguments are required: --occupation-guid, --location-guid` | Lance la commande générée par **Nouvelle recherche**, elle contient les deux identifiants. |
+| La page affiche une erreur | Le serveur est-il lancé et sa fenêtre toujours ouverte ? |
+| La page reste sur « Chargement des annonces… » | Le terminal du serveur a été fermé : relance `python serveur.py`. |
+| Page blanche en ouvrant `index.html` directement | Le site du Forem bloque le mode `file://` : passe par `http://localhost:8123`. |
 
 ---
 
-## 9) Fichiers du projet
+# Partie 2 — Comment fonctionne le logiciel
 
-- `scraper.py` : le programme qui télécharge les offres (c'est lui qui écrit
-  les fichiers de données).
-- `serveur.py` : le petit serveur local qui affiche la page.
-- `index.html`, `style.css`, `script.js` : la page web elle-même.
-- `data.json`, `historique_supprimees.json`, `blacklist.json` : les données
-  générées par le scraper (ne pas y toucher à la main). `blacklist.json`
-  contient les numéros d'annonces introuvables (404), automatiquement
-  ignorés au scrap suivant ; tu peux le supprimer pour tout retenter.
+## Les trois morceaux
 
-Bonne recherche !
+```
+   terminal                     navigateur
+┌──────────────┐            ┌────────────────────────┐
+│ scraper.py   │  écrit     │ index.html + script.js  │
+│ (télécharge) ├───────────►│ (tableau, filtres)      │
+└──────┬───────┘  data/     │ detail.html (fiche)     │
+       │ import             └───────────┬─────────────┘
+       │                               │ lit /api/…
+┌──────▼───────┐  lit  data/           │
+│ serveur.py   │◄─────────────────────┤
+│ (serveur web)│  POST /api/scraper/run
+└──────────────┘       (actualiser)
+```
+
+1. **`scraper.py`** — le programme qui parle au site du Forem et écrit les
+   fichiers de données dans `data/`. Il se lance dans le terminal.
+2. **`serveur.py`** — un petit serveur web local (port 8123). Il sert la page,
+   expose les fichiers de `data/`, quelques API (`/api/scrapings`,
+   `/api/nomenclature/…`) et la route qui lance un scraping depuis la page.
+3. **L'interface** (`index.html`, `style.css`, `script.js`, `scraper-ui.js`,
+   `detail.html`, `detail.js`) — le tableau des offres, les filtres, la fiche
+   d'une offre. Elle ne scrape jamais elle-même : elle demande au serveur ou lit
+   les fichiers.
+
+## Ce qui se passe pendant un scraping
+
+1. **Phase 1 — la liste.** Le scraper interroge l'API du Forem et récupère le
+   résumé de chaque offre (numéro, titre, société, lieu, date, description
+   courte). C'est rapide : une seule requête par page de résultats.
+2. **Comparaison.** Pour chaque résumé, il calcule un `listing_hash` (empreinte
+   de l'annonce résumé) et le compare à celui enregistré au scraping précédent.
+3. **Phase 2 — les détails.** Il n'ouvre la fiche complète que pour les offres
+   **nouvelles**, les offres dont le `listing_hash` a **changé**, et les offres
+   qui avaient **échoué** la dernière fois. Les autres sont reprises du cache :
+   c'est ce qui rend un scraping incrémental rapide.
+4. **Écriture.** Chaque réponse est convertie en champs lisibles (contrat,
+   horaire, rémunération, email, lieu, dates), un `content_hash` est calculé,
+   puis les fichiers JSON sont réécrits **de façon atomique** (fichier temporaire
+   puis remplacement, pour ne jamais laisser de fichier tronqué).
+
+## Le système « incrémental » en deux empreintes
+
+| Empreinte | Portée | Sert à quoi |
+|---|---|---|
+| `listing_hash` | le résumé de l'annonce (sans date de publication, sans logo, sans identifiant) | décider s'il faut rouvrir la fiche |
+| `content_hash` | le contenu extrait de la fiche | repérer une offre qui a changé → tag « modifiée » |
+
+Quelques règles qui évitent les faux positifs :
+
+- une offre qui n'a pas encore d'empreinte enregistrée (première fois) est
+  simplement mise en cache, pas marquée comme modifiée ;
+- un changement de règle de hash (`hash_rule`, actuellement `2`) ne déclenche
+  pas une rafale de fausses modifications ;
+- `published_on` est exclu du `content_hash` car cette valeur bouge chez le
+  Forem sans que l'offre change.
+
+## Actualiser depuis la page web
+
+Le bouton **Actualiser** appelle `POST /api/scraper/run` sur le serveur, qui
+lance exactement le même code que le terminal, en mode incrémental :
+
+- une demande de confirmation s'affiche avant le lancement (il n'y a pas de
+  tâche de fond, le bouton reste bloqué jusqu'à la fin) ;
+- le serveur renvoie un flux d'événements (`log`, `progress`, `done`, `error`)
+  que la page affiche en direct dans le pseudo-terminal ;
+- un seul scraping à la fois : une seconde demande reçoit une erreur `409` ;
+- à la fin, la page propose un résumé (téléchargées, nouvelles, modifiées,
+  en cache, erreurs, durée) puis recharge le tableau ;
+- si une fenêtre « données obsolètes » s'affiche (les offres ont beaucoup
+  vieilli), le bouton **Actualiser** qu'elle propose lance le même flux.
+
+## Où sont mes données
+
+**Les offres** dans `data/`, un ensemble de fichiers par recherche
+(`<base>` = le nom court de la recherche, p. ex. `liege`) :
+
+| Fichier | Contenu |
+|---|---|
+| `data_<base>.json` | les offres de la recherche (ce que la page affiche) |
+| `details_<base>.json` | le cache des fiches complètes (sert aux calculs) |
+| `historique_<base>.json` | les offres disparues depuis le début |
+| `historique_modifications.json` | la liste des offres modifiées dans le temps |
+| `historique_scrapes.json` | l'historique des scrapings et leurs statistiques |
+| `blacklist.json` | les numéros d'annonces en 404, ignorés automatiquement |
+| `companies.json` | les logos d'entreprises, mis en cache |
+| `trash/` | les recherches supprimées depuis la page (corbeille) |
+
+**Tes suivis** (statut, favori, remarque, priorité, dates de relance) ne sont
+**pas** dans ces fichiers : ils vivent dans le `localStorage` de ton navigateur,
+avec une clé par recherche (`forem_<base>_statuts`, `forem_<base>_favoris`, …).
+Conséquences pratiques :
+
+- tout est locaux, rien n'est envoyé sur Internet ;
+- effacer les données du navigateur efface tes suivis ;
+- la page de détail d'une offre (`detail.html`) lit et écrit les mêmes clés :
+  un statut changé dans une fiche apparaît dans le tableau, même sans
+  recharger, et inversement ;
+- les compteurs de statut, filtres et relances sont recalculés à chaque
+  changement.
+
+## Les pages et les fichiers du projet
+
+La barre de navigation en haut de page relie trois écrans :
+
+- **Offres** (`index.html`) : le tableau, les filtres, le bouton *Actualiser* ;
+- **Dashboard** (`insights.html`) : les statistiques de tes recherches ;
+- **Employeurs** (`companies.html`) : les entreprises et leurs logos.
+
+| Fichier | Rôle |
+|---|---|
+| `scraper.py` | télécharge les offres, compare les empreintes, écrit `data/` |
+| `serveur.py` | serveur local (page + API + lancement d'un scraping) |
+| `core.py` | outils partagés : empreintes, lecture/écriture des historiques |
+| `companies.py` | récupère et met en cache les logos des entreprises |
+| `script.js`, `style.css`, `index.html` | le tableau des offres et son style |
+| `detail.html`, `detail.js` | la fiche d'une offre (statut, remarque, priorité) |
+| `scraper-ui.js` | fenêtre d'actualisation : confirmation, flux en direct, résumé |
+| `scraping-selector.js` | menu « Scraping » partagé entre les pages |
+| `insights.html`, `insights.js` | le dashboard |
+| `companies.html`, `companies.js` | la page Employeurs |
+| `suivi-io.js` | export / import de tes suivis (JSON) pour changer de PC |
+| `navbar_include.html`, `navbar-loader.js` | la barre de navigation commune |
+| `theme.js` | thème clair / sombre |
+| `tests/` | la suite de tests |
+
+## Options du scraper
+
+| Option | Effet |
+|---|---|
+| `--occupation-guid ID` | métier recherché (obligatoire, fourni par la page) |
+| `--location-guid ID` | lieu recherché (obligatoire, fourni par la page) |
+| `--label "texte"` | nom lisible de la recherche, affiché dans le menu |
+| `--base nom` | nom court des fichiers ; par défaut généré à partir des identifiants |
+| `--limit N` | ne traiter que N offres (utile pour tester) |
+| `--refresh` | re-télécharge **toutes** les offres au lieu d'appliquer l'incrémental |
+
+## Les tests
+
+Le projet embarque une suite de tests (aucune installation supplémentaire) :
+
+```
+python -m unittest discover -s tests
+```
+
+Elle couvre l'incrémental, les empreintes, le nettoyage des données, l'export
+CSV et le contrat HTTP du scraping. Ni le réseau ni le site du Forem ne sont
+utilisés.
