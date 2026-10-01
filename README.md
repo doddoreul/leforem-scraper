@@ -286,3 +286,8 @@ Elle couvre l'incrémental, les empreintes, le nettoyage des données, l'export
 CSV, le contrat HTTP du scraping et les fichiers servis par le serveur (pages,
 modules ES, fichiers JSON, refus de sortir de `data/` ou de `js/`). Ni le réseau
 ni le site du Forem ne sont utilisés.
+
+Une partie de la suite ouvre réellement les quatre pages dans un navigateur sans
+fenêtre (Edge, ou `EDGE_PATH` pour pointer un autre Chromium) et vérifie ce qui
+s'affiche vraiment. C'est la seule partie qui peut être sautée : elle est
+ignorée si aucun navigateur n'est trouvé.
