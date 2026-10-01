@@ -373,39 +373,54 @@ def normalize_for_hash(value):
     return value
 
 
+def compute_hash(value):
+    """SHA-256 of any JSON-able value, normalized so it is stable."""
+    json_str = json.dumps(
+        normalize_for_hash(value),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(json_str.encode("utf-8")).hexdigest()
+
+
+# Rule used by compute_content_hash(). It is stored on every offer so an
+# offer stored with an older rule is never reported as modified just because
+# the hashing rules changed (see run_scrape's change detection).
+CONTENT_HASH_RULE = 2
+
+# Fields that are part of the Forem data (determine content changes).
+# `published_on` is left out on purpose: the search result gives it as a
+# relative text ("Publié hier") which changes with the passing days, while
+# the absolute `date_publication` below already covers the publication date.
+CONTENT_HASH_FIELDS = [
+    "number",
+    "offer_title",
+    "description",
+    "company",
+    "email",
+    "url",
+    "contract_type",
+    "schedule",
+    "pay",
+    "salary",
+    "location",
+    "date_publication",
+    "date_fin_diffusion",
+    "metier",
+    "summary",
+]
+
+
 def compute_content_hash(offer):
     """Compute SHA-256 hash of the normalized offer content.
-    
+
     Only hashes the Forem data fields, not user data or metadata.
     """
-    # Fields that are part of the Forem data (determine content changes)
-    hash_fields = [
-        "number",
-        "offer_title",
-        "description",
-        "company",
-        "email",
-        "url",
-        "contract_type",
-        "schedule",
-        "pay",
-        "salary",
-        "location",
-        "published_on",
-        "date_publication",
-        "date_fin_diffusion",
-        "metier",
-        "summary",
-    ]
-    
-    normalized = {}
-    for field in hash_fields:
-        value = offer.get(field)
-        normalized[field] = normalize_for_hash(offer.get(field, ""))
-    
-    # Create deterministic JSON string
-    json_str = json.dumps(normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(json_str.encode("utf-8")).hexdigest()
+    normalized = {
+        field: offer.get(field, "") for field in CONTENT_HASH_FIELDS
+    }
+    return compute_hash(normalized)
 
 
 def compute_diff(old_offer, new_offer):

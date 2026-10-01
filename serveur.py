@@ -3,6 +3,8 @@ import os
 import re
 import shutil
 import sys
+import threading
+import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
@@ -40,6 +42,7 @@ STATIC_FILES = {
     "/companies.js": ("companies.js", "application/javascript; charset=utf-8"),
     "/detail.js": ("detail.js", "application/javascript; charset=utf-8"),
     "/scraping-selector.js": ("scraping-selector.js", "application/javascript; charset=utf-8"),
+    "/scraper-ui.js": ("scraper-ui.js", "application/javascript; charset=utf-8"),
     "/navbar-loader.js": ("navbar-loader.js", "application/javascript; charset=utf-8"),
     "/navbar_include.html": ("navbar_include.html", "text/html; charset=utf-8"),
 }
@@ -51,6 +54,12 @@ DATA_FILES = {
 }
 
 CLEAN_FILE_NAME = re.compile(r"(data|details)_[A-Za-z0-9_-]+\.json")
+
+# Synchronous scraping: the browser blocks on this route until scraper.py
+# has finished writing its files.
+SCRAPER_RUN_PATH = "/api/scraper/run"
+SCRAPING_NAME = re.compile(r"[A-Za-z0-9_-]+")
+_scraper_lock = threading.Lock()
 
 TRASH_DIR = os.path.join(DATA_DIR, "trash")
 os.makedirs(TRASH_DIR, exist_ok=True)
@@ -72,8 +81,40 @@ def details_file_for(name):
     return f"details_{name}.json"
 
 
+class StreamReporter:
+    """Turns the real scraper events into NDJSON lines.
+
+    The scraper runs in this very request thread; each line it logs is
+    forwarded to the browser while the request stays open. Nothing runs in
+    the background: the response is finished once scraper.py returns.
+    """
+
+    def __init__(self, handler):
+        self.handler = handler
+
+    def log(self, message=""):
+        lines = str(message).splitlines() or [""]
+        for line in lines:
+            self.handler.log_message("scraper | %s", line)
+            self.handler._write_event({"type": "log", "line": line})
+
+    def progress(self, done, total):
+        self.handler._write_event(
+            {"type": "progress", "done": done, "total": total}
+        )
+
+    def progress_done(self):
+        pass
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "LeForemScraper/1.0"
+    # Required to stream the scraper log while the request is still open.
+    protocol_version = "HTTP/1.1"
+
+    def setup(self):
+        super().setup()
+        self._stream_broken = False
 
     def _send_json(self, code, content):
         body = json.dumps(content, ensure_ascii=False).encode("utf-8")
@@ -149,6 +190,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if parsed.path == SCRAPER_RUN_PATH:
+            self._handle_scraper_run()
+            return
         if parsed.path == "/delete-scraping":
             self._handle_delete_scraping()
             return
@@ -268,6 +312,183 @@ class Handler(BaseHTTPRequestHandler):
             if isinstance(item, dict) and item.get("gufid")
         ]
         self._send_json(200, results)
+
+    # ============================================================
+    # SYNCHRONOUS SCRAPING (POST /api/scraper/run)
+    # ============================================================
+
+    def _origin_allowed(self):
+        origin = self.headers.get("Origin")
+        host = self.headers.get("Host") or ""
+        return not origin or urlparse(origin).netloc == host
+
+    def _read_json_body(self, required=True):
+        """Return (payload, error_message)."""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        if length <= 0:
+            return (None, "empty body") if required else ({}, None)
+        if length > MAX_EDIT_BODY:
+            return None, "invalid body size"
+        raw = self.rfile.read(length)
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return None, "invalid JSON"
+        if not isinstance(payload, dict):
+            return None, "invalid JSON"
+        return payload, None
+
+    def _start_stream(self):
+        self.send_response(200)
+        self.send_header(
+            "Content-Type", "application/x-ndjson; charset=utf-8"
+        )
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Accel-Buffering", "no")
+        self.send_header("Transfer-Encoding", "chunked")
+        self.end_headers()
+
+    def _write_event(self, event):
+        if self._stream_broken:
+            return
+        body = json.dumps(event, ensure_ascii=False).encode("utf-8") + b"\n"
+        try:
+            self.wfile.write(b"%X\r\n" % len(body))
+            self.wfile.write(body)
+            self.wfile.write(b"\r\n")
+            self.wfile.flush()
+        except OSError as exc:
+            # Browser closed the page: the scrape still runs to the end,
+            # only the live log is dropped.
+            self._stream_broken = True
+            self.log_message("scraper stream closed: %s", exc)
+
+    def _end_stream(self):
+        if self._stream_broken:
+            self.close_connection = True
+            return
+        try:
+            self.wfile.write(b"0\r\n\r\n")
+            self.wfile.flush()
+        except OSError:
+            self.close_connection = True
+
+    def _read_scraping_target(self, name, payload):
+        """GUIDs and label of one scraping. The stored values win, so the
+        request cannot scrape another search than the selected one."""
+        stored = {}
+        try:
+            with open(
+                os.path.join(DATA_DIR, f"data_{name}.json"),
+                "r",
+                encoding="utf-8",
+            ) as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                stored = data
+        except (OSError, json.JSONDecodeError):
+            stored = {}
+
+        occupation_guid = (
+            stored.get("occupation_guid") or payload.get("occupation_guid") or ""
+        )
+        location_guid = (
+            stored.get("location_guid") or payload.get("location_guid") or ""
+        )
+        if not occupation_guid or not location_guid:
+            return None
+
+        return {
+            "occupation_guid": str(occupation_guid),
+            "location_guid": str(location_guid),
+            "label": str(stored.get("label") or payload.get("label") or ""),
+        }
+
+    def _handle_scraper_run(self):
+        """Run scraper.py and answer only once it is finished.
+
+        The response is streamed (one NDJSON line per real scraper event) so
+        the terminal follows the run, but the request stays open and blocking
+        for the whole duration: no task, queue or job is created.
+        """
+        if not self._origin_allowed():
+            self._send_json(403, {"error": "origin refused"})
+            return
+
+        payload, error = self._read_json_body(required=False)
+        if error:
+            self._send_json(400, {"error": error})
+            return
+
+        name = str(payload.get("name") or "").strip()
+        if not SCRAPING_NAME.fullmatch(name):
+            self._send_json(
+                400,
+                {"error": "Sélectionnez un scraping précis à actualiser."},
+            )
+            return
+
+        target = self._read_scraping_target(name, payload)
+        if target is None:
+            self._send_json(
+                404, {"error": "Recherche inconnue ou incomplète : " + name}
+            )
+            return
+
+        if not _scraper_lock.acquire(blocking=False):
+            self._send_json(
+                409, {"error": "Un scraping est déjà en cours."}
+            )
+            return
+
+        try:
+            self._run_scraper(
+                name, target, refresh=bool(payload.get("refresh"))
+            )
+        finally:
+            _scraper_lock.release()
+
+    def _run_scraper(self, name, target, refresh):
+        self.log_message("scraper run started for %s", name)
+        self._start_stream()
+        reporter = StreamReporter(self)
+
+        try:
+            summary = scraper.run_scrape(
+                occupation_guid=target["occupation_guid"],
+                location_guid=target["location_guid"],
+                base=name,
+                label=target["label"],
+                refresh=refresh,
+                reporter=reporter,
+                # The user already confirmed in the web interface.
+                confirm=lambda question: True,
+            )
+        except Exception as exc:
+            self.log_message("scraper run failed for %s: %s", name, exc)
+            self._write_event({
+                "type": "error",
+                "message": str(exc) or exc.__class__.__name__,
+                "details": traceback.format_exc(limit=8),
+            })
+            self._end_stream()
+            return
+
+        self.log_message(
+            "scraper run finished for %s: %s offer(s), %s new, %s modified, "
+            "%s error(s) in %ss",
+            name,
+            summary.get("total_offres"),
+            summary.get("nouvelles"),
+            summary.get("modifiees"),
+            summary.get("erreurs"),
+            summary.get("duration_seconds"),
+        )
+        self._write_event({"type": "done", "result": summary})
+        self._end_stream()
 
     def _handle_delete_scraping(self):
         """Move all files for a scraping to trash."""

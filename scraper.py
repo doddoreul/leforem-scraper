@@ -48,7 +48,10 @@ HEADERS = {
     "Referer": "https://www.leforem.be/recherche-offres/resultat-recherche",
 }
 
-DATA_DIR = "data"
+# Absolute so the scraper can also be started from the web server, whatever
+# the current working directory is.
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
 SCRAPES_FILE = os.path.join(DATA_DIR, "historique_scrapes.json")
 BLACKLIST_FILE = os.path.join(DATA_DIR, "blacklist.json")
 VERSION = 1
@@ -508,6 +511,7 @@ def build_offer(detail, published_on=""):
 
     # Add content hash for change detection
     offer["content_hash"] = core.compute_content_hash(offer)
+    offer["hash_rule"] = core.CONTENT_HASH_RULE
 
     # Add timestamps - only set first_seen_at if not already present
     now = core.now_iso_timestamp()
@@ -523,7 +527,37 @@ def build_offer(detail, published_on=""):
 # OFFER SEARCH
 # ============================================================
 
-def search_offers(session, limit=None, occupation_guid=None, location_guid=None):
+# Fields of a search result that change without the offer being modified:
+# `publication` is a relative text ("Publié hier" becomes "Il y a 3 jours")
+# and `logo` is a file id the employer can renew at any time. Everything else
+# describes the offer, so anything new appearing there means a real change.
+LISTING_VOLATILE_FIELDS = frozenset({"publication", "logo", "id"})
+
+
+def listing_hash(entry):
+    """SHA-256 of one search result, i.e. of the summary of the offer.
+
+    Phase 1 of a run (the search) already knows every offer of the query.
+    Comparing this hash with the one stored by the previous run tells, before
+    opening anything, whether the summary changed. Phase 2 then downloads the
+    detail of the new offers and of the offers whose summary changed, and only
+    those.
+    """
+    stable = {
+        key: value
+        for key, value in entry.items()
+        if key not in LISTING_VOLATILE_FIELDS
+    }
+    return core.compute_hash(stable)
+
+def search_offers(session, limit=None, occupation_guid=None, location_guid=None,
+                  log=print, progress=None):
+    """List the offers matching one search.
+
+    `log` and `progress` are the two reporting hooks used to follow the run
+    from the terminal or from the web interface; they default to stdout so the
+    command-line behaviour is unchanged.
+    """
     payload = {
         "filtres": [],
         "filtresCodifies": [],
@@ -542,7 +576,9 @@ def search_offers(session, limit=None, occupation_guid=None, location_guid=None)
 
     while True:
         url = f"{SEARCH_URL_BASE}?page={page}&row={ROW}"
-        print(f"Search page {page}...")
+        log(f"Search page {page}...")
+        if progress is not None:
+            progress(page)
 
         throttle()
         response = session.post(url, json=payload, timeout=30)
@@ -553,7 +589,7 @@ def search_offers(session, limit=None, occupation_guid=None, location_guid=None)
         total = data.get("total", 0)
         page_count = data.get("pageCount") or 1
 
-        print(f"  -> {len(results)} result(s) (total: {total})")
+        log(f"  -> {len(results)} result(s) (total: {total})")
 
         for offer in results:
             if not isinstance(offer, dict):
@@ -565,6 +601,7 @@ def search_offers(session, limit=None, occupation_guid=None, location_guid=None)
             offers.append({
                 "number": number,
                 "published_on": clean_text(offer.get("publication")),
+                "listing_hash": listing_hash(offer),
             })
 
             if limit is not None and len(offers) >= limit:
@@ -578,7 +615,7 @@ def search_offers(session, limit=None, occupation_guid=None, location_guid=None)
 
         page += 1
 
-    print(f"\nOffers retained: {len(offers)}")
+    log(f"\nOffers retained: {len(offers)}")
     return offers
 
 
@@ -752,6 +789,36 @@ def now_iso_timestamp():
 
 
 # ============================================================
+# RUN REPORTING
+# ============================================================
+
+class ConsoleReporter:
+    """Default reporter: writes to stdout (command-line behaviour)."""
+
+    def log(self, message=""):
+        print(message)
+
+    def progress(self, done, total):
+        sys.stdout.write(
+            "\rFetching details: " + draw_progress(done, total)
+        )
+        sys.stdout.flush()
+
+    def progress_done(self):
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+
+
+def ask_confirmation(question):
+    """Interactive confirmation used when a scrape starts from a terminal."""
+    try:
+        answer = input(f"{question} (O/n) ").strip().lower()
+    except EOFError:
+        return True
+    return answer in ("", "y", "yes", "o", "oui")
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
@@ -797,15 +864,44 @@ def main():
     if args.limit is not None and args.limit <= 0:
         parser.error("--limit must be a positive integer")
 
+    run_scrape(
+        occupation_guid=args.occupation_guid,
+        location_guid=args.location_guid,
+        base=args.base,
+        label=args.label,
+        limit=args.limit,
+        refresh=args.refresh,
+    )
+
+
+def run_scrape(occupation_guid, location_guid, base="", label="", limit=None,
+               refresh=False, reporter=None, confirm=None):
+    """Run one complete scrape and return its summary.
+
+    The call is blocking: it only returns once every file has been written.
+    `reporter` receives the real scraper events (see ConsoleReporter) and
+    `confirm` asks whether the newly found offers should be downloaded. Both
+    are injected so the same code serves the CLI and the web server.
+    """
+    reporter = reporter or ConsoleReporter()
+    log = reporter.log
+    confirm = confirm or ask_confirmation
+
+    if limit is not None and limit <= 0:
+        raise ValueError("--limit must be a positive integer")
+
     # Generate base_name from GUIDs (first 8 chars each) unless overridden.
-    if args.base:
-        base_name = re.sub(r"[^A-Za-z0-9_-]+", "-", args.base).strip("-")
+    if base:
+        base_name = re.sub(r"[^A-Za-z0-9_-]+", "-", base).strip("-")
     else:
-        occ8 = args.occupation_guid[:8]
-        loc8 = args.location_guid[:8]
+        occ8 = occupation_guid[:8]
+        loc8 = location_guid[:8]
         base_name = f"{occ8}-{loc8}"
 
     data_file, history_file = scraper_files(base_name)
+    scrapes_file = os.path.join(DATA_DIR, "historique_scrapes.json")
+    blacklist_file = os.path.join(DATA_DIR, "blacklist.json")
+    started_at = time.monotonic()
     details_file_path = details_file(base_name)
 
     now = now_iso_timestamp()
@@ -827,44 +923,49 @@ def main():
         if isinstance(entry, dict) and clean_text(entry.get("number"))
     }
 
-    scrapes = core.read_scrape_history(SCRAPES_FILE)
+    scrapes = core.read_scrape_history(scrapes_file)
 
     previous_details = read_details(details_file_path)
 
-    blacklist = read_blacklist()
+    blacklist = read_blacklist(blacklist_file)
     if blacklist:
-        print(f"Offers tracked as missing: {len(blacklist)}")
-        if args.refresh:
-            print("  (--refresh: attempting them again)")
+        log(f"Offers tracked as missing: {len(blacklist)}")
+        if refresh:
+            log("  (--refresh: attempting them again)")
 
     if base_name:
-        print(f"Scrape: {base_name}")
-    if args.label:
-        print(f"Label: {args.label}")
-    print(f"Files: {data_file}, {history_file}")
-    print(f"Details: {details_file_path}")
-    print(f"Scrape history: {SCRAPES_FILE}")
+        log(f"Scrape: {base_name}")
+    if label:
+        log(f"Label: {label}")
+    log(f"Files: {data_file}, {history_file}")
+    log(f"Details: {details_file_path}")
+    log(f"Scrape history: {scrapes_file}")
 
-    if args.limit is not None:
-        print(f"Limit requested: {args.limit} offer(s)")
+    if limit is not None:
+        log(f"Limit requested: {limit} offer(s)")
     else:
-        print("No limit: fetching every offer.")
-    print()
+        log("No limit: fetching every offer.")
+    log()
 
-    if args.refresh:
-        print("--refresh mode: every offer is downloaded again.")
+    if refresh:
+        log("--refresh mode: every offer is downloaded again.")
     else:
-        print("Only the offers missing from the last scrape are downloaded.")
-    print()
+        log(
+            "Only the new offers, the offers whose summary changed and the "
+            "previously failed ones are downloaded."
+        )
+    log()
 
     session = requests.Session()
     session.headers.update(HEADERS)
 
+    log(f"Connecting to the Forem API...")
     search_results = search_offers(
         session,
-        limit=args.limit,
-        occupation_guid=args.occupation_guid,
-        location_guid=args.location_guid,
+        limit=limit,
+        occupation_guid=occupation_guid,
+        location_guid=location_guid,
+        log=log,
     )
 
     new_count = sum(
@@ -872,42 +973,74 @@ def main():
         if entry["number"] not in previous_numbers
     )
 
-    if new_count > 0 and not args.refresh:
-        answer = input(
+    if new_count > 0 and not refresh:
+        if not confirm(
             f"{new_count} nouvelles annonces trouvées, "
-            "souhaitez-vous les scraper? (O/n) "
-        ).strip().lower()
-        if answer not in ("", "y", "yes", "o", "oui"):
-            print("Annulation. Les fichiers existants sont conservés.")
-            return
+            "souhaitez-vous les scraper?"
+        ):
+            log("Annulation. Les fichiers existants sont conservés.")
+            return {
+                "status": "cancelled",
+                "name": base_name,
+                "label": label,
+                "total_offres": len(previous_offers),
+                "duration_seconds": round(time.monotonic() - started_at, 1),
+            }
 
     new_offers = []
     new_details = {}
     fetched_count = 0
     cached_count = 0
+    errors = []
+    changed_summaries = []
 
     if search_results:
-        # Default run: only the offers that were not in the previous
-        # scrape are downloaded, the known ones are kept from the cache.
+        # Phase 1 gave the summary of every offer of the search. Phase 2 only
+        # opens the offers that are new, the ones whose summary changed since
+        # the previous run, and the ones that previously failed. The others
+        # are kept from the cache without a single request.
         # --refresh downloads every offer again.
         tasks = []
         for index, entry in enumerate(search_results, start=1):
             number = entry["number"]
             known = number in previous_by_number
-            if known and not args.refresh:
-                tasks.append((index, entry, True))
-            elif core.should_fetch(number, blacklist, force=args.refresh):
+            if known and not refresh:
+                previous_listing = clean_text(
+                    previous_by_number[number].get("listing_hash")
+                )
+                current_listing = clean_text(entry.get("listing_hash"))
+                if not previous_listing:
+                    # First run storing the summaries: the baseline is saved
+                    # without downloading the offers again.
+                    tasks.append((index, entry, True))
+                    continue
+                if current_listing and current_listing != previous_listing:
+                    changed_summaries.append(number)
+                else:
+                    tasks.append((index, entry, True))
+                    continue
+            if core.should_fetch(number, blacklist, force=refresh):
                 tasks.append((index, entry))
             else:
                 tasks.append((index, entry, True))
         to_fetch = len([t for t in tasks if len(t) == 2])
         cached_count = len(tasks) - to_fetch
-        print(
+        log(
             f"\nFetching details ({to_fetch} offer(s)) "
             f"with {MAX_WORKERS} parallel workers..."
         )
         if cached_count:
-            print(f"  ({cached_count} offer(s) kept from cache)")
+            log(f"  ({cached_count} offer(s) kept from cache)")
+        if changed_summaries:
+            preview = ", ".join(changed_summaries[:5])
+            more = (
+                f" (+{len(changed_summaries) - 5})"
+                if len(changed_summaries) > 5 else ""
+            )
+            log(
+                f"  ({len(changed_summaries)} summary(ies) changed since the "
+                f"last run: {preview}{more})"
+            )
 
         def process_entry(task):
             index, entry = task[:2]
@@ -945,6 +1078,10 @@ def main():
 
         done = 0
         issue_lines = []
+        # The progress counts the offers actually downloaded: the cached ones
+        # are not requests to Forem, so counting them would make an
+        # incremental run look like a full one.
+        fetch_total = to_fetch
 
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=MAX_WORKERS
@@ -971,23 +1108,26 @@ def main():
                         cached["is_new"] = False
                         new_offers.append(cached)
                     issue_lines.append(f"  Offer {number}: {outcome}")
-                done += 1
-                sys.stdout.write(
-                    "\rFetching details: "
-                    + draw_progress(done, len(tasks))
-                )
-                sys.stdout.flush()
+                    errors.append(f"Offer {number}: {outcome}")
+                if outcome != "cached":
+                    done += 1
+                    reporter.progress(done, fetch_total)
 
-        sys.stdout.write("\n")
-        sys.stdout.flush()
+        reporter.progress_done()
         for line in issue_lines:
-            print(line)
+            log(line)
 
     if not new_offers and not search_results:
-        print("\nNo offer found.")
+        log("\nNo offer found.")
 
     # Hash-based change detection and diff generation
-    for offer in new_offers:
+    modified_count = 0
+    summaries_stored = 0
+    listing_hashes = {
+        entry["number"]: entry.get("listing_hash") or ""
+        for entry in search_results
+    }
+    for position, offer in enumerate(new_offers):
         if not isinstance(offer, dict):
             continue
         number = clean_text(offer.get("number"))
@@ -997,42 +1137,58 @@ def main():
         previous = previous_by_number.get(number)
         new_hash = offer.get("content_hash")
 
+        # Every offer keeps the summary hash of this run: it is the reference
+        # the next run compares against before opening the offer.
+        current_listing = listing_hashes.get(number, "")
+        if current_listing:
+            offer["listing_hash"] = current_listing
+            if previous is not None and not previous.get("listing_hash"):
+                summaries_stored += 1
+        if offer.get("hash_rule") != core.CONTENT_HASH_RULE:
+            offer["hash_rule"] = core.CONTENT_HASH_RULE
+
         if previous is not None:
             # Existing offer - check for changes
             previous_hash = previous.get("content_hash")
-            if previous_hash and new_hash != previous_hash:
-                # Content changed - compute diff
+            comparable = (
+                previous.get("hash_rule") == core.CONTENT_HASH_RULE
+            )
+            if previous_hash and comparable and new_hash != previous_hash:
+                # Content changed - compute diff, then replace the stored
+                # data and keep a single version of the offer.
+                stamp = core.now_iso_timestamp()
                 offer["diff"] = core.compute_diff(previous, offer)
                 offer["modified"] = True
-                offer["modified_at"] = core.now_iso_timestamp()
-                offer["content_hash"] = new_hash  # Update to new hash
+                offer["content_hash"] = new_hash
+                offer["modified_at"] = stamp
+                offer["last_seen_at"] = stamp
+                offer["last_scraped_at"] = stamp
                 # Preserve original first_seen_at
                 if "first_seen_at" in previous:
                     offer["first_seen_at"] = previous["first_seen_at"]
-                # Update timestamps
-                offer["modified_at"] = core.now_iso_timestamp()
-                offer["last_seen_at"] = core.now_iso_timestamp()
-                offer["last_scraped_at"] = core.now_iso_timestamp()
-                # Preserve user data from previous offer
-                offer = core.preserve_user_data(previous, offer)
+                modified_count += 1
             else:
                 # No content change
                 offer["modified"] = False
                 offer["content_hash"] = previous_hash or new_hash
-                # Preserve existing timestamps and user data
+                offer["diff"] = {}
+                # Preserve existing timestamps
                 if "first_seen_at" in previous:
                     offer["first_seen_at"] = previous["first_seen_at"]
                 if "modified_at" in previous:
                     offer["modified_at"] = previous["modified_at"]
                 offer["last_seen_at"] = core.now_iso_timestamp()
                 offer["last_scraped_at"] = core.now_iso_timestamp()
-                offer = core.preserve_user_data(previous, offer)
+            # User data (favorite, status, notes, tags…) lives apart from
+            # the Forem payload and is carried over to the new version.
+            new_offers[position] = core.preserve_user_data(previous, offer)
         else:
             # New offer - set initial timestamps
+            stamp = core.now_iso_timestamp()
             if "first_seen_at" not in offer:
-                offer["first_seen_at"] = core.now_iso_timestamp()
-            offer["last_seen_at"] = core.now_iso_timestamp()
-            offer["last_scraped_at"] = core.now_iso_timestamp()
+                offer["first_seen_at"] = stamp
+            offer["last_seen_at"] = stamp
+            offer["last_scraped_at"] = stamp
             offer["modified"] = False
             # No diff for new offers
             offer["diff"] = {}
@@ -1060,12 +1216,9 @@ def main():
             offer["reappeared"] = True
 
     # Apply 12-month temporal filter
+    offers_before_filter = len(new_offers)
     new_offers = core.filter_recent_offers(new_offers, max_age_days=365)
-
-    # Build métier index for the current scrape
-    metier_index = core.build_metier_index(new_offers)
-    # Store metier index in the data for later use
-    # (could be saved to a separate file or included in the data file)
+    dropped_count = offers_before_filter - len(new_offers)
 
     update_history(
         previous_offers, new_offers, history, now
@@ -1075,29 +1228,30 @@ def main():
     entry = {
         "timestamp": now,
         "search": base_name,
-        "label": args.label,
+        "label": label,
         **summary,
     }
     core.record_scrape(scrapes, entry)
 
-    # Build métier index for the current scrape
+    # Métier index, written with the data file so the search stays able to
+    # filter offers by métier.
     metier_index = core.build_metier_index(new_offers)
 
     data = {
         "version": VERSION,
         "scrape_timestamp": now,
         "name": base_name,
-        "label": args.label,
-        "occupation_guid": args.occupation_guid,
-        "location_guid": args.location_guid,
+        "label": label,
+        "occupation_guid": occupation_guid,
+        "location_guid": location_guid,
         "offers": new_offers,
         "metier_index": metier_index,
     }
 
     write_json_atomically(history_file, history)
-    write_json_atomically(SCRAPES_FILE, scrapes)
+    write_json_atomically(scrapes_file, scrapes)
     write_json_atomically(data_file, data)
-    write_blacklist(blacklist)
+    write_blacklist(blacklist, blacklist_file)
 
     keep_details_numbers = {
         clean_text(o.get("number"))
@@ -1115,19 +1269,62 @@ def main():
         "details": final_details,
     })
 
-    print()
-    print(
+    log()
+    log(
         f"Done: {len(new_offers)} offer(s) "
         f"({fetched_count} fetched, {cached_count} from cache)"
     )
-    print(
+    log(
         "States: {nouvelles} new, {reapparues} back, "
         "{inchangees} unchanged, {supprimees} deleted".format(**summary)
     )
-    print(
+    log(f"Change detection: {modified_count} offer(s) modified")
+    if changed_summaries:
+        log(
+            f"Summaries changed: {len(changed_summaries)} offer(s) opened "
+            "again to compare the detail"
+        )
+    if summaries_stored:
+        log(
+            f"Summary hashes stored: {summaries_stored} offer(s) "
+            "(reference for the next run)"
+        )
+    if dropped_count:
+        log(
+            f"Temporal filter (12 months): {dropped_count} offer(s) ignored"
+        )
+    log(f"Métiers indexed: {len(metier_index)}")
+    if errors:
+        log(f"Errors: {len(errors)} offer(s) failed, data kept")
+    log(
         f"Files written: {data_file}, {history_file}, "
-        f"{SCRAPES_FILE}, {details_file_path}"
+        f"{scrapes_file}, {details_file_path}"
     )
+
+    return {
+        "status": "done",
+        "name": base_name,
+        "label": label,
+        "scrape_timestamp": now,
+        "occupation_guid": occupation_guid,
+        "location_guid": location_guid,
+        "total_offres": len(new_offers),
+        "traitees": offers_before_filter,
+        "nouvelles": summary["nouvelles"],
+        "reapparues": summary["reapparues"],
+        "inchangees": summary["inchangees"],
+        "supprimees": summary["supprimees"],
+        "modifiees": modified_count,
+        "resumes_modifies": len(changed_summaries),
+        "resumes_enregistres": summaries_stored,
+        "erreurs": len(errors),
+        "erreur_details": errors,
+        "hors_periode": dropped_count,
+        "metiers": len(metier_index),
+        "fetched": fetched_count,
+        "cached": cached_count,
+        "duration_seconds": round(time.monotonic() - started_at, 1),
+    }
 
 
 if __name__ == "__main__":
