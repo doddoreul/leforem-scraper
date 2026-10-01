@@ -63,6 +63,13 @@ OFFERS = [
         "email": "jobs@example.be",
         "is_new": True,
         "offer_state": "new",
+        "diff": {
+            "contract_type": ["CDD", "CDI"],
+            "description": [
+                "<p>Tien de poste au sein d'une equipe de jour.</p>",
+                "<p>Tien de poste au sein d'une equipe de nuit.</p>",
+            ],
+        },
     },
     {
         "number": "1903",
@@ -82,6 +89,7 @@ OFFERS = [
         "email": "",
         "is_new": False,
         "offer_state": "old",
+        "diff": {},
     },
 ]
 
@@ -148,6 +156,49 @@ COMPANIES = {
     },
     "stats": {"total": 1, "avecEmail": 1},
 }
+
+# Loads the offer sheet in an iframe and clicks its diff button, so a
+# --dump-dom run shows what the user gets after asking for the diff.
+DIFF_PROBE = """<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<iframe id="frame" src="/detail.html?number=1902&base=metier_liege"
+        width="900" height="600"></iframe>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\\n"); }
+
+const frame = document.getElementById("frame");
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+for (let i = 0; i < 60; i += 1) {
+    await sleep(250);
+    const doc = frame.contentDocument;
+    const toggle = doc && doc.querySelector(".diff-toggle");
+    if (!toggle) continue;
+
+    const body = doc.querySelector(".diff-body");
+    log("button=" + toggle.textContent.trim());
+    log("hiddenBefore=" + body.classList.contains("hidden"));
+    log("blocksBefore=" + doc.querySelectorAll(".diff-block").length);
+
+    toggle.click();
+    await sleep(120);
+    log("buttonAfter=" + toggle.textContent.trim());
+    log("hiddenAfter=" + body.classList.contains("hidden"));
+    log("blocksAfter=" + doc.querySelectorAll(".diff-block").length);
+    log("fields=" + Array.from(doc.querySelectorAll(".diff-field"))
+        .map(n => n.textContent).join("|"));
+    log("oldText=" + (doc.querySelector(".diff-old .diff-text") || {}).textContent);
+    log("newText=" + (doc.querySelector(".diff-new .diff-text") || {}).textContent);
+    log("DIFF-OK");
+    break;
+}
+log("done");
+</script>
+</body></html>
+"""
 
 # Imports every module and calls the shared helpers: the import errors a
 # --dump-dom run cannot show are reported here.
@@ -219,8 +270,8 @@ class ProbeHandler(server.Handler):
     """The real handler, plus the page that exercises every module."""
 
     def _serve_file(self, path):
-        if path == "/probe.html":
-            body = PROBE.encode("utf-8")
+        if path in ("/probe.html", "/diff-probe.html"):
+            body = (PROBE if path == "/probe.html" else DIFF_PROBE).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -310,6 +361,32 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         self.assertIn("imported=12", report)
         self.assertNotIn("PROBE-FAIL", report)
 
+    def report_of(self, path):
+        dom = self.dump(path)
+        start = dom.find('<pre id="out">')
+        end = dom.find("</pre>", start)
+        self.assertGreater(start, 0, "la sonde n'a pas rendu")
+        return dom[start:end]
+
+    def test_the_diff_appears_when_asked(self):
+        report = self.report_of("/diff-probe.html")
+
+        self.assertIn("DIFF-OK", report)
+        self.assertIn("button=Afficher le diff", report)
+        self.assertIn("hiddenBefore=true", report)
+        self.assertIn("blocksBefore=0", report)
+        self.assertIn("buttonAfter=Masquer le diff", report)
+        self.assertIn("hiddenAfter=false", report)
+        self.assertIn("blocksAfter=2", report)
+        self.assertIn("fields=Description|Type de contrat", report)
+        # The HTML of the stored descriptions is shown as text.
+        self.assertIn(
+            "oldText=Tien de poste au sein d'une equipe de jour.", report
+        )
+        self.assertIn(
+            "newText=Tien de poste au sein d'une equipe de nuit.", report
+        )
+
 
 class TestPagesInBrowser(BrowserPagesTestCase):
     def assertDrawn(self, path, markers):
@@ -375,6 +452,19 @@ class TestPagesInBrowser(BrowserPagesTestCase):
             "Intéressé",
             "Voir l'offre sur Le Forem",
         ])
+
+    def test_the_diff_is_hidden_until_asked(self):
+        dom = self.dump("/detail.html?number=1902&base=metier_liege")
+        self.assertIn("Afficher le diff", dom)
+        self.assertIn("Modifications (2)", dom)
+        # The offer is shown, not the diff.
+        self.assertNotIn("Masquer le diff", dom)
+        self.assertNotIn('class="diff-block"', dom)
+
+    def test_an_offer_without_changes_has_no_diff_button(self):
+        dom = self.dump("/detail.html?number=1903&base=metier_liege")
+        self.assertNotIn("diff-card", dom)
+        self.assertNotIn("Afficher le diff", dom)
 
     def test_no_page_reports_a_missing_module(self):
         for page in ("", "/insights.html", "/companies.html", "/detail.html"):

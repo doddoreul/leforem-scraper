@@ -116,10 +116,17 @@ function main() {
 }
 
 function loadEntry(entry, root) {
+    // The listing carries the diff (what changed since the previous scrape),
+    // the detail file carries the full Forem payload. Both are needed.
     const detailsPromise = fetchJsonOrNull(entry.details);
+    const offersPromise = entry.file
+        ? fetchJsonOrNull(entry.file)
+        : Promise.resolve(null);
 
-    detailsPromise
-        .then(detailsData => {
+    Promise.all([detailsPromise, offersPromise])
+        .then(results => {
+            const detailsData = results[0];
+            const offersData = results[1];
             const store = (detailsData && detailsData.details)
                 ? detailsData.details : null;
             const payload = store ? store[numberStr] : null;
@@ -133,12 +140,28 @@ function loadEntry(entry, root) {
                 return;
             }
 
-            renderFiche(root, payload);
+            renderFiche(root, payload, findOffer(offersData));
         })
         .catch(err => {
             renderNotAvailable(root, "Impossible de charger les données : "
                 + err.message);
         });
+}
+
+/**
+ * The offer's row in the listing, where the scraper stores the diff.
+ * @param {Object|null} offersData the data_*.json payload
+ * @returns {{diff: Object, modifiedAt: string}|null}
+ */
+function findOffer(offersData) {
+    const offers = (offersData && Array.isArray(offersData.offers))
+        ? offersData.offers : [];
+    const offer = offers.find(item => str(item && item.number) === numberStr);
+    if (!offer) return null;
+    return {
+        diff: (offer.diff && typeof offer.diff === "object") ? offer.diff : {},
+        modifiedAt: str(offer.modified_at),
+    };
 }
 
 function renderNotAvailable(root, message) {
@@ -181,7 +204,7 @@ function renderNotAvailable(root, message) {
 // FICHE
 // ============================================================
 
-function renderFiche(root, payload) {
+function renderFiche(root, payload, offer) {
     root.innerHTML = "";
 
     const number = str(payload.numero || payload.idOffreEmploi || numberStr);
@@ -273,6 +296,11 @@ function renderFiche(root, payload) {
 
     const mainCol = el("div", "detail-main");
     layout.appendChild(mainCol);
+
+    // Ce que le scraping a changé depuis la version précédente, sur
+    // demande seulement : la fiche montre d'abord l'annonce.
+    const diffCard = buildDiffCard(offer);
+    if (diffCard) mainCol.appendChild(diffCard);
 
     const sideCol = el("aside", "detail-side");
     layout.appendChild(sideCol);
@@ -497,6 +525,124 @@ function buildProfile(payload) {
     const card = el("section", "card");
     card.appendChild(el("h2", "card-title", "Profil recherché"));
     blocks.forEach(block => card.appendChild(block));
+    return card;
+}
+
+// ============================================================
+// DIFF AVEC LA VERSION PRÉCÉDENTE
+// core.compute_diff() écrit dans chaque annonce du listing un objet
+// { champ: [avant, après] }. La fiche affiche l'annonce ; les
+// modifications restent masquées jusqu'à ce que l'utilisateur les
+// demande, puis se remplissent à la première ouverture.
+// ============================================================
+
+const DIFF_FIELD_LABELS = {
+    number: "Numéro",
+    offer_title: "Titre de l'offre",
+    description: "Description",
+    summary: "Résumé",
+    company: "Société",
+    email: "E-mail",
+    url: "Lien",
+    contract_type: "Type de contrat",
+    schedule: "Régime de travail",
+    pay: "Rémunération",
+    salary: "Salaire",
+    location: "Lieu",
+    metier: "Métier",
+    published_on: "Publié le",
+    date_publication: "Date de publication",
+    date_fin_diffusion: "Fin de diffusion",
+};
+
+// Champs dont la valeur arrive en HTML depuis Forem.
+const DIFF_HTML_FIELDS = ["description", "summary"];
+
+/**
+ * A value of the diff, as plain text ready to display.
+ * @param {*} value
+ * @returns {string}
+ */
+function diffValue(value) {
+    if (value === undefined || value === null) return "";
+    const text = String(value);
+    if (DIFF_HTML_FIELDS.some(field => text.indexOf("<") !== -1)) {
+        const block = document.createElement("div");
+        block.innerHTML = scrubHtml(text);
+        return (block.textContent || "").replace(/\s+/g, " ").trim();
+    }
+    return text.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * @param {Object} diff the { champ: [avant, après] } object
+ * @returns {Array<{field: string, label: string, before: string, after: string}>}
+ */
+function diffRows(diff) {
+    if (!diff || typeof diff !== "object") return [];
+    return Object.keys(diff).map(field => {
+        const pair = diff[field];
+        return {
+            field: field,
+            label: DIFF_FIELD_LABELS[field] || field,
+            before: diffValue(Array.isArray(pair) ? pair[0] : ""),
+            after: diffValue(Array.isArray(pair) ? pair[1] : ""),
+        };
+    }).sort((a, b) => a.label.localeCompare(b.label, "fr"));
+}
+
+function buildDiffRow(row) {
+    const block = el("div", "diff-block");
+    block.appendChild(el("h3", "diff-field", row.label));
+
+    const before = el("div", "diff-old");
+    before.appendChild(el("span", "diff-tag", "Avant"));
+    before.appendChild(el("span", "diff-text", row.before || "(vide)"));
+
+    const after = el("div", "diff-new");
+    after.appendChild(el("span", "diff-tag", "Après"));
+    after.appendChild(el("span", "diff-text", row.after || "(vide)"));
+
+    block.appendChild(before);
+    block.appendChild(after);
+    return block;
+}
+
+/**
+ * @param {{diff: Object, modifiedAt: string}|null} offer
+ * @returns {HTMLElement|null} null when nothing changed
+ */
+function buildDiffCard(offer) {
+    const rows = offer ? diffRows(offer.diff) : [];
+    if (!rows.length) return null;
+
+    const card = el("section", "card diff-card");
+    card.appendChild(el("h2", "card-title",
+        "Modifications (" + rows.length + ")"));
+
+    const when = parseForemDate(offer.modifiedAt);
+    card.appendChild(el("p", "diff-meta", when
+        ? "Dernière modification : " + formatLongDate(when)
+        : "Dernière modification : " + str(offer.modifiedAt)));
+
+    const toggle = el("button", "btn btn-outline diff-toggle",
+        "Afficher le diff");
+    const body = el("div", "diff-body hidden");
+    body.setAttribute("aria-live", "polite");
+
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.addEventListener("click", function () {
+        const opening = body.classList.contains("hidden");
+        if (opening && !body.childElementCount) {
+            rows.forEach(row => body.appendChild(buildDiffRow(row)));
+        }
+        body.classList.toggle("hidden", !opening);
+        toggle.textContent = opening ? "Masquer le diff" : "Afficher le diff";
+        toggle.setAttribute("aria-expanded", opening ? "true" : "false");
+    });
+
+    card.appendChild(toggle);
+    card.appendChild(body);
     return card;
 }
 
