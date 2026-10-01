@@ -208,6 +208,16 @@ for (let i = 0; i < 60; i += 1) {
             + styleToggle.getAttribute("aria-pressed"));
         log("stored=" + (frame.contentWindow.localStorage
             .getItem("forem_plain_styles") || "absent"));
+
+        // And back on: the styles the employer pasted must return.
+        styleToggle.click();
+        await sleep(120);
+        const back = rich.querySelector("[style]");
+        log("restyled=" + (back ? back.getAttribute("style") : "none"));
+        log("styleButtonBack=" + styleToggle.textContent.trim() + "/"
+            + styleToggle.getAttribute("aria-pressed"));
+        log("storedBack=" + (frame.contentWindow.localStorage
+            .getItem("forem_plain_styles") || "absent"));
     }
 
     // --- The diff, before the button is used --------------------------
@@ -420,6 +430,18 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         self.assertNotIn("styledAfter=background-color", report)
         self.assertNotIn("styledAfter=font-family", report)
         self.assertNotIn("styledAfter=text-align", report)
+
+    def test_the_styles_come_back_when_asked_again(self):
+        report = self.report_of("/diff-probe.html")
+
+        # Second click restores exactly what Forem sent.
+        self.assertIn("styleButtonBack=Styles du texte : activés/false",
+                      report)
+        self.assertIn(
+            "restyled=color:rgb(89,89,89);background-color:rgb(255,255,255)",
+            report,
+        )
+        self.assertIn("storedBack=0", report)
 
     def test_the_diff_appears_when_asked(self):
         report = self.report_of("/diff-probe.html")

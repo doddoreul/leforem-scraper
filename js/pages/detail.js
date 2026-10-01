@@ -147,8 +147,16 @@ function setupStyleToggle(mainCol) {
     toggle.title = "Les couleurs, polices et fonds collés par l'employeur " +
         "peuvent rendre le texte illisible.";
 
+    // The backup survives the round trip: switching the styles off and on
+    // again has to give the page back exactly what Forem sent.
+    const saved = new Map();
+
     const apply = function (plain) {
-        styled.forEach(block => stripPresentationStyles(block));
+        if (plain) {
+            styled.forEach(block => stripPresentationStyles(block, saved));
+        } else {
+            restorePresentationStyles(saved);
+        }
         toggle.textContent = plain
             ? "Styles du texte : désactivés"
             : "Styles du texte : activés";
@@ -170,17 +178,20 @@ function setupStyleToggle(mainCol) {
 /**
  * Strip the presentation attributes an employer pasted along with the text.
  * Inline `style` attributes only: the tags themselves (<strong>, <u>, <em>)
- * carry meaning and are left alone.
+ * carry meaning and are left alone. The original attributes are kept in
+ * `saved` so the button can put them back.
  * @param {HTMLElement} block a node whose children carry the styles
+ * @param {Map<HTMLElement, string>} saved the first-strip backup
  * @returns {number} how many elements were cleaned
  */
-function stripPresentationStyles(block) {
+function stripPresentationStyles(block, saved) {
     let cleaned = 0;
     const nodes = [block].concat(Array.from(block.querySelectorAll("*")));
     nodes.forEach(node => {
         if (!node.getAttribute) return;
         const style = node.getAttribute("style");
         if (!style) return;
+        if (!saved.has(node)) saved.set(node, style);
 
         const kept = style.split(";")
             .map(decl => decl.trim())
@@ -192,10 +203,6 @@ function stripPresentationStyles(block) {
                 );
             });
 
-        if (kept.length === style.split(";").map(d => d.trim())
-            .filter(Boolean).length && kept.join("; ") === style) {
-            return;
-        }
         if (kept.length) {
             node.setAttribute("style", kept.join("; "));
         } else {
@@ -204,6 +211,16 @@ function stripPresentationStyles(block) {
         cleaned += 1;
     });
     return cleaned;
+}
+
+/**
+ * Put back the attributes a previous strip removed.
+ * @param {Map<HTMLElement, string>} saved the backup taken while stripping
+ */
+function restorePresentationStyles(saved) {
+    saved.forEach((style, node) => {
+        if (node.isConnected) node.setAttribute("style", style);
+    });
 }
 
 // ============================================================
