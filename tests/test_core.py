@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Unit tests for core.py (+ scraper.update_history pure logic).
+"""Unit tests for leforem_scraper.core (+ scraper.update_history pure logic).
 
 Runs offline on fictional data. No network, no real files.
 
@@ -16,8 +16,8 @@ sys.path.insert(
     0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
-import core
-import scraper
+from leforem_scraper import core
+from leforem_scraper import scraper
 
 
 def make_offer(number, title="Titre", company="Entreprise",

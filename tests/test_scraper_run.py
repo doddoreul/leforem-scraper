@@ -24,7 +24,8 @@ sys.path.insert(
     0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
-import scraper
+from leforem_scraper import config
+from leforem_scraper import scraper
 
 
 def iso_days_ago(days):
@@ -72,8 +73,8 @@ class RunScrapeTestCase(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self._saved = scraper.DATA_DIR
-        scraper.DATA_DIR = self.tmp.name
+        self._saved = config.DATA_DIR
+        config.DATA_DIR = self.tmp.name
 
         # The server never prompts: any read from stdin is a bug here.
         self._input = builtins.input
@@ -90,7 +91,6 @@ class RunScrapeTestCase(unittest.TestCase):
         scraper.search_offers = self._search_offers
         scraper.fetch_detail = self._fetch_detail
         scraper.get_session = lambda: None
-        scraper.DATA_DIR = self.tmp.name
 
         self.details = {}
         self.search = []
@@ -99,7 +99,7 @@ class RunScrapeTestCase(unittest.TestCase):
         self.fetched_numbers = []
 
     def tearDown(self):
-        scraper.DATA_DIR = self._saved
+        config.DATA_DIR = self._saved
         builtins.input = self._input
         for name, function in self._api.items():
             setattr(scraper, name, function)

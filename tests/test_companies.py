@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Unit tests for companies.py (employer index).
+"""Unit tests for py (employer index).
 
 Runs offline on fictional data. No network, no real files.
 
@@ -17,8 +17,19 @@ sys.path.insert(
     0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
-import companies
-import scraper
+from leforem_scraper import config
+from leforem_scraper import scraper
+from leforem_scraper.employers import (
+    build_index,
+    collapse_websites,
+    company_key,
+    compose_address,
+    emails_from_offer,
+    main,
+    normalize_url,
+    observe_offer,
+    refresh_index,
+)
 
 
 def write_data(directory, file_name, payload):
@@ -76,18 +87,11 @@ class TempDataDir(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.data_dir = self.tmp.name
-        self._saved = (
-            companies.DATA_DIR,
-            scraper.DATA_DIR,
-        )
-        companies.DATA_DIR = self.data_dir
-        scraper.DATA_DIR = self.data_dir
+        self._saved = config.DATA_DIR
+        config.DATA_DIR = self.data_dir
 
     def tearDown(self):
-        (
-            companies.DATA_DIR,
-            scraper.DATA_DIR,
-        ) = self._saved
+        config.DATA_DIR = self._saved
         self.tmp.cleanup()
 
     def seed(self, offers, details=None, history=None, base="test"):
@@ -110,24 +114,24 @@ class TempDataDir(unittest.TestCase):
 class TestKeys(unittest.TestCase):
     def test_whitespace_is_collapsed(self):
         self.assertEqual(
-            companies.company_key("  Start   People \n "), "Start People"
+            company_key("  Start   People \n "), "Start People"
         )
 
     def test_similar_names_stay_distinct(self):
         # No fuzzy matching: two different names, two entries.
         self.assertNotEqual(
-            companies.company_key("Accent"),
-            companies.company_key("ACCENT CONSTRUCT - Accent"),
+            company_key("Accent"),
+            company_key("ACCENT CONSTRUCT - Accent"),
         )
         self.assertNotEqual(
-            companies.company_key("Actief Interim Liege"),
-            companies.company_key("Actief Interim Wavre"),
+            company_key("Actief Interim Liege"),
+            company_key("Actief Interim Wavre"),
         )
 
     def test_case_is_preserved(self):
-        self.assertEqual(companies.company_key("Equans"), "Equans")
+        self.assertEqual(company_key("Equans"), "Equans")
         self.assertNotEqual(
-            companies.company_key("Equans"), companies.company_key("EQUANS")
+            company_key("Equans"), company_key("EQUANS")
         )
 
 
@@ -137,7 +141,7 @@ class TestEmails(unittest.TestCase):
         detail["descriptionJob"] = (
             "Ecrire a jobs@startpeople.be ou 04 220 97 40."
         )
-        emails = companies.emails_from_offer({}, detail)
+        emails = emails_from_offer({}, detail)
         self.assertEqual(
             emails, ["info@startpeople.be", "jobs@startpeople.be"]
         )
@@ -145,25 +149,25 @@ class TestEmails(unittest.TestCase):
     def test_summary_email_is_split_and_validated(self):
         offer = make_offer("1", email="a@b.be, c@d.be, pas-un-email")
         self.assertEqual(
-            companies.emails_from_offer(offer, {}),
+            emails_from_offer(offer, {}),
             ["a@b.be", "c@d.be"],
         )
 
     def test_postal_organisation_holding_an_email(self):
         detail = make_detail(postal={"organisation": "info@dhfields.be"})
         self.assertEqual(
-            companies.emails_from_offer({}, detail), ["info@dhfields.be"]
+            emails_from_offer({}, detail), ["info@dhfields.be"]
         )
 
     def test_postal_organisation_name_is_not_an_email(self):
         detail = make_detail(postal={"organisation": "DH Fields Service"})
-        self.assertEqual(companies.emails_from_offer({}, detail), [])
+        self.assertEqual(emails_from_offer({}, detail), [])
 
     def test_no_duplicates(self):
         detail = make_detail(email="info@startpeople.be")
         detail["descriptionJob"] = "Contact : info@startpeople.be."
         self.assertEqual(
-            companies.emails_from_offer(
+            emails_from_offer(
                 make_offer("1", email="info@startpeople.be"), detail
             ),
             ["info@startpeople.be"],
@@ -180,7 +184,7 @@ class TestAddresses(unittest.TestCase):
             "pays": "Belgique",
         }
         self.assertEqual(
-            companies.compose_address(postal),
+            compose_address(postal),
             "Avenue Eiffel 8, 1300 Wavre",
         )
 
@@ -188,7 +192,7 @@ class TestAddresses(unittest.TestCase):
         postal = {"street": "Rue de Cockerill", "numero": "44/46",
                   "codePostal": "4100", "municipalite": "Seraing"}
         self.assertEqual(
-            companies.compose_address(postal),
+            compose_address(postal),
             "Rue de Cockerill 44/46, 4100 Seraing",
         )
 
@@ -196,7 +200,7 @@ class TestAddresses(unittest.TestCase):
         postal = {"adresse": ["Zone Verte", "Batiment C"],
                   "codePostal": "4040", "municipalite": "Herstal"}
         self.assertEqual(
-            companies.compose_address(postal),
+            compose_address(postal),
             "Zone Verte, Batiment C, 4040 Herstal",
         )
 
@@ -204,46 +208,46 @@ class TestAddresses(unittest.TestCase):
         postal = {"street": "Rue de Paris", "codePostal": "75001",
                   "municipalite": "Paris", "pays": "France"}
         self.assertEqual(
-            companies.compose_address(postal), "Rue de Paris, 75001 Paris, France"
+            compose_address(postal), "Rue de Paris, 75001 Paris, France"
         )
 
     def test_not_a_dict(self):
-        self.assertEqual(companies.compose_address("nope"), "")
+        self.assertEqual(compose_address("nope"), "")
 
 
 class TestWebsites(unittest.TestCase):
     def test_only_the_domain_is_kept(self):
         self.assertEqual(
-            companies.normalize_url(
+            normalize_url(
                 "https://www.jobat.be/fr/emplois/electricien/job_6293847"
                 "?utm_source=forem&utm_medium=jobs#top"
             ),
             "https://www.jobat.be",
         )
         self.assertEqual(
-            companies.normalize_url("http://www.forumjobs.be/fr/vacature-2646675"),
+            normalize_url("http://www.forumjobs.be/fr/vacature-2646675"),
             "http://www.forumjobs.be",
         )
 
     def test_host_is_lowercased(self):
         self.assertEqual(
-            companies.normalize_url("https://WWW.DHFIELDS.be/Be/"), "https://www.dhfields.be"
+            normalize_url("https://WWW.DHFIELDS.be/Be/"), "https://www.dhfields.be"
         )
 
     def test_bare_domain_gets_a_scheme(self):
         self.assertEqual(
-            companies.normalize_url("dhfields.be/offres"), "https://dhfields.be"
+            normalize_url("dhfields.be/offres"), "https://dhfields.be"
         )
 
     def test_rejected_values(self):
-        self.assertEqual(companies.normalize_url(""), "")
-        self.assertEqual(companies.normalize_url("appelez nous"), "")
-        self.assertEqual(companies.normalize_url("mailto:info@dhfields.be"), "")
-        self.assertEqual(companies.normalize_url("javascript:alert(1)"), "")
+        self.assertEqual(normalize_url(""), "")
+        self.assertEqual(normalize_url("appelez nous"), "")
+        self.assertEqual(normalize_url("mailto:info@dhfields.be"), "")
+        self.assertEqual(normalize_url("javascript:alert(1)"), "")
 
     def test_one_entry_per_domain(self):
         self.assertEqual(
-            companies.collapse_websites([
+            collapse_websites([
                 "https://www.jobat.be/fr/emplois/electricien/job_1?utm_source=forem",
                 "https://www.jobat.be/fr/emplois/electricien/job_2",
                 "https://www.jobat.be",
@@ -259,7 +263,7 @@ class TestObservation(unittest.TestCase):
     def test_offer_without_employer_is_skipped(self):
         offer = make_offer("1", company="")
         offer["company"] = ""
-        self.assertIsNone(companies.observe_offer(offer, {}))
+        self.assertIsNone(observe_offer(offer, {}))
 
     def test_full_observation(self):
         detail = make_detail(
@@ -274,7 +278,7 @@ class TestObservation(unittest.TestCase):
             sector="Installation de systemes de telecommunication",
             partner="Jobat",
         )
-        observation = companies.observe_offer(
+        observation = observe_offer(
             make_offer("2053275"), detail, base="liege"
         )
         self.assertEqual(observation["number"], "2053275")
@@ -293,7 +297,7 @@ class TestObservation(unittest.TestCase):
         self.assertEqual(observation["emails"], ["info@dhfields.be"])
 
     def test_summary_only_offer_has_published_date(self):
-        observation = companies.observe_offer(
+        observation = observe_offer(
             make_offer("1", company="Vivaldis", email="contact@vivaldis.be"), {}
         )
         self.assertEqual(observation["published"], "2026-09-16")
@@ -307,8 +311,8 @@ class TestBuildIndex(TempDataDir):
             [make_offer("1"), make_offer("2"), make_offer("3", "Vivaldis")],
             details={"1": make_detail(email="info@startpeople.be")},
         )
-        index = companies.build_index()
-        self.assertEqual(index["version"], companies.VERSION)
+        index = build_index()
+        self.assertEqual(index["version"], config.VERSION)
         self.assertEqual(sorted(index["employers"]), ["Start People", "Vivaldis"])
         start = index["employers"]["Start People"]
         self.assertEqual(start["offerCount"], 2)
@@ -328,7 +332,7 @@ class TestBuildIndex(TempDataDir):
             "2": make_detail("ACCENT CONSTRUCT - Accent",
                              email="liege@accentjobs.be"),
         })
-        index = companies.build_index()
+        index = build_index()
         self.assertEqual(len(index["employers"]), 4)
         self.assertEqual(
             index["employers"]["Accent"]["emails"],
@@ -345,7 +349,7 @@ class TestBuildIndex(TempDataDir):
         self.seed([make_offer("2")],
                   details={"2": make_detail(email="wavre@accents.be")},
                   base="liege")
-        index = companies.build_index()
+        index = build_index()
         record = index["employers"]["Start People"]
         self.assertEqual(record["offerCount"], 2)
         # Emails are cumulated from both scrapes; order depends on scrape order
@@ -362,7 +366,7 @@ class TestBuildIndex(TempDataDir):
             [make_offer("1")],
             history={"offers": [dict(make_offer("2"), removed=True)]},
         )
-        index = companies.build_index()
+        index = build_index()
         record = index["employers"]["Start People"]
         self.assertEqual(record["offerCount"], 1)
         self.assertEqual(record["deletedCount"], 1)
@@ -376,7 +380,7 @@ class TestBuildIndex(TempDataDir):
                       "2": make_detail("Synergie Interim",
                                        partner="Synergie Interim"),
                   })
-        index = companies.build_index()
+        index = build_index()
         self.assertEqual(sorted(index["employers"]), [
             "Start People (Jobat)",
             "Synergie Interim (Synergie Interim)",
@@ -394,7 +398,7 @@ class TestBuildIndex(TempDataDir):
                 "3": make_detail("Start People"),
             },
         )
-        index = companies.build_index()
+        index = build_index()
         self.assertEqual(sorted(index["employers"]), [
             "Start People",
             "Start People (Jobat)",
@@ -404,13 +408,13 @@ class TestBuildIndex(TempDataDir):
     def test_old_key_does_not_survive_the_partner_arrival(self):
         # First run: no detail file yet, so no partner in the name.
         self.seed([make_offer("1")])
-        first = companies.build_index()
+        first = build_index()
         self.assertEqual(list(first["employers"]), ["Start People"])
 
         # Second run: the details bring the channel, the old key goes away.
         self.seed([make_offer("1")],
                   details={"1": make_detail("Start People", partner="Jobat")})
-        second = companies.build_index(previous=first)
+        second = build_index(previous=first)
         self.assertEqual(list(second["employers"]), ["Start People (Jobat)"])
         self.assertEqual(
             second["employers"]["Start People (Jobat)"]["offerCount"], 1
@@ -419,7 +423,7 @@ class TestBuildIndex(TempDataDir):
     def test_key_split_over_channels_leaves_no_orphan(self):
         # Before the details: one entry with three offers.
         self.seed([make_offer("1"), make_offer("2"), make_offer("3")])
-        first = companies.build_index()
+        first = build_index()
         self.assertEqual(list(first["employers"]), ["Start People"])
 
         # The channels split those offers over three keys.
@@ -429,7 +433,7 @@ class TestBuildIndex(TempDataDir):
                       "2": make_detail("Start People", partner="VDAB"),
                       "3": make_detail("Start People"),
                   })
-        second = companies.build_index(previous=first)
+        second = build_index(previous=first)
         self.assertEqual(sorted(second["employers"]), [
             "Start People",
             "Start People (Jobat)",
@@ -441,12 +445,12 @@ class TestBuildIndex(TempDataDir):
     def test_manual_contact_survives_the_next_run(self):
         self.seed([make_offer("1")],
                   details={"1": make_detail("Start People", partner="Jobat")})
-        first = companies.build_index()
+        first = build_index()
         record = first["employers"]["Start People (Jobat)"]
         record["emails"] = list(record["emails"]) + ["saisi@main.be"]
         record["description"] = "Corrigée à la main."
 
-        second = companies.build_index(previous=first)
+        second = build_index(previous=first)
         kept = second["employers"]["Start People (Jobat)"]
         self.assertIn("saisi@main.be", kept["emails"])
         self.assertEqual(kept["description"], "Corrigée à la main.")
@@ -455,13 +459,13 @@ class TestBuildIndex(TempDataDir):
     def test_edited_name_wins_over_the_partner(self):
         self.seed([make_offer("1")],
                   details={"1": make_detail("Start People", partner="Jobat")})
-        first = companies.build_index()
+        first = build_index()
         record = first["employers"]["Start People (Jobat)"]
         record["name"] = "Start People SPRL"
         record["edited"] = "2026-09-27T10:00:00+02:00"
         first = {"employers": {"Start People SPRL": record}}
 
-        second = companies.build_index(previous=first)
+        second = build_index(previous=first)
         self.assertEqual(list(second["employers"]), ["Start People SPRL"])
         self.assertEqual(
             second["employers"]["Start People SPRL"]["partners"], ["Jobat"]
@@ -482,7 +486,7 @@ class TestBuildIndex(TempDataDir):
         self.seed([make_offer("1")], details={
             "1": make_detail(email="start@startpeople.be")
         })
-        index = companies.build_index(previous=previous)
+        index = build_index(previous=previous)
         self.assertEqual(list(index["employers"]), ["Start People SPRL"])
         record = index["employers"]["Start People SPRL"]
         self.assertEqual(record["edited"], "2026-09-27T10:00:00+02:00")
@@ -500,7 +504,7 @@ class TestBuildIndex(TempDataDir):
             }
         }
         self.seed([make_offer("1")])
-        index = companies.build_index(previous=previous)
+        index = build_index(previous=previous)
         self.assertIn("Start People", index["employers"])
         self.assertIn("Ancien nom", index["employers"])
 
@@ -524,7 +528,7 @@ class TestBuildIndex(TempDataDir):
                     "?utm_source=forem",
             )
         })
-        record = companies.build_index(previous=previous)["employers"]["Jobat"]
+        record = build_index(previous=previous)["employers"]["Jobat"]
         self.assertEqual(record["websites"], ["https://www.jobat.be"])
 
     def test_previous_contacts_are_kept(self):
@@ -550,7 +554,7 @@ class TestBuildIndex(TempDataDir):
         }
         self.seed([make_offer("1")],
                   details={"1": make_detail(email="nouveau@startpeople.be")})
-        index = companies.build_index(previous=previous)
+        index = build_index(previous=previous)
         record = index["employers"]["Start People"]
         self.assertEqual(
             record["emails"], ["ancien@startpeople.be", "nouveau@startpeople.be"]
@@ -573,24 +577,24 @@ class TestBuildIndex(TempDataDir):
             }
         }
         self.seed([make_offer("1")])
-        index = companies.build_index(previous=previous, rebuild=True)
+        index = build_index(previous=previous, rebuild=True)
         self.assertNotIn("Ancien Employeur", index["employers"])
         self.assertEqual(index["stats"]["conserves"], 0)
 
     def test_missing_details_do_not_block(self):
         self.seed([make_offer("1"), make_offer("2", "Vivaldis")])
-        index = companies.build_index()
+        index = build_index()
         self.assertEqual(len(index["employers"]), 2)
         self.assertEqual(index["stats"]["employeursSansNom"], 0)
 
     def test_duplicate_offer_numbers_are_merged(self):
         self.seed([make_offer("1"), make_offer("1")])
-        record = companies.build_index()["employers"]["Start People"]
+        record = build_index()["employers"]["Start People"]
         self.assertEqual(record["offerCount"], 2)
         self.assertEqual([o["number"] for o in record["offers"]], ["1"])
 
     def test_stats_without_data(self):
-        index = companies.build_index()
+        index = build_index()
         self.assertEqual(index["employers"], {})
         self.assertEqual(index["stats"]["employeurs"], 0)
         self.assertEqual(index["scrapes"], [])
@@ -600,12 +604,12 @@ class TestRefreshIndex(TempDataDir):
     """refresh_index(): what the server calls after each scraping."""
 
     def index_path(self):
-        return os.path.join(self.data_dir, "companies.json")
+        return os.path.join(self.data_dir, "json")
 
     def test_the_index_is_written_and_reported(self):
         self.seed([make_offer("1", company="Acme")])
 
-        stats = companies.refresh_index(self.index_path())
+        stats = refresh_index(self.index_path())
 
         self.assertEqual(stats["employeurs"], 1)
         self.assertTrue(os.path.exists(self.index_path()))
@@ -619,11 +623,11 @@ class TestRefreshIndex(TempDataDir):
             [make_offer("1")],
             details={"1": make_detail(email="jobs@acme.be")},
         )
-        companies.refresh_index(self.index_path())
+        refresh_index(self.index_path())
 
         # The offer disappears, but the email collected earlier must remain.
         self.seed([])
-        stats = companies.refresh_index(self.index_path())
+        stats = refresh_index(self.index_path())
 
         with open(self.index_path(), encoding="utf-8") as handle:
             data = json.load(handle)
@@ -638,18 +642,18 @@ class TestRefreshIndex(TempDataDir):
             handle.write("{ truncated")
         self.seed([make_offer("1", company="Acme")])
 
-        stats = companies.refresh_index(self.index_path())
+        stats = refresh_index(self.index_path())
 
         self.assertEqual(stats["employeurs"], 1)
 
 
 class TestGeneratedFile(unittest.TestCase):
-    """Invariants on data/companies.json when it has already been built."""
+    """Invariants on data/json when it has already been built."""
 
     def test_keys_match_names(self):
-        path = companies.COMPANIES_FILE
+        path = config.companies_file()
         if not os.path.exists(path):
-            self.skipTest("companies.json pas encore généré")
+            self.skipTest("json pas encore généré")
         with open(path, encoding="utf-8") as handle:
             data = json.load(handle)
         for key, record in data["employers"].items():

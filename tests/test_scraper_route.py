@@ -26,9 +26,10 @@ sys.path.insert(
     0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
-import companies
-import scraper
-import serveur
+from leforem_scraper import config
+from leforem_scraper import scraper
+from leforem_scraper import server
+from leforem_scraper.employers import refresh_index
 
 
 class FakeRunScraper:
@@ -63,20 +64,15 @@ class ScraperRouteTestCase(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        # companies.DATA_DIR is bound at import time to scraper's, so it has
-        # to be pointed at the temporary directory as well: the employer
-        # index is rebuilt from the data/ files after each run.
+        # One source of truth for the data folder: config.DATA_DIR.
         self._saved = (
-            serveur.DATA_DIR,
+            config.DATA_DIR,
             scraper.run_scrape,
-            companies.DATA_DIR,
-            companies.refresh_index,
+            refresh_index,
         )
-        serveur.DATA_DIR = self.tmp.name
-        scraper.DATA_DIR = self.tmp.name
-        companies.DATA_DIR = self.tmp.name
+        config.DATA_DIR = self.tmp.name
 
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), serveur.Handler)
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
         self.port = self.server.server_address[1]
         self.thread = threading.Thread(target=self.server.serve_forever)
         self.thread.daemon = True
@@ -86,9 +82,8 @@ class ScraperRouteTestCase(unittest.TestCase):
 
     def tearDown(self):
         scraper.run_scrape = self._saved[1]
-        serveur.DATA_DIR = self._saved[0]
-        companies.DATA_DIR = self._saved[2]
-        companies.refresh_index = self._saved[3]
+        config.DATA_DIR = self._saved[0]
+        server.refresh_index = self._saved[2]
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(timeout=5)
@@ -331,7 +326,7 @@ class TestBlockingScrape(ScraperRouteTestCase):
         def broken(path=None):
             raise OSError("disk full")
 
-        companies.refresh_index = broken
+        server.refresh_index = broken
 
         response = self.post({"name": "test"})
 

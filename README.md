@@ -123,12 +123,16 @@ en haut de la page, ou sur la date de dernier scraping.
 └──────────────┘       (actualiser)
 ```
 
-1. **`scraper.py`** — le programme qui parle au site du Forem et écrit les
-   fichiers de données dans `data/`. Il se lance dans le terminal.
-2. **`serveur.py`** — un petit serveur web local (port 8123). Il sert la page,
-   expose les fichiers de `data/`, quelques API (`/api/scrapings`,
-   `/api/nomenclature/…`) et la route qui lance un scraping depuis la page.
-3. **L'interface** (`index.html`, `style.css`, `script.js`, `scraper-ui.js`,
+1. **`leforem_scraper/scraper.py`** — le programme qui parle au site du Forem et
+   écrit les fichiers de données dans `data/`. Il se lance dans le terminal
+   (`python scraper.py`).
+2. **`leforem_scraper/server.py`** — un petit serveur web local (port 8123). Il
+   sert la page, expose les fichiers de `data/`, quelques API
+   (`/api/scrapings`, `/api/nomenclature/…`) et la route qui lance un scraping
+   depuis la page (`python serveur.py`).
+3. **`leforem_scraper/employers.py`** — construit `data/companies.json` à partir
+   des offres déjà téléchargées (`python companies.py`).
+4. **L'interface** (`index.html`, `style.css`, `script.js`, `scraper-ui.js`,
    `scraping-selector.js`, `detail.html`, `detail.js`) — le tableau des offres,
    les filtres, la fiche d'une offre. Elle ne scrape jamais elle-même : elle
    demande au serveur ou lit les fichiers.
@@ -242,10 +246,8 @@ La barre de navigation en haut de page relie trois écrans :
 
 | Fichier | Rôle |
 |---|---|
-| `scraper.py` | télécharge les offres, compare les empreintes, écrit `data/` |
-| `serveur.py` | serveur local (page + API + lancement d'un scraping) |
-| `core.py` | outils partagés : empreintes, lecture/écriture des historiques |
-| `companies.py` | construit `data/companies.json` : l'index des employeurs et leurs coordonnées |
+| `scraper.py`, `serveur.py`, `companies.py`, `core.py` | points d'entrée : `python scraper.py …`, `python serveur.py`, `python companies.py` |
+| `leforem_scraper/` | le code : `config.py` (chemins), `jsonio.py` (lecture/écriture JSON), `core.py` (logique pure), `scraper.py`, `employers.py`, `server.py` |
 | `script.js`, `style.css`, `index.html` | le tableau des offres et son style |
 | `detail.html`, `detail.js` | la fiche d'une offre (statut, remarque, priorité) |
 | `scraper-ui.js` | fenêtre d'actualisation : confirmation, flux en direct, résumé |
@@ -256,6 +258,10 @@ La barre de navigation en haut de page relie trois écrans :
 | `navbar_include.html`, `navbar-loader.js` | la barre de navigation commune |
 | `theme.js` | thème clair / sombre |
 | `tests/` | la suite de tests |
+
+Les quatre fichiers de la racine ne font que réimporter le paquet : tout le code
+vit dans `leforem_scraper/`. Le dossier des données n'a qu'une seule source de
+vérité, `leforem_scraper/config.py`.
 
 ## Options du scraper
 
