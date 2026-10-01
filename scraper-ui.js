@@ -17,6 +17,7 @@ const ScraperUi = (function () {
     let target = null;
     let getTarget = null;
     let onScraped = null;
+    let pendingDone = null;
 
     function el(id) {
         return document.getElementById(id);
@@ -133,7 +134,8 @@ const ScraperUi = (function () {
     function showResult(summary) {
         setRunning(false);
         show(elements.result, true);
-        elements.resultTitle.textContent = "Scraping terminé";
+        const labels = (pendingDone && pendingDone.labels) || {};
+        elements.resultTitle.textContent = labels.doneTitle || "Scraping terminé";
         elements.resultInfo.innerHTML = "";
 
         // « téléchargées » = requêtes réellement faites à Forem. Les offres
@@ -160,12 +162,18 @@ const ScraperUi = (function () {
         }
 
         if (elements.runHint) {
-            elements.runHint.textContent = "Synchronisation terminée.";
+            elements.runHint.textContent = labels.doneHint
+                || "Synchronisation terminée.";
         }
         appendLine("> Scraping terminé", "done");
         finishRunModal("Fermer");
 
-        if (onScraped) onScraped();
+        const callback = pendingDone;
+        if (callback && callback.onDone) {
+            callback.onDone(summary);
+        } else if (onScraped) {
+            onScraped();
+        }
     }
 
     function showError(message, details) {
@@ -275,15 +283,28 @@ const ScraperUi = (function () {
         closeConfirm();
         // Le scraping réellement ciblé est relu au moment du lancement.
         if (getTarget) target = getTarget();
-        resetRunModal();
-        setRunning(true);
 
         if (!target) {
+            resetRunModal();
+            setRunning(true);
             showError(
                 "Sélectionnez un scraping précis avant de lancer la mise à jour.",
                 ""
             );
             return;
+        }
+
+        return executeRun(target, null, null);
+    }
+
+    // Lance un scraping donné (nouvelle recherche ou mise à jour) et affiche
+    // le même terminal. onDone est appelé après un scraping terminé.
+    async function executeRun(runTarget, onDone, labels) {
+        resetRunModal();
+        setRunning(true);
+
+        if (labels && labels.runningHint && elements.runHint) {
+            elements.runHint.textContent = labels.runningHint;
         }
 
         appendLine("> Initialisation du scraper...");
@@ -294,10 +315,10 @@ const ScraperUi = (function () {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    name: target.name,
-                    label: target.label,
-                    occupation_guid: target.occupation_guid,
-                    location_guid: target.location_guid,
+                    name: runTarget.name,
+                    label: runTarget.label,
+                    occupation_guid: runTarget.occupation_guid,
+                    location_guid: runTarget.location_guid,
                     // Incrémental : le scraper ne retélécharge que les
                     // offres absentes du dernier scraping (et celles qui
                     // avaient échoué). Les offres connues restent en cache,
@@ -324,6 +345,7 @@ const ScraperUi = (function () {
         }
 
         const state = { buffer: "" };
+        pendingDone = { onDone: onDone, labels: labels };
 
         // Le flux est lu tant que la requête est ouverte, c'est-à-dire
         // pendant toute la durée du scraping.
@@ -347,6 +369,8 @@ const ScraperUi = (function () {
             consumeLines(text, state);
             consumeLines("\n", state);
         }
+
+        pendingDone = null;
 
         if (!elements.result.classList.contains("scraper-hide")) {
             return;
@@ -449,6 +473,21 @@ const ScraperUi = (function () {
         },
         isRunning: function () {
             return running;
+        },
+        openConfirm: openConfirm,
+        // Nouvelle recherche : même terminal, mais la cible vient de la
+        // fenêtre « Nouvelle recherche » et non du scraping sélectionné.
+        // target: { name, label, occupation_guid, location_guid }
+        runNewScraping: function (runTarget, onDone) {
+            if (running) {
+                notify("Un scraping est déjà en cours.");
+                return Promise.resolve();
+            }
+            return executeRun(runTarget, onDone, {
+                runningHint: "Recherche en cours, cela peut prendre quelques minutes...",
+                doneTitle: "Recherche terminée",
+                doneHint: "La nouvelle recherche est prête."
+            });
         }
     };
 })();

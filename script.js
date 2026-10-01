@@ -1402,8 +1402,8 @@ function setupNewSearch() {
         "click", closeModal
     );
     modal.querySelector(".modal-backdrop").addEventListener("click", closeModal);
-    document.getElementById("copyCommandBtn").addEventListener(
-        "click", copyCommand
+    document.getElementById("launchScrapeBtn").addEventListener(
+        "click", launchNewScraping
     );
 
     modal.addEventListener("keydown", function (e) {
@@ -1455,8 +1455,8 @@ function openModal() {
     document.getElementById("occupationInput").value = "";
     document.getElementById("locationInput").value = "";
     document.getElementById("scrapeStatus").textContent = "";
-    document.getElementById("commandBox").value = "";
-    document.getElementById("copyCommandBtn").disabled = true;
+    document.getElementById("searchNamePreview").value = "";
+    document.getElementById("launchScrapeBtn").disabled = true;
     updateConfirmation();
     modal.classList.add("visible");
     document.getElementById("occupationInput").focus();
@@ -1591,20 +1591,11 @@ function updateConfirmation() {
         ? selectedLocation.label : "—";
     document.getElementById("confirmationLocationGuid").textContent = selectedLocation
         ? selectedLocation.key : "—";
-    const ready = selectedOccupation && selectedLocation;
-    document.getElementById("commandBox").value = ready
-        ? buildCommand() : "";
-    document.getElementById("copyCommandBtn").disabled = !ready;
-}
-
-function buildCommand() {
-    if (!selectedOccupation || !selectedLocation) return "";
-    const slug = slugify(selectedOccupation.value + " " + selectedLocation.label);
-    const label = selectedOccupation.value + " / " + selectedLocation.label;
-    return "python scraper.py --occupation-guid " + selectedOccupation.key +
-        " --location-guid " + selectedLocation.key +
-        " --base " + slug +
-        " --label \"" + label + "\"";
+    const ready = Boolean(selectedOccupation && selectedLocation);
+    document.getElementById("searchNamePreview").value = ready
+        ? newScrapingName() : "";
+    document.getElementById("launchScrapeBtn").disabled = !ready;
+    document.getElementById("scrapeStatus").textContent = "";
 }
 
 function slugify(text) {
@@ -1613,20 +1604,60 @@ function slugify(text) {
         .replace(/^-+|-+$/g, "");
 }
 
-async function copyCommand() {
-    const command = document.getElementById("commandBox").value;
+// Nom court utilisé par le scraper pour les fichiers de la recherche
+// (data_<nom>.json, details_<nom>.json, historique_<nom>.json).
+function newScrapingName() {
+    if (!selectedOccupation || !selectedLocation) return "";
+    return slugify(selectedOccupation.value + " " + selectedLocation.label);
+}
+
+function newScrapingLabel() {
+    return selectedOccupation.value + " / " + selectedLocation.label;
+}
+
+// La recherche est créée et téléchargée comme les mises à jour : même route,
+// même terminal. Aucune commande à copier dans un terminal.
+function launchNewScraping() {
+    if (!selectedOccupation || !selectedLocation) return;
+    const name = newScrapingName();
     const status = document.getElementById("scrapeStatus");
-    if (!command) return;
-    try {
-        await navigator.clipboard.writeText(command);
-        status.textContent = "Commande copiée. Colle-la dans le terminal, " +
-            "dans le dossier leforem-scraper.";
-    } catch (e) {
-        const box = document.getElementById("commandBox");
-        box.select();
-        document.execCommand("copy");
-        status.textContent = "Commande copiée.";
+    if (!name) {
+        status.textContent = "Choisis un métier et un lieu qui contiennent des lettres.";
+        return;
     }
+    if (!window.ForemScraperUi) {
+        status.textContent = "Le module de scraping est introuvable. Recharge la page.";
+        return;
+    }
+
+    closeModal();
+    window.ForemScraperUi.runNewScraping({
+        name: name,
+        label: newScrapingLabel(),
+        occupation_guid: selectedOccupation.key,
+        location_guid: selectedLocation.key
+    }, function () {
+        selectCreatedScraping(name);
+    });
+}
+
+// Le scraper vient d'écrire data_<name>.json : la liste des recherches est
+// rechargée et la nouvelle recherche devient la sélection courante.
+function selectCreatedScraping(name) {
+    localStorage.setItem(
+        window.ScrapingSelector.STORAGE_KEY, "data_" + name + ".json"
+    );
+    refreshScrapingSelector();
+}
+
+// Recharge la liste des recherches sans perdre l'écouteur du <select> ni la
+// sélection courante.
+function refreshScrapingSelector() {
+    if (!window.ScrapingSelector || !window.ScrapingSelector.refreshScrapingSelector) {
+        location.reload();
+        return Promise.resolve(null);
+    }
+    return window.ScrapingSelector.refreshScrapingSelector("scrapingSelect");
 }
 
 
@@ -2310,71 +2341,19 @@ async function init() {
         });
     }
 
-    // Scrape command modal
-    const scrapeCommandModal = document.getElementById("scrapeCommandModal");
-    const closeScrapeCommandBtn = document.getElementById("closeScrapeCommandBtn");
-    const closeScrapeCommandFooterBtn = document.getElementById("closeScrapeCommandFooterBtn");
-    const copyScrapeCommandBtn = document.getElementById("copyScrapeCommandBtn");
-    const scrapeCommandBox = document.getElementById("scrapeCommandBox");
-    const scrapeCommandStatus = document.getElementById("scrapeCommandStatus");
-
-    function closeScrapeCommandModal() {
-        if (scrapeCommandModal) scrapeCommandModal.classList.remove("visible");
-    }
-
-    function openScrapeCommandModal() {
-        if (!dataUrl || dataUrl === "all" || !activeBaseName) {
-            showSuiviToast("Sélectionnez un scraping précis pour voir la commande.");
-            return;
-        }
-        const parts = ["python", "scraper.py"];
-        if (lastData.occupation_guid) parts.push("--occupation-guid " + lastData.occupation_guid);
-        if (lastData.location_guid) parts.push("--location-guid " + lastData.location_guid);
-        if (lastData.name) parts.push("--base " + lastData.name);
-        if (lastData.label) parts.push("--label \"" + lastData.label + "\"");
-        const command = parts.join(" ");
-        scrapeCommandBox.value = command;
-        scrapeCommandStatus.textContent = "";
-        if (scrapeCommandModal) scrapeCommandModal.classList.add("visible");
-    }
-
-    function closeScrapeCommandModal() {
-        if (scrapeCommandModal) scrapeCommandModal.classList.remove("visible");
-    }
-
-    async function copyScrapeCommand() {
-        if (!scrapeCommandBox.value) return;
-        try {
-            await navigator.clipboard.writeText(scrapeCommandBox.value);
-            scrapeCommandStatus.textContent = "Commande copiée.";
-        } catch (e) {
-            scrapeCommandBox.select();
-            document.execCommand("copy");
-            scrapeCommandStatus.textContent = "Commande copiée.";
-        }
-    }
-
-    // Stat date click handler
+    // Relancer le scraping depuis la date de dernière exécution.
     const statDateEl = document.getElementById("statDate");
     if (statDateEl) {
         statDateEl.addEventListener("click", function () {
-            if (dataUrl && dataUrl !== "all" && activeBaseName) {
-                openScrapeCommandModal();
-            } else {
-                showSuiviToast("Sélectionnez un scraping précis pour voir la commande.");
+            if (!dataUrl || dataUrl === "all" || !activeBaseName) {
+                showSuiviToast("Sélectionnez un scraping précis pour l'actualiser.");
+                return;
             }
-        });
-    }
-
-    // Scrape command modal event listeners
-    if (closeScrapeCommandBtn) closeScrapeCommandBtn.addEventListener("click", closeScrapeCommandModal);
-    if (closeScrapeCommandFooterBtn) closeScrapeCommandFooterBtn.addEventListener("click", closeScrapeCommandModal);
-    if (copyScrapeCommandBtn) copyScrapeCommandBtn.addEventListener("click", copyScrapeCommand);
-    if (scrapeCommandModal) {
-        scrapeCommandModal.querySelector(".modal-backdrop")
-            .addEventListener("click", closeScrapeCommandModal);
-        scrapeCommandModal.addEventListener("keydown", function (e) {
-            if (e.key === "Escape") closeScrapeCommandModal();
+            if (window.ForemScraperUi) {
+                window.ForemScraperUi.openConfirm();
+            } else {
+                showSuiviToast("Le module de scraping est introuvable. Recharge la page.");
+            }
         });
     }
 
@@ -2389,7 +2368,7 @@ async function init() {
             if (!resp.ok) throw new Error(result.error || "Erreur lors de la suppression");
             showSuiviToast("Scraping supprimé : " + result.moved.join(", "));
             // Refresh scraping selector
-            await setupScrapingSelector();
+            await refreshScrapingSelector();
             // If we were viewing the deleted scrape, switch to "all"
             if (dataUrl === "data_" + name + ".json") {
                 const select = document.getElementById("scrapingSelect");

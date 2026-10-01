@@ -28,8 +28,10 @@ python --version
 ## Étape 2 — Installer la seule dépendance (une fois pour toutes)
 
 ```
-python -m pip install requests
+python -m pip install -r requirements.txt
 ```
+
+(équivalent à `python -m pip install requests`)
 
 ## Étape 3 — Se placer dans le dossier du projet
 
@@ -63,22 +65,19 @@ http://localhost:8123
 2. Tape un métier (par exemple « électromécanicien ») et choisis-le dans la
    liste proposée.
 3. Tape un lieu (par exemple « Liège ») et choisis-le.
-4. Clique sur **Copier la commande**.
-5. Colle cette commande dans le terminal (celui de l'étape 4) et valide avec
-   Entrée :
+4. Clique sur **Lancer le scraping**.
 
-```
-python scraper.py --occupation-guid <id métier> --location-guid <id lieu>
-```
+Le téléchargement démarre et les offres défilent dans le faux terminal de la
+page. Compte quelques minutes pour une première recherche. Une fois la
+recherche terminée, elle devient la recherche affichée et le tableau se remplit.
 
-Le téléchargement commence. Les offres défilent dans le terminal ; le trait
-`=` indique l'avancement. Compte quelques minutes pour une première recherche.
+Tout se passe dans le navigateur : il n'y a plus de commande à copier.
 
 ## Étape 7 — Revenir voir tes offres
 
 Recharge la page (`F5`). Le menu **Scraping** en haut permet de choisir la
 recherche à afficher. Pour la mettre à jour plus tard, clique sur **Actualiser**
-en haut de la page : tu n'as plus besoin du terminal.
+en haut de la page, ou sur la date de dernier scraping.
 
 ### Petit aide-mémoire
 
@@ -88,7 +87,7 @@ en haut de la page : tu n'as plus besoin du terminal.
 | Ouvrir la page | <http://localhost:8123> |
 | Mettre à jour les offres | bouton **Actualiser** sur la page |
 | Tout re-télécharger | `python scraper.py --refresh …` dans le terminal |
-| Nouvelle recherche | **Nouvelle recherche**, puis commande à coller |
+| Nouvelle recherche | **Nouvelle recherche**, puis **Lancer le scraping** |
 | Transporter mes suivis sur un autre PC | export puis import du fichier JSON (page Offres) |
 | Arrêter le programme | `Ctrl + C` dans le terminal du serveur |
 
@@ -97,8 +96,8 @@ en haut de la page : tu n'as plus besoin du terminal.
 | Problème | Solution |
 |---|---|
 | `python n'est pas reconnu…` | Python absent ou hors du PATH : relis l'étape 1, ou utilise `py`. |
-| `No module named requests` | `python -m pip install requests` |
-| `error: the following arguments are required: --occupation-guid, --location-guid` | Lance la commande générée par **Nouvelle recherche**, elle contient les deux identifiants. |
+| `No module named requests` | `python -m pip install -r requirements.txt` |
+| `error: the following arguments are required: --occupation-guid, --location-guid` | Utilise **Nouvelle recherche** puis **Lancer le scraping** : la page fournit les deux identifiants. |
 | La page affiche une erreur | Le serveur est-il lancé et sa fenêtre toujours ouverte ? |
 | La page reste sur « Chargement des annonces… » | Le terminal du serveur a été fermé : relance `python serveur.py`. |
 | Page blanche en ouvrant `index.html` directement | Le site du Forem bloque le mode `file://` : passe par `http://localhost:8123`. |
@@ -129,9 +128,9 @@ en haut de la page : tu n'as plus besoin du terminal.
    expose les fichiers de `data/`, quelques API (`/api/scrapings`,
    `/api/nomenclature/…`) et la route qui lance un scraping depuis la page.
 3. **L'interface** (`index.html`, `style.css`, `script.js`, `scraper-ui.js`,
-   `detail.html`, `detail.js`) — le tableau des offres, les filtres, la fiche
-   d'une offre. Elle ne scrape jamais elle-même : elle demande au serveur ou lit
-   les fichiers.
+   `scraping-selector.js`, `detail.html`, `detail.js`) — le tableau des offres,
+   les filtres, la fiche d'une offre. Elle ne scrape jamais elle-même : elle
+   demande au serveur ou lit les fichiers.
 
 ## Ce qui se passe pendant un scraping
 
@@ -165,13 +164,21 @@ Quelques règles qui évitent les faux positifs :
 - `published_on` est exclu du `content_hash` car cette valeur bouge chez le
   Forem sans que l'offre change.
 
-## Actualiser depuis la page web
+## Lancer et actualiser un scraping depuis la page web
 
-Le bouton **Actualiser** appelle `POST /api/scraper/run` sur le serveur, qui
-lance exactement le même code que le terminal, en mode incrémental :
+**Nouvelle recherche** et **Actualiser** appellent la même route,
+`POST /api/scraper/run`, qui lance exactement le même code que le terminal, en
+mode incrémental.
 
-- une demande de confirmation s'affiche avant le lancement (il n'y a pas de
-  tâche de fond, le bouton reste bloqué jusqu'à la fin) ;
+Une nouvelle recherche n'existe pas encore dans `data/` : la page envoie le nom
+court, le métier et le lieu choisis, et le serveur crée les fichiers. Ensuite,
+elle apparaît dans le menu **Scraping** et devient la recherche affichée.
+
+Points communs aux deux :
+
+- **Actualiser** demande une confirmation avant de lancer, **Lancer le
+  scraping** démarre directement (tu viens de choisir métier et lieu) ;
+- il n'y a pas de tâche de fond : le bouton reste bloqué jusqu'à la fin ;
 - le serveur renvoie un flux d'événements (`log`, `progress`, `done`, `error`)
   que la page affiche en direct dans le pseudo-terminal ;
 - un seul scraping à la fois : une seconde demande reçoit une erreur `409` ;

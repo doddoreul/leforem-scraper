@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="fr">
 <head>
 
@@ -106,7 +106,7 @@
             </button>
 
             <div class="stat stat-date">
-                Dernier scraping&nbsp;: <span id="statDate" class="stat-date-clickable" title="Cliquer pour voir la commande de scraping">—</span>
+                Dernier scraping&nbsp;: <span id="statDate" class="stat-date-clickable" title="Cliquer pour relancer ce scraping">—</span>
                 <button class="stat-refresh" type="button" id="refreshScrapeBtn"
                         title="Relancer le scraping de la recherche sélectionnée">Actualiser</button>
             </div>
@@ -317,9 +317,9 @@
 </section>
 
 <script src="suivi-io.js?v=1"></script>
-<script src="scraping-selector.js?v=2"></script>
-<script src="scraper-ui.js?v=2"></script>
-<script src="script.js?v=34"></script>
+<script src="scraping-selector.js?v=3"></script>
+<script src="scraper-ui.js?v=3"></script>
+<script src="script.js?v=35"></script>
 
 <div class="modal" id="searchModal" role="dialog" aria-modal="true" aria-labelledby="searchModalTitle">
 
@@ -333,7 +333,7 @@
         </div>
 
         <p class="modal-hint">
-            Trouve le métier et le lieu : une commande de scraping prête à coller sera générée.
+            Trouve le métier et le lieu : le scraping se lance depuis cette page.
         </p>
 
         <div class="search-field">
@@ -360,14 +360,14 @@
                 <dt>GUID</dt>
                 <dd id="confirmationLocationGuid" class="guid">—</dd>
             </dl>
-            <label class="command-label" for="commandBox">Commande à coller dans le terminal</label>
-            <textarea id="commandBox" class="command-box" rows="3" readonly spellcheck="false"></textarea>
+            <label class="command-label" for="searchNamePreview">Nom de la recherche</label>
+            <input type="text" id="searchNamePreview" class="command-box" readonly spellcheck="false">
             <p class="confirmation-status" id="scrapeStatus"></p>
         </div>
 
         <div class="modal-footer">
             <button class="btn-secondary" type="button" id="cancelModalBtn">Annuler</button>
-            <button class="btn-primary" type="button" id="copyCommandBtn" disabled>Copier la commande</button>
+            <button class="btn-primary" type="button" id="launchScrapeBtn" disabled>Lancer le scraping</button>
         </div>
 
     </div>
@@ -419,34 +419,6 @@
         <div class="modal-footer">
             <button class="btn-secondary" type="button" id="cancelDeleteBtn">Annuler</button>
             <button class="btn-danger" type="button" id="confirmDeleteBtn">Supprimer définitivement</button>
-        </div>
-
-    </div>
-
-</div>
-
-<div class="modal" id="scrapeCommandModal" role="dialog" aria-modal="true" aria-labelledby="scrapeCommandTitle">
-
-    <div class="modal-backdrop"></div>
-
-    <div class="modal-box" style="max-width: 640px;">
-
-        <div class="modal-header">
-            <h2 id="scrapeCommandTitle">Commande de scraping</h2>
-            <button class="modal-close" type="button" id="closeScrapeCommandBtn" aria-label="Fermer">✕</button>
-        </div>
-
-        <p class="modal-hint">
-            Copiez cette commande pour relancer le scraping actuel :
-        </p>
-
-        <label class="command-label" for="scrapeCommandBox">Commande à coller dans le terminal</label>
-        <textarea id="scrapeCommandBox" class="command-box" rows="4" readonly spellcheck="false"></textarea>
-        <p class="confirmation-status" id="scrapeCommandStatus"></p>
-
-        <div class="modal-footer">
-            <button class="btn-primary" type="button" id="copyScrapeCommandBtn">Copier la commande</button>
-            <button class="btn-secondary" type="button" id="closeScrapeCommandFooterBtn">Fermer</button>
         </div>
 
     </div>

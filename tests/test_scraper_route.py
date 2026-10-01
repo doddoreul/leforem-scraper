@@ -228,6 +228,39 @@ class TestBlockingScrape(ScraperRouteTestCase):
         self.assertEqual(result["erreurs"], 2)
         self.assertEqual(result["duration_seconds"], 272.0)
 
+    def test_a_new_scraping_is_created_from_the_guids_sent_by_the_browser(self):
+        # « Nouvelle recherche » : le navigateur choisit métier et lieu, donc
+        # le nom n'existe pas encore dans data/. Les GUIDs du payload sont
+        # alors utilisés et le scraper écrit data_<nom>.json.
+        self.assertFalse(
+            os.path.exists(os.path.join(self.tmp.name, "data_nouveau.json"))
+        )
+        self.install(FakeRunScraper(summary={"status": "done", "nouvelles": 1}))
+
+        response = self.post({
+            "name": "nouveau",
+            "label": "Metier / Ville",
+            "occupation_guid": "occ-new",
+            "location_guid": "loc-new",
+        })
+
+        self.assertEqual(response.status_code, 200)
+        call = self.fake.calls[0]
+        self.assertEqual(call["occupation_guid"], "occ-new")
+        self.assertEqual(call["location_guid"], "loc-new")
+        self.assertEqual(call["base"], "nouveau")
+        self.assertEqual(call["label"], "Metier / Ville")
+        self.assertFalse(call["refresh"])
+        self.assertEqual(self.events(response)[-1]["type"], "done")
+
+    def test_a_new_scraping_without_guids_is_refused(self):
+        self.install(FakeRunScraper(summary={"status": "done"}))
+
+        response = self.post({"name": "nouveau", "label": "Metier / Ville"})
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self.fake.calls, [])
+
     def test_scrape_failure_is_reported_without_killing_the_server(self):
         self.seed_scraping()
         self.install(FakeRunScraper(error=RuntimeError("Forem injoignable")))
