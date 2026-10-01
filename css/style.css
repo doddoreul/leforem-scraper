@@ -59,6 +59,7 @@
     --success-text: #33604F;
     --success-border: #C6DED5;
     --warning-bg: #F7F1E6;
+    --warning-bg-hover: #EFE5D2;
     --warning-text: #77581F;
     --warning-border: #E4D4B2;
     --danger-bg: #F8ECEE;
@@ -119,6 +120,7 @@
     --success-text: #9CC7B8;
     --success-border: #2F4A41;
     --warning-bg: #352D1F;
+    --warning-bg-hover: #443825;
     --warning-text: #DCBE8A;
     --warning-border: #4C4130;
     --danger-bg: #382529;
