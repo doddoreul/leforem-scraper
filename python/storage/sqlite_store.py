@@ -91,14 +91,10 @@ class SqliteStorage(Storage):
                 );
 
                 CREATE TABLE IF NOT EXISTS history_offers (
-                  id INTEGER PRIMARY KEY,
-                  base_name TEXT NOT NULL,
-                  offer_id TEXT NOT NULL,
-                  state TEXT,
-                  timestamp TEXT,
-                  UNIQUE(base_name, offer_id)
+                  base_name TEXT PRIMARY KEY,
+                  payload_json TEXT NOT NULL,
+                  updated_at TEXT DEFAULT (datetime('now'))
                 );
-                CREATE INDEX IF NOT EXISTS idx_history_offers_base ON history_offers(base_name);
 
                 CREATE TABLE IF NOT EXISTS scrape_state (
                   id INTEGER PRIMARY KEY CHECK (id=1),
@@ -111,7 +107,34 @@ class SqliteStorage(Storage):
                 );
                 """
         )
+        self._upgrade_history_offers(conn)
         conn.commit()
+
+    def _upgrade_history_offers(self, conn: sqlite3.Connection) -> None:
+        """Replace the early per-offer ``history_offers`` schema.
+
+        The first version stored one row per offer (``offer_id``, ``state``,
+        ``timestamp``); it cannot hold the full history payload the JSON
+        format uses. An old database is upgraded by recreating the table,
+        which is the only shape-compatible option. The per-search history is
+        rebuilt on the next scraping (or by ``migrate_to_sqlite``).
+        """
+        columns = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(history_offers)").fetchall()
+        }
+        if not columns or "payload_json" in columns:
+            return
+        conn.execute("DROP TABLE history_offers")
+        conn.execute(
+            """
+            CREATE TABLE history_offers (
+              base_name TEXT PRIMARY KEY,
+              payload_json TEXT NOT NULL,
+              updated_at TEXT DEFAULT (datetime('now'))
+            )
+            """
+        )
 
     def _json_dumps(self, obj: Any) -> str:
         return json.dumps(obj, ensure_ascii=False, indent=2)
@@ -167,6 +190,18 @@ class SqliteStorage(Storage):
                 },
             )
             conn.commit()
+
+    def delete_scraping(self, name: str) -> List[str]:
+        with self._session() as conn:
+            conn.execute("DELETE FROM scrapings WHERE name=?", (name,))
+            conn.execute("DELETE FROM offer_details WHERE base_name=?", (name,))
+            conn.execute("DELETE FROM history_offers WHERE base_name=?", (name,))
+            conn.commit()
+        return [
+            config.data_file_name(name),
+            config.history_file_name(name),
+            config.details_file_name(name),
+        ]
 
     def read_details(self, base_name: str) -> Dict[str, Any]:
         out: Dict[str, Any] = {}
@@ -283,36 +318,28 @@ class SqliteStorage(Storage):
             conn.commit()
 
     def read_history_offers(self, base_name: str) -> Dict[str, Any]:
-        out: Dict[str, Any] = {}
         with self._session() as conn:
-            rows = conn.execute(
-                "SELECT offer_id, state, timestamp FROM history_offers WHERE base_name=?",
+            row = conn.execute(
+                "SELECT payload_json FROM history_offers WHERE base_name=?",
                 (base_name,),
-            ).fetchall()
-            for r in rows:
-                out[str(r["offer_id"])] = {
-                    "state": r.get("state"),
-                    "timestamp": r.get("timestamp"),
-                }
-        return out
+            ).fetchone()
+            data = self._json_loads(row["payload_json"] if row else None)
+            if isinstance(data, dict):
+                return data
+            return {}
 
     def write_history_offers(self, base_name: str, history: Dict[str, Any]) -> None:
         with self._session() as conn:
-            for offer_id, h in history.items():
-                state = h.get("offer_state") if isinstance(h, dict) else None
-                ts = h.get("timestamp") if isinstance(h, dict) else None
-                if state is None and isinstance(h, dict):
-                    state = h.get("state")
-                conn.execute(
-                    """
-                    INSERT INTO history_offers (base_name, offer_id, state, timestamp)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT(base_name, offer_id) DO UPDATE SET
-                      state=excluded.state,
-                      timestamp=excluded.timestamp
-                    """,
-                    (base_name, str(offer_id), state, ts),
-                )
+            conn.execute(
+                """
+                INSERT INTO history_offers (base_name, payload_json)
+                VALUES (?, ?)
+                ON CONFLICT(base_name) DO UPDATE SET
+                  payload_json=excluded.payload_json,
+                  updated_at=datetime('now')
+                """,
+                (base_name, self._json_dumps(history)),
+            )
             conn.commit()
 
     def read_scrape_state(self) -> Optional[Dict[str, Any]]:

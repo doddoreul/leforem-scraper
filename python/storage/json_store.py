@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from typing import Any, Dict, List, Optional, Tuple
 
 from python import config
@@ -13,7 +14,11 @@ from python.storage.base import Storage
 
 
 def _details_map_to_payload(details: Dict[str, Any]) -> Dict[str, Any]:
-    return {"details": details}
+    return {
+        "version": config.VERSION,
+        "updated_timestamp": jsonio.now_iso_timestamp(),
+        "details": details,
+    }
 
 
 class JsonStorage(Storage):
@@ -115,6 +120,25 @@ class JsonStorage(Storage):
                 os.remove(path)
         except OSError:
             pass
+
+    def delete_scraping(self, name: str) -> List[str]:
+        moved: List[str] = []
+        trash = config.trash_dir()
+        os.makedirs(trash, exist_ok=True)
+        for src in (
+            config.data_file(name),
+            config.history_file(name),
+            config.details_file(name),
+        ):
+            if not os.path.exists(src):
+                continue
+            file_name = os.path.basename(src)
+            try:
+                shutil.move(src, os.path.join(trash, file_name))
+                moved.append(file_name)
+            except OSError:
+                continue
+        return moved
 
     def list_data_files(self) -> List[str]:
         files: List[str] = []

@@ -684,7 +684,10 @@ def empty_history(timestamp):
 
 
 def read_history(path, timestamp=""):
-    name = config.scrape_base(os.path.basename(path)) if path else ""
+    name = ""
+    if path:
+        base_name = os.path.basename(path)
+        name = config.scrape_base(base_name) or config.history_base(base_name) or ""
     data = _storage.read_history_offers(name) if name else {}
     if data and isinstance(data, dict) and isinstance(data.get("offers"), list):
         data.setdefault("version", VERSION)

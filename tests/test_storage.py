@@ -19,6 +19,7 @@ sys.path.insert(
 )
 
 from python import config  # noqa: E402
+from python.storage.factory import get_storage, reset_storage  # noqa: E402
 from python.storage.json_store import JsonStorage  # noqa: E402
 from python.storage.sqlite_store import SqliteStorage  # noqa: E402
 
@@ -77,6 +78,28 @@ class StorageContract:
         self.store.write_history_modifications(payload)
         self.assertEqual(self.store.read_history_modifications(), payload)
 
+    def test_history_offers_round_trip(self):
+        payload = {
+            "version": 1,
+            "updated_timestamp": "t",
+            "offers": [{"number": "1", "offer_state": "removed"}],
+        }
+        self.store.write_history_offers("liege", payload)
+        self.assertEqual(self.store.read_history_offers("liege"), payload)
+
+    def test_delete_scraping_removes_every_trace(self):
+        self.store.write_scraping("liege", {"offers": []})
+        self.store.write_details("liege", {"1": {"numero": "1"}})
+        self.store.write_history_offers("liege", {"offers": []})
+
+        moved = self.store.delete_scraping("liege")
+
+        self.assertIsNone(self.store.read_scraping("liege"))
+        self.assertNotIn("liege", self.store.get_scraping_names())
+        self.assertEqual(self.store.read_details("liege"), {})
+        self.assertEqual(self.store.read_history_offers("liege"), {})
+        self.assertIn("data_liege.json", moved)
+
     def test_companies_round_trip(self):
         payload = {"records": [{"key": "acme", "name": "Acme"}]}
         self.store.write_companies(payload)
@@ -110,6 +133,36 @@ class TestSqliteStorage(StorageContract, unittest.TestCase):
         self.assertTrue(
             os.path.exists(os.path.join(config.DATA_DIR, "leforem.db"))
         )
+
+
+class TestStorageFactory(unittest.TestCase):
+    """The backend is chosen by LEFOREM_STORAGE, SQLite by default."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self._saved_data_dir = config.DATA_DIR
+        self._saved_env = os.environ.get("LEFOREM_STORAGE")
+        config.DATA_DIR = self.tmp.name
+        reset_storage()
+
+    def tearDown(self):
+        reset_storage()
+        config.DATA_DIR = self._saved_data_dir
+        if self._saved_env is None:
+            os.environ.pop("LEFOREM_STORAGE", None)
+        else:
+            os.environ["LEFOREM_STORAGE"] = self._saved_env
+        self.tmp.cleanup()
+
+    def test_the_default_backend_is_sqlite(self):
+        os.environ.pop("LEFOREM_STORAGE", None)
+        reset_storage()
+        self.assertIsInstance(get_storage(), SqliteStorage)
+
+    def test_the_environment_can_select_the_json_backend(self):
+        os.environ["LEFOREM_STORAGE"] = "json"
+        reset_storage()
+        self.assertIsInstance(get_storage(), JsonStorage)
 
 
 if __name__ == "__main__":

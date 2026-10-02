@@ -26,6 +26,8 @@ sys.path.insert(
     0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
+os.environ.setdefault("LEFOREM_STORAGE", "json")
+
 from python import config
 from python import server
 
@@ -195,15 +197,22 @@ class TestStyles(StaticFilesTestCase):
 
 class TestDataFiles(StaticFilesTestCase):
     def test_the_shared_json_files_are_served_from_the_data_directory(self):
-        for name in ("historique_scrapes.json", "historique_modifications.json",
-                     "companies.json"):
+        expected = {
+            "historique_scrapes.json": {
+                "version": config.VERSION,
+                "scrapes": [],
+            },
+            "historique_modifications.json": {},
+            "companies.json": {"employers": {}},
+        }
+        for name, body in expected.items():
             with self.subTest(name=name):
                 with open(os.path.join(self.tmp.name, name), "w",
                           encoding="utf-8") as handle:
                     handle.write("{}")
                 response = self.get(f"/{name}")
                 self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.json(), {})
+                self.assertEqual(response.json(), body)
 
     def test_an_unknown_json_file_is_a_404(self):
         self.assertEqual(self.get("/data_ghost.json").status_code, 404)

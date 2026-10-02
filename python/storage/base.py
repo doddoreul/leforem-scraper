@@ -26,6 +26,10 @@ class Storage(abc.ABC):
         ...
 
     @abc.abstractmethod
+    def delete_scraping(self, name: str) -> List[str]:
+        ...
+
+    @abc.abstractmethod
     def read_details(self, base_name: str) -> Dict[str, Any]:
         ...
 

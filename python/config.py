@@ -117,6 +117,18 @@ def scrape_base(file_name):
     return file_name[len(DATA_PREFIX):-len(JSON_SUFFIX)]
 
 
+def history_base(file_name):
+    """The search name a history file belongs to.
+
+    ``historique_liege.json`` is ``liege``. Returns ``None`` for anything
+    that is not one of our own files.
+    """
+    if not (file_name.startswith(HISTORY_PREFIX)
+            and file_name.endswith(JSON_SUFFIX)):
+        return None
+    return file_name[len(HISTORY_PREFIX):-len(JSON_SUFFIX)]
+
+
 def valid_search_name(name):
     """True if `name` is safe to use as a file name and in a URL.
 

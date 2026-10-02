@@ -131,7 +131,7 @@ terminal                     navigateur
    sert la page, expose les fichiers de `data/`, quelques API
    (`/api/scrapings`, `/api/nomenclature/…`) et la route qui lance un scraping
    depuis la page (`python serveur.py`).
-3. **`python/employers.py`** — construit `data/companies.json` à partir
+3. **`python/employers.py`** — construit l'index des employeurs à partir
    des offres déjà téléchargées (`python -m python.employers`).
 4. **L'interface** (`index.html`, `html/detail.html`, `html/insights.html`,
    `html/companies.html`, `css/style.css` et les modules `js/`) — le tableau des
@@ -151,8 +151,8 @@ terminal                     navigateur
    c'est ce qui rend un scraping incrémental rapide.
 4. **Écriture.** Chaque réponse est convertie en champs lisibles (contrat,
    horaire, rémunération, email, lieu, dates), un `content_hash` est calculé,
-   puis les fichiers JSON sont réécrits **de façon atomique** (fichier temporaire
-   puis remplacement, pour ne jamais laisser de fichier tronqué).
+   puis les données sont enregistrées (par défaut dans la base SQLite
+   `data/leforem.db`, ou dans les fichiers JSON si `LEFOREM_STORAGE=json`).
 
 ## Le système « incrémental » en deux empreintes
 
@@ -193,8 +193,8 @@ Points communs aux deux :
 - si une fenêtre « données obsolètes » s'affiche (les offres ont beaucoup
   vieilli), le bouton **Actualiser** qu'elle propose lance le même flux.
 
-À la fin d'un scraping réussi, le serveur reconstruit aussi
-`data/companies.json` : la page **Employeurs** est donc à jour sans rien lancer
+À la fin d'un scraping réussi, le serveur reconstruit aussi l'index des
+employeurs : la page **Employeurs** est donc à jour sans rien lancer
 dans un terminal. L'index est fusionné avec le précédent, si bien qu'un e-mail ou
 un téléphone trouvé puis disparu de l'affichage est conservé. Si cette
 reconstruction échoue, le scraping reste considéré comme réussi (les offres sont
@@ -210,8 +210,20 @@ Tu peux aussi reconstruire l'index à la main :
 
 ## Où sont mes données
 
-**Les offres** dans `data/`, un ensemble de fichiers par recherche
-(`<base>` = le nom court de la recherche, p. ex. `liege`) :
+**Les offres** vivent dans `data/`. Par défaut, tout est enregistré dans une
+base SQLite unique :
+
+| Fichier | Contenu |
+|---|---|
+| `leforem.db` | offres, détails, historiques, blacklist et index des employeurs |
+| `trash/` | les recherches supprimées depuis la page (corbeille) |
+
+Le format JSON reste disponible en le demandant explicitement
+(`LEFOREM_STORAGE=json`), notamment pour l'export, les tests et la migration.
+Au premier lancement en SQLite, si `data/leforem.db` n'existe pas encore, les
+fichiers JSON présents dans `data/` sont importés automatiquement. Voici ces
+fichiers, un ensemble par recherche (`<base>` = le nom court de la recherche,
+p. ex. `liege`) :
 
 | Fichier | Contenu |
 |---|---|
@@ -222,7 +234,6 @@ Tu peux aussi reconstruire l'index à la main :
 | `historique_scrapes.json` | l'historique des scrapings et leurs statistiques |
 | `blacklist.json` | les numéros d'annonces en 404, ignorés automatiquement |
 | `companies.json` | l'index des employeurs (coordonnées, contacts, offres), reconstruit après chaque scraping |
-| `trash/` | les recherches supprimées depuis la page (corbeille) |
 
 **Tes suivis** (statut, favori, remarque, priorité, dates de relance) ne sont
 **pas** dans ces fichiers : ils vivent dans le `localStorage` de ton navigateur,
@@ -248,7 +259,7 @@ La barre de navigation en haut de page relie trois écrans :
 | Fichier | Rôle |
 |---|---|
 | `serveur.py` | le point de démarrage : `python serveur.py` |
-| `python/` | le code : `config.py` (chemins), `jsonio.py` (lecture/écriture JSON), `core.py` (logique pure), `scraper.py`, `employers.py`, `server.py` — lancés par `python -m python.scraper`, `python -m python.employers`, `python -m python.server` |
+| `python/` | le code : `config.py` (chemins), `jsonio.py` (lecture/écriture JSON), `core.py` (logique pure), `storage/` (stockage SQLite/JSON interchangeable), `scraper.py`, `employers.py`, `server.py` — lancés par `python -m python.scraper`, `python -m python.employers`, `python -m python.server` |
 | `index.html`, `css/style.css`, `js/pages/index.js` | le tableau des offres, ses filtres et son style |
 | `html/detail.html`, `js/pages/detail.js` | la fiche d'une offre (statut, remarque, priorité) |
 | `html/insights.html`, `js/pages/insights.js` | le dashboard |
@@ -290,9 +301,11 @@ python -m unittest discover -s tests
 ```
 
 Elle couvre l'incrémental, les empreintes, le nettoyage des données, l'export
-CSV, le contrat HTTP du scraping et les fichiers servis par le serveur (pages,
-modules ES, feuille de style, fichiers JSON, refus de sortir de `data/`, `js/`,
-`css/` ou `html/`). Ni le réseau ni le site du Forem ne sont utilisés.
+CSV, le contrat HTTP du scraping, le stockage SQLite et JSON, et les fichiers
+servis par le serveur (pages, modules ES, feuille de style, refus de sortir de
+`data/`, `js/`, `css/` ou `html/`). Les tests qui s'appuient sur des fichiers
+JSON forcent `LEFOREM_STORAGE=json` ; les autres s'exécutent sur le backend par
+défaut (SQLite). Ni le réseau ni le site du Forem ne sont utilisés.
 
 Une partie de la suite ouvre réellement les quatre pages dans un navigateur sans
 fenêtre (Edge, ou `EDGE_PATH` pour pointer un autre Chromium) et vérifie ce qui

@@ -20,17 +20,16 @@ Usage:
 """
 
 import argparse
-import os
 import re
 from urllib.parse import urlsplit, urlunsplit
 
 from python import config
 from python import core
 from python import scraper
+from python.storage import get_storage
 
 VERSION = config.VERSION
 
-DATA_FILE_PATTERN = re.compile(r"data(?:_[A-Za-z0-9_-]+)?\.json")
 SCHEME_PREFIX = re.compile(r"^([A-Za-z][A-Za-z0-9+.-]*):")
 PHONE_KEEP = re.compile(r"[^\d+]")
 PHONE_MIN_DIGITS = 8
@@ -419,18 +418,8 @@ def merge_observation(record, observation):
 # ============================================================
 
 def scrape_bases():
-    """Scrape names found in data/ ("" for the default scrape)."""
-    if not os.path.isdir(config.DATA_DIR):
-        return []
-    names = []
-    for file_name in sorted(os.listdir(config.DATA_DIR)):
-        match = DATA_FILE_PATTERN.fullmatch(file_name)
-        if not match:
-            continue
-        base = file_name[len("data"):-len(".json")].lstrip("_")
-        if base not in names:
-            names.append(base)
-    return names
+    """Scrape names known to the storage ("" for the default scrape)."""
+    return get_storage().get_scraping_names()
 
 
 def offers_of(data):
@@ -446,16 +435,16 @@ def offers_of(data):
 def collect_observations():
     """Read every scrape (active + removed offers) and return the
     observations plus the list of scrape names."""
+    store = get_storage()
     observations = []
     names = []
 
     for base in scrape_bases():
         names.append(base)
-        data_path, history_path = scraper.scraper_files(base)
-        details = scraper.read_details(scraper.details_file(base))
-        history = scraper.read_history(history_path)
+        details = store.read_details(base)
+        history = store.read_history_offers(base)
 
-        for offer in offers_of(scraper.read_json(data_path, None)):
+        for offer in offers_of(store.read_scraping(base)):
             number = scraper.clean_text(offer.get("number"))
             observation = observe_offer(offer, details.get(number), base=base)
             if observation:
@@ -477,9 +466,7 @@ def collect_observations():
 # ============================================================
 
 def load_previous(path=None):
-    if path is None:
-        path = config.companies_file()
-    data = scraper.read_json(path, None)
+    data = get_storage().read_companies()
     if isinstance(data, dict) and isinstance(data.get("employers"), dict):
         return data
     return {"employers": {}}
@@ -639,10 +626,8 @@ def refresh_index(path=None):
     Returns the new stats. Raises whatever the build raises: the caller
     decides whether a failure matters.
     """
-    if path is None:
-        path = config.companies_file()
-    index = build_index(previous=load_previous(path))
-    scraper.write_json_atomically(path, index)
+    index = build_index(previous=load_previous())
+    get_storage().write_companies(index)
     return index["stats"]
 
 
@@ -687,7 +672,7 @@ def main():
         print("\n(--dry-run : aucun fichier écrit)")
         return
 
-    scraper.write_json_atomically(config.companies_file(), index)
+    get_storage().write_companies(index)
     print(f"\nÉcrit : {config.companies_file()}")
 
     if args.stats:

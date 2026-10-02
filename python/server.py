@@ -19,7 +19,6 @@ Routes:
 import json
 import os
 import re
-import shutil
 import sys
 import threading
 import time
@@ -33,6 +32,7 @@ import requests
 from python import config
 from python import scraper
 from python.employers import refresh_index, summarize
+from python.storage import get_storage
 
 BASE_DIR = config.BASE_DIR
 
@@ -77,22 +77,10 @@ JAVASCRIPT_MIME = "application/javascript; charset=utf-8"
 CSS_PATH = re.compile(r"^/css/[A-Za-z0-9_-]+\.css$")
 CSS_MIME = "text/css; charset=utf-8"
 
-JSON_MIME = "application/json; charset=utf-8"
-
 # The routes that answer a POST.
 SCRAPER_RUN_PATH = "/api/scraper/run"
 DELETE_SCRAPING_PATH = "/delete-scraping"
 COMPANIES_PATH = "/companies.json"
-
-DATA_FILES = {
-    "/" + config.SCRAPES_FILE_NAME: config.SCRAPES_FILE_NAME,
-    "/" + config.MODIFICATIONS_FILE_NAME: config.MODIFICATIONS_FILE_NAME,
-    COMPANIES_PATH: config.COMPANIES_FILE_NAME,
-}
-
-# The file names the scraper writes, e.g. data_liege.json. Anything else in
-# data/ is not ours to serve.
-CLEAN_FILE_NAME = config.SCRAPE_FILE_RE
 
 # Synchronous scraping: the browser blocks on SCRAPER_RUN_PATH until the
 # scraper has finished writing its files.
@@ -104,18 +92,6 @@ MAX_EDIT_BODY = 8 * 1024 * 1024
 
 SESSION = requests.Session()
 SESSION.headers.update(scraper.HEADERS)
-
-
-def scrape_files_for(name):
-    """File names of the offers and the history of one search."""
-    return (
-        config.data_file_name(name),
-        config.history_file_name(name),
-    )
-
-
-def details_file_for(name):
-    return config.details_file_name(name)
 
 
 class StreamReporter:
@@ -163,11 +139,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _serve_file(self, path):
-        if path in DATA_FILES:
-            file_name = DATA_FILES[path]
-            file_root = config.DATA_DIR
-            mime_type = JSON_MIME
-        elif JS_PATH.match(path):
+        if self._serve_data(path):
+            return
+        if JS_PATH.match(path):
             file_name = path[len("/js/"):]
             file_root = JS_DIR
             mime_type = JAVASCRIPT_MIME
@@ -183,21 +157,8 @@ class Handler(BaseHTTPRequestHandler):
             file_name, mime_type = STATIC_FILES[path]
             file_root = BASE_DIR
         else:
-            # Per-search files, named data_<search>.json / details_<search>.json.
-            base_name = os.path.basename(path)
-            if CLEAN_FILE_NAME.match(base_name):
-                file_name = base_name
-                file_root = config.DATA_DIR
-                mime_type = JSON_MIME
-            # The per-search history, plus the two shared files that follow
-            # the same historique_<name>.json shape.
-            elif config.HISTORY_NAME_RE.match(base_name):
-                file_name = base_name
-                file_root = config.DATA_DIR
-                mime_type = JSON_MIME
-            else:
-                self.send_error(404)
-                return
+            self.send_error(404)
+            return
 
         file_dir = os.path.normpath(file_root)
         file_path = os.path.normpath(os.path.join(file_dir, file_name))
@@ -217,6 +178,62 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
+
+    def _serve_data(self, path):
+        """Serve the JSON data routes from the storage layer.
+
+        Returns True when the path belongs to the data API (even if the
+        answer is a 404), False to let the static-file handler take over.
+        """
+        name = os.path.basename(path)
+        store = get_storage()
+
+        if path == "/" + config.SCRAPES_FILE_NAME:
+            self._send_json(200, {
+                "version": config.VERSION,
+                "scrapes": store.read_history_scrapes(),
+            })
+            return True
+
+        if path == "/" + config.MODIFICATIONS_FILE_NAME:
+            payload = store.read_history_modifications()
+            self._send_json(200, payload if isinstance(payload, dict) else {})
+            return True
+
+        if path == COMPANIES_PATH:
+            payload = store.read_companies()
+            self._send_json(200, payload or {"employers": {}})
+            return True
+
+        details_prefix = config.DETAILS_PREFIX
+        data_prefix = config.DATA_PREFIX
+        history_prefix = config.HISTORY_PREFIX
+        suffix = config.JSON_SUFFIX
+
+        if name.startswith(details_prefix) and name.endswith(suffix):
+            base = name[len(details_prefix):-len(suffix)]
+            self._send_json(200, {
+                "version": config.VERSION,
+                "details": store.read_details(base),
+            })
+            return True
+
+        if name.startswith(data_prefix) and name.endswith(suffix):
+            base = config.scrape_base(name)
+            payload = store.read_scraping(base)
+            if payload is None:
+                self.send_error(404)
+            else:
+                self._send_json(200, payload)
+            return True
+
+        if name.startswith(history_prefix) and name.endswith(suffix):
+            base = name[len(history_prefix):-len(suffix)]
+            payload = store.read_history_offers(base)
+            self._send_json(200, payload or {"offers": []})
+            return True
+
+        return False
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -269,10 +286,8 @@ class Handler(BaseHTTPRequestHandler):
         payload["updated_timestamp"] = scraper.now_iso_timestamp()
         payload["stats"] = summarize(payload["employers"])
         try:
-            scraper.write_json_atomically(
-                config.companies_file(), payload
-            )
-        except OSError as exc:
+            get_storage().write_companies(payload)
+        except Exception as exc:
             self._send_json(500, {"error": str(exc)})
             return
 
@@ -282,28 +297,18 @@ class Handler(BaseHTTPRequestHandler):
         })
 
     def _handle_scrapings(self):
-        if not os.path.isdir(config.DATA_DIR):
-            self._send_json(200, [])
-            return
+        store = get_storage()
         results = []
-        for file_name in sorted(os.listdir(config.DATA_DIR)):
-            name = config.scrape_base(file_name) if CLEAN_FILE_NAME.match(file_name) else None
-            if not name:
-                continue
-            try:
-                with open(os.path.join(config.DATA_DIR, file_name),
-                          "r", encoding="utf-8") as f:
-                    data = json.load(f)
-            except (OSError, json.JSONDecodeError):
-                continue
+        for name in store.get_scraping_names():
+            data = store.read_scraping(name)
             if not isinstance(data, dict):
                 continue
             offers = data.get("offers", [])
             results.append({
                 "name": name,
-                "file": file_name,
-                "history": scrape_files_for(name)[1],
-                "details": details_file_for(name),
+                "file": config.data_file_name(name),
+                "history": config.history_file_name(name),
+                "details": config.details_file_name(name),
                 "label": data.get("label", "") or "",
                 "scrape_timestamp": data.get("scrape_timestamp", "") or "",
                 "occupationGuid": data.get("occupation_guid", "") or "",
@@ -416,18 +421,7 @@ class Handler(BaseHTTPRequestHandler):
     def _read_scraping_target(self, name, payload):
         """GUIDs and label of one scraping. The stored values win, so the
         request cannot scrape another search than the selected one."""
-        stored = {}
-        try:
-            with open(
-                config.data_file(name),
-                "r",
-                encoding="utf-8",
-            ) as f:
-                data = json.load(f)
-            if isinstance(data, dict):
-                stored = data
-        except (OSError, json.JSONDecodeError):
-            stored = {}
+        stored = get_storage().read_scraping(name) or {}
 
         occupation_guid = (
             stored.get("occupation_guid") or payload.get("occupation_guid") or ""
@@ -540,9 +534,7 @@ class Handler(BaseHTTPRequestHandler):
         the index can be rebuilt again later.
         """
         try:
-            stats = refresh_index(
-                config.companies_file()
-            )
+            stats = refresh_index()
         except Exception as exc:
             self.log_message(
                 "employer index not refreshed: %s: %s",
@@ -583,22 +575,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(400, {"error": "invalid name format"})
             return
 
-        moved = []
-        errors = []
-
-        for file_name in scrape_files_for(name) + (details_file_for(name),):
-            src = os.path.join(config.DATA_DIR, file_name)
-            if os.path.exists(src):
-                dst = os.path.join(config.trash_dir(), file_name)
-                try:
-                    shutil.move(src, dst)
-                    moved.append(file_name)
-                except OSError as e:
-                    errors.append(f"{file_name}: {e}")
-            # If file doesn't exist, that's okay - just skip
-
-        if errors:
-            self._send_json(500, {"error": "partial failure", "moved": moved, "errors": errors})
+        try:
+            moved = get_storage().delete_scraping(name)
+        except Exception as exc:
+            self._send_json(500, {"error": str(exc)})
             return
 
         self._send_json(200, {"ok": True, "moved": moved})

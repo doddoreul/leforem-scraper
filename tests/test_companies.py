@@ -17,6 +17,8 @@ sys.path.insert(
     0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 
+os.environ.setdefault("LEFOREM_STORAGE", "json")
+
 from python import config
 from python import scraper
 from python.employers import (
@@ -604,7 +606,7 @@ class TestRefreshIndex(TempDataDir):
     """refresh_index(): what the server calls after each scraping."""
 
     def index_path(self):
-        return os.path.join(self.data_dir, "json")
+        return config.companies_file()
 
     def test_the_index_is_written_and_reported(self):
         self.seed([make_offer("1", company="Acme")])
