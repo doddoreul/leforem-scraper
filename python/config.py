@@ -22,6 +22,7 @@ SCRAPES_FILE_NAME = "historique_scrapes.json"
 BLACKLIST_FILE_NAME = "blacklist.json"
 COMPANIES_FILE_NAME = "companies.json"
 MODIFICATIONS_FILE_NAME = "historique_modifications.json"
+SCRAPE_STATE_FILE_NAME = "scrape_state.json"
 
 # Format version of the scraper history files.
 VERSION = 1
@@ -52,6 +53,14 @@ def blacklist_file():
 
 def companies_file():
     return shared_file(COMPANIES_FILE_NAME)
+
+
+def modifications_file():
+    return shared_file(MODIFICATIONS_FILE_NAME)
+
+
+def scrape_state_file():
+    return shared_file(SCRAPE_STATE_FILE_NAME)
 
 
 # One search owns exactly three files, named after it: the offers

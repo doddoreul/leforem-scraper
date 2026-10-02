@@ -14,6 +14,7 @@ Run it from the repository root::
 import argparse
 import concurrent.futures
 import json
+import os
 import random
 import re
 import sys
@@ -31,6 +32,9 @@ from python.jsonio import (
     read_json,
     write_json_atomically,
 )
+from python.storage import get_storage
+
+_storage = get_storage()
 
 
 # ============================================================
@@ -650,7 +654,12 @@ def fetch_detail(session, number):
 # ============================================================
 
 def read_previous_offers(path):
-    data = read_json(path, None)
+    name = config.scrape_base(os.path.basename(path)) if path else ""
+    data = _storage.read_scraping(name) if name else None
+    if not data:
+        from python.jsonio import read_json
+
+        data = read_json(path, None)
     if isinstance(data, dict):
         offers = data.get("offers", [])
     elif isinstance(data, list):
@@ -675,7 +684,16 @@ def empty_history(timestamp):
 
 
 def read_history(path, timestamp=""):
-    data = read_json(path, None)
+    name = config.scrape_base(os.path.basename(path)) if path else ""
+    data = _storage.read_history_offers(name) if name else {}
+    if data and isinstance(data, dict) and isinstance(data.get("offers"), list):
+        data.setdefault("version", VERSION)
+        data.setdefault("updated_timestamp", timestamp)
+        return data
+    if not data:
+        from python.jsonio import read_json
+
+        data = read_json(path, None)
     if isinstance(data, dict) and isinstance(data.get("offers"), list):
         data.setdefault("version", VERSION)
         data.setdefault("updated_timestamp", timestamp)
@@ -684,16 +702,16 @@ def read_history(path, timestamp=""):
 
 
 def read_blacklist(path=None):
-    if path is None:
-        path = config.blacklist_file()
-    data = read_json(path, None)
+    data = _storage.read_blacklist()
+    if not data and path is not None:
+        from python.jsonio import read_json
+
+        data = read_json(path, None)
     return core.read_blacklist_data(data)
 
 
 def write_blacklist(blacklist, path=None):
-    if path is None:
-        path = config.blacklist_file()
-    write_json_atomically(path, blacklist)
+    _storage.write_blacklist(blacklist)
 
 
 def normalize_published_on(offer):
@@ -910,7 +928,7 @@ def run_scrape(occupation_guid, location_guid, base="", label="", limit=None,
 
     scrapes = core.read_scrape_history(scrapes_file)
 
-    previous_details = read_details(details_file_path)
+    previous_details = _storage.read_details(base_name)
 
     blacklist = read_blacklist(blacklist_file)
     if blacklist:
@@ -1238,9 +1256,9 @@ def run_scrape(occupation_guid, location_guid, base="", label="", limit=None,
         "metier_index": metier_index,
     }
 
-    write_json_atomically(history_file, history)
-    write_json_atomically(scrapes_file, scrapes)
-    write_json_atomically(data_file, data)
+    _storage.write_history_offers(base_name, history)
+    _storage.write_history_scrapes(scrapes)
+    _storage.write_scraping(base_name, data)
     write_blacklist(blacklist, blacklist_file)
 
     keep_details_numbers = {
@@ -1253,11 +1271,7 @@ def run_scrape(occupation_guid, location_guid, base="", label="", limit=None,
         fetched=new_details,
         keep=keep_details_numbers,
     )
-    write_json_atomically(details_file_path, {
-        "version": VERSION,
-        "updated_timestamp": now,
-        "details": final_details,
-    })
+    _storage.write_details(base_name, final_details)
 
     log()
     log(
