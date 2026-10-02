@@ -47,13 +47,14 @@ cd leforem-scraper
 python serveur.py
 ```
 
-Tu dois voir : *Web interface on http://localhost:8123*. **Laisse cette fenêtre
-ouverte** : c'est elle qui sert la page. Pour l'arrêter : `Ctrl + C` dans cette
-fenêtre.
+Tu dois voir un encadré *Le scraper Le Forem est démarré*, et **ton navigateur
+par défaut s'ouvre tout seul** sur `http://localhost:8123` (Edge, Chrome ou
+Firefox, selon celui que tu utilises). **Laisse cette fenêtre ouverte** : c'est
+elle qui sert la page. Pour l'arrêter : `Ctrl + C` dans cette fenêtre.
 
 ## Étape 5 — Ouvrir la page
 
-Ouvre ton navigateur (Edge, Chrome, Firefox…) sur :
+Si aucun navigateur ne s'est ouvert, ouvre le tien à la main sur :
 
 ```
 http://localhost:8123

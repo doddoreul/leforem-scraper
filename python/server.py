@@ -22,7 +22,9 @@ import re
 import shutil
 import sys
 import threading
+import time
 import traceback
+import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
@@ -607,14 +609,53 @@ class Handler(BaseHTTPRequestHandler):
         )
 
 
+def open_browser(url):
+    """Ouvre l'adresse dans le navigateur par défaut (Edge, Chrome, Firefox).
+
+    Le serveur écoute déjà quand cette fonction est appelée : la requête
+    du navigateur est donc servie même si elle arrive avant la boucle.
+    Retourne True si un navigateur est bien lancé.
+    """
+    try:
+        controller = webbrowser.get()
+    except webbrowser.Error:
+        # Aucun navigateur enregistré sur ce poste.
+        return False
+
+    # Petit délai : la page a le temps d'être servie, et l'utilisateur
+    # voit d'abord la fenêtre du serveur.
+    def launch():
+        time.sleep(0.4)
+        try:
+            controller.open(url, new=1)
+        except Exception:  # pragma: no cover - dépend du poste
+            pass
+
+    threading.Thread(target=launch, daemon=True).start()
+    return True
+
+
 def main():
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"Web interface on http://localhost:{PORT}")
-    print("(Ctrl+C to stop)")
+    url = f"http://localhost:{PORT}"
+    opened = open_browser(url)
+    # flush=True : le message s'affiche tout de suite même si la sortie
+    # est redirigée dans un fichier.
+    print("=" * 58, flush=True)
+    print("  Le scraper Le Forem est démarré.", flush=True)
+    print(flush=True)
+    if opened:
+        print("  Le navigateur par défaut s'ouvre sur :", flush=True)
+    else:
+        print("  Ouvre cette adresse dans ton navigateur :", flush=True)
+    print(f"    {url}", flush=True)
+    print(flush=True)
+    print("  Ctrl+C pour arrêter le serveur.", flush=True)
+    print("=" * 58, flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nServer stopped.")
+        print("\nServeur arrêté.")
     finally:
         server.server_close()
 
