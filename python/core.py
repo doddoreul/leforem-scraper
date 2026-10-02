@@ -46,11 +46,20 @@ def collect_states(previous_offers, current_offers, deleted_numbers):
     """Compute the full state picture of one scrape.
 
     Returns a dict mapping each state to the list of numbers in it.
+
+    Since deleted offers are kept in the listing as tombstones, a number
+    that is present again while its previous version was a tombstone is a
+    reappearance, not an unchanged offer.
     """
     previous = {}
+    tombstoned = set()
     for offer in previous_offers:
-        if isinstance(offer, dict) and clean_number(offer.get("number")):
-            previous[clean_number(offer.get("number"))] = offer
+        if not isinstance(offer, dict) or not clean_number(offer.get("number")):
+            continue
+        number = clean_number(offer.get("number"))
+        previous[number] = offer
+        if offer.get("removed") is True:
+            tombstoned.add(number)
     previous_numbers = set(previous)
     current_numbers = set()
 
@@ -68,6 +77,9 @@ def collect_states(previous_offers, current_offers, deleted_numbers):
         if not number or number in current_numbers:
             continue
         current_numbers.add(number)
+        if number in tombstoned:
+            states["reappeared"].append(number)
+            continue
         state = offer_state_for(number, previous_numbers, deleted_numbers)
         states[state].append(number)
 
@@ -75,6 +87,39 @@ def collect_states(previous_offers, current_offers, deleted_numbers):
         states["deleted"].append(number)
 
     return states, current_numbers
+
+
+def tombstone_offers(previous_offers, current_offers, timestamp):
+    """Return the offers that disappeared, kept in the listing.
+
+    An offer present in the previous listing but not in the current one is
+    not dropped: it is returned as a copy marked ``offer_state="deleted"``
+    and ``removed_on=<timestamp>`` so the file keeps its whole content (and
+    the raw detail payload can be kept too). The UI shows it as
+    "Supprimée" instead of removing it.
+    """
+    current_numbers = {
+        clean_number(o.get("number"))
+        for o in current_offers
+        if isinstance(o, dict)
+    }
+    tombstones = []
+    seen = set()
+    for offer in previous_offers:
+        if not isinstance(offer, dict):
+            continue
+        number = clean_number(offer.get("number"))
+        if not number or number in current_numbers or number in seen:
+            continue
+        seen.add(number)
+        entry = dict(offer)
+        entry["offer_state"] = "deleted"
+        entry["is_new"] = False
+        entry["removed"] = True
+        if not entry.get("removed_on"):
+            entry["removed_on"] = timestamp
+        tombstones.append(entry)
+    return tombstones
 
 
 def summarize_scrape(states, total=None):

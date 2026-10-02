@@ -312,6 +312,7 @@ const STATE_BADGE_TEXT = {
     reappeared: "De retour",
     old: "Ancienne",
     deleted: "Supprimée",
+    modified: "Modifiée",
 };
 
 function createStateBadge(state) {
@@ -372,6 +373,13 @@ function createDescriptionBlock(offer) {
         tag.setAttribute("aria-label", "Offre modifiée");
         tag.setAttribute("role", "img");
         head.appendChild(tag);
+    }
+
+    if (state === "deleted" && offer.removed_on) {
+        const hint = document.createElement("span");
+        hint.className = "date-hint date-removed";
+        hint.textContent = " · supprimée le " + formatDateTime(offer.removed_on);
+        head.appendChild(hint);
     }
 
     container.appendChild(head);
@@ -535,11 +543,6 @@ function createCurrentRow(offer) {
     tr.dataset.number = number;
     tr.dataset.isNew = offer.is_new === true ? "true" : "false";
     tr.dataset.state = getOfferState(offer);
-    
-    // Add modified class for visual indication
-    if (offer.modified === true) {
-        tr.classList.add("offer-modified");
-    }
 
     const textCell = (nodes, className) => {
         const td = document.createElement("td");
@@ -582,38 +585,22 @@ function createSeparationRow(text, className) {
     return row;
 }
 
-function createDeletedRow(offer) {
-    const tr = document.createElement("tr");
-    tr.dataset.number = String(offer.number);
-
-    const textCell = (nodes, className) => {
-        const td = document.createElement("td");
-        td.className = className;
-        nodes.forEach(node => td.appendChild(node));
-        return td;
-    };
-
-    const offerCell = document.createElement("div");
-    offerCell.className = "offer-head";
-    const badge = createStateBadge("deleted");
-    offerCell.appendChild(badge);
-    offerCell.appendChild(createOfferLink(offer));
-
-    tr.appendChild(createStarCell(String(offer.number)));
-    tr.appendChild(textCell([document.createTextNode(String(offer.number))], "col-forem-id"));
-    tr.appendChild(textCell([offerCell], "col-offer"));
-    tr.appendChild(textCell([document.createTextNode(offer.company || "")], "col-company"));
-    tr.appendChild(createDetailsCell(offer));
-    tr.appendChild(textCell([document.createTextNode(offer.location || "")], "col-location"));
-    tr.appendChild(textCell([document.createTextNode(formatDateTime(offer.removed_on))], "col-removed-on"));
-    tr.appendChild(createNotesCell(String(offer.number)));
-
-    return tr;
+function appendRemovedGroup(tbody, removed) {
+    if (removed.length === 0) return;
+    removed.sort((a, b) => {
+        const ra = parseSortDate(a.removed_on) || 0;
+        const rb = parseSortDate(b.removed_on) || 0;
+        return rb - ra;
+    });
+    tbody.appendChild(createSeparationRow(`Supprimées (${removed.length})`, "separ-deleted"));
+    removed.forEach(offer => tbody.appendChild(createCurrentRow(offer)));
 }
 
 function renderCurrent(offers, scrapeDate) {
-    const allNew = offers.filter(o => o.is_new === true);
-    const allOld = offers.filter(o => o.is_new !== true);
+    const removed = offers.filter(o => getOfferState(o) === "deleted");
+    const live = offers.filter(o => getOfferState(o) !== "deleted");
+    const allNew = live.filter(o => o.is_new === true);
+    const allOld = live.filter(o => o.is_new !== true);
 
     document.getElementById("statTotal").textContent = offers.length;
     document.getElementById("statNew").textContent = allNew.length;
@@ -629,29 +616,28 @@ function renderCurrent(offers, scrapeDate) {
     }
 
     if (sortIsActive() && sortTable === "currentRows") {
-        sortedOffers(offers).forEach(offer => {
+        sortedOffers(live).forEach(offer => {
             tbody.appendChild(createCurrentRow(offer));
         });
+        appendRemovedGroup(tbody, removed);
         return;
     }
 
-    const favorites = offers.filter(o => isFavorite(String(o.number)));
+    const favorites = live.filter(o => isFavorite(String(o.number)));
     const favNumbers = new Set(favorites.map(o => String(o.number)));
-    const modifiedOffers = offers.filter(o => o.modified === true);
-    const modifiedNumbers = new Set(modifiedOffers.map(o => String(o.number)));
+    const modifiedOffers = live.filter(o => o.modified === true);
     const newOffers = allNew.filter(o => !favNumbers.has(String(o.number)));
     const olderOffers = allOld.filter(o => !favNumbers.has(String(o.number)));
     
-    // Default sort: by modified_at descending, then published_on descending
+    // Default order: most recently published first
     if (!sortIsActive() || sortTable !== "currentRows") {
-        // Default sort by modified_at desc, then published_on desc
         offers.sort((a, b) => {
-            const ma = parseSortDate(a.modified_at) || 0;
-            const mb = parseSortDate(b.modified_at) || 0;
-            if (mb !== ma) return mb - ma;
             const pa = parseSortDate(a.published_on) || 0;
             const pb = parseSortDate(b.published_on) || 0;
-            return pb - pa;
+            if (pb !== pa) return pb - pa;
+            const ma = parseSortDate(a.modified_at) || 0;
+            const mb = parseSortDate(b.modified_at) || 0;
+            return mb - ma;
         });
     }
 
@@ -676,15 +662,16 @@ function renderCurrent(offers, scrapeDate) {
         olderOffers.forEach(offer => tbody.appendChild(createCurrentRow(offer)));
     }
 
+    if (removed.length > 0) {
+        appendRemovedGroup(tbody, removed);
+    }
+
     refreshFollowUps();
 }
 
 function rerenderTables() {
     if (!currentOffers) return;
     renderCurrent(currentOffers, lastScrapeDate);
-    if (deletedOffers) {
-        renderDeleted(deletedOffers);
-    }
     applyFilters();
     renderTrackedAlerts();
 }
@@ -698,42 +685,60 @@ function rerenderTables() {
 // rest of the session.
 // ============================================================
 
-const TRACKED_ALERT_STATUSES = ["postule", "contacte"];
+let trackedAlertsExpanded = false;
 
-let trackedAlertsDismissed = false;
+const TRACKED_ALERTS_DISMISS_KEY = "forem_tracked_alerts_dismissed";
 
-function getTrackedAlertNumbers() {
-    const set = new Set();
-    Object.keys(favorites).forEach(number => {
-        if (favorites[number] === true) {
-            set.add(number);
-        }
-    });
-    Object.keys(statuses).forEach(number => {
-        if (TRACKED_ALERT_STATUSES.indexOf(statuses[number]) !== -1) {
-            set.add(number);
-        }
-    });
-    return set;
+// "Masquer" keeps the panel hidden until a new scraping replaces the one
+// currently displayed: the marker remembers the scrape date it hid.
+function trackedAlertsHiddenForCurrentScrape() {
+    if (!lastScrapeDate) return false;
+    try {
+        return localStorage.getItem(TRACKED_ALERTS_DISMISS_KEY) === lastScrapeDate;
+    } catch (error) {
+        return false;
+    }
 }
 
-function buildTrackedAlertItem(kind, offer, removedOn) {
+function dismissTrackedAlerts() {
+    try {
+        if (lastScrapeDate) {
+            localStorage.setItem(TRACKED_ALERTS_DISMISS_KEY, lastScrapeDate);
+        }
+    } catch (error) {
+        /* storage unavailable */
+    }
+}
+
+const TRACKED_ALERTS_VISIBLE = 5;
+
+const TRACKED_ALERT_BADGES = {
+    gone: "Disparue",
+    back: "De retour",
+    modified: "Modifiée",
+};
+
+function buildTrackedAlertItem(kind, offer, dateValue) {
     const row = document.createElement("div");
     row.className = "tracked-alert-item tracked-alert-" + kind;
 
     const badge = document.createElement("span");
     badge.className = "tracked-alert-badge";
-    badge.textContent = kind === "gone" ? "Disparue" : "De retour";
+    badge.textContent = TRACKED_ALERT_BADGES[kind] || kind;
 
     const message = document.createElement("span");
     message.appendChild(createOfferLink(offer));
     const company = offer.company ? " (" + offer.company + ")" : "";
-    const date = formatDateTime(removedOn);
-    message.appendChild(document.createTextNode(
-        kind === "gone"
-            ? company + " — passée dans les annonces supprimées (" + date + ")."
-            : company + " — de retour dans les annonces (supprimée le " + date + ")."
-    ));
+    const date = formatDateTime(dateValue);
+    let text;
+    if (kind === "gone") {
+        text = company + " — supprimée (le " + date + ").";
+    } else if (kind === "modified") {
+        text = company + " — annonce modifiée (" + date + ").";
+    } else {
+        text = company + " — de retour dans la liste (" + date + ").";
+    }
+    message.appendChild(document.createTextNode(text));
 
     row.appendChild(badge);
     row.appendChild(message);
@@ -745,22 +750,22 @@ function renderTrackedAlerts() {
     const list = document.getElementById("trackedAlertList");
     if (!panel || !list) return;
 
-    if (trackedAlertsDismissed) {
+    if (trackedAlertsHiddenForCurrentScrape()) {
         panel.classList.add("hidden");
         return;
     }
 
-    const tracked = getTrackedAlertNumbers();
-    const currentNumbers = new Set(
-        (currentOffers || []).map(o => String(o.number))
-    );
-
     const items = [];
-    (deletedOffers || []).forEach(offer => {
-        const number = String(offer.number);
-        if (!tracked.has(number)) return;
-        const kind = currentNumbers.has(number) ? "back" : "gone";
-        items.push(buildTrackedAlertItem(kind, offer, offer.removed_on));
+    (currentOffers || []).forEach(offer => {
+        const state = getOfferState(offer);
+        if (state === "deleted") {
+            items.push(buildTrackedAlertItem("gone", offer, offer.removed_on));
+        } else if (state === "reappeared") {
+            items.push(buildTrackedAlertItem("back", offer, lastScrapeDate));
+        }
+        if (offer.modified === true && state !== "deleted") {
+            items.push(buildTrackedAlertItem("modified", offer, offer.modified_at));
+        }
     });
 
     list.innerHTML = "";
@@ -770,35 +775,27 @@ function renderTrackedAlerts() {
     }
 
     items.forEach(item => list.appendChild(item));
+    updateTrackedAlertToggle(items.length);
     panel.classList.remove("hidden");
 }
 
-function renderDeleted(offers) {
-    const tbody = document.getElementById("deletedRows");
-    tbody.innerHTML = "";
+function updateTrackedAlertToggle(total) {
+    const toggle = document.getElementById("trackedAlertToggleBtn");
+    const list = document.getElementById("trackedAlertList");
+    const limited = total > TRACKED_ALERTS_VISIBLE;
 
-    const counter = document.getElementById("statDeleted");
-    if (counter) {
-        counter.textContent = String(offers.length);
+    if (list) {
+        list.classList.toggle(
+            "is-limited", limited && !trackedAlertsExpanded
+        );
     }
-
-    let list;
-    if (sortIsActive() && sortTable === "deletedRows") {
-        list = sortedOffers(offers);
-    } else {
-        list = offers.slice().sort((a, b) => {
-            const aTime = new Date(a.removed_on || "1970-01-01T00:00:00").getTime();
-            const bTime = new Date(b.removed_on || "1970-01-01T00:00:00").getTime();
-            return bTime - aTime;
-        });
+    if (toggle) {
+        toggle.classList.toggle("hidden", !limited);
+        toggle.textContent = trackedAlertsExpanded ? "Voir moins" : "Voir plus";
+        toggle.setAttribute(
+            "aria-expanded", trackedAlertsExpanded ? "true" : "false"
+        );
     }
-
-    if (list.length === 0) {
-        tbody.appendChild(createInfoRow("Aucune annonce supprimée.", 8));
-        return;
-    }
-
-    list.forEach(offer => tbody.appendChild(createDeletedRow(offer)));
 }
 
 
@@ -962,8 +959,8 @@ function readFilterValue(id) {
 }
 
 function offerStateMatches(offer, value) {
-    if (!value) return true;
     const state = getOfferState(offer);
+    if (!value) return state !== "deleted";
     if (value === "old") {
         return state === "old" || state === "unchanged";
     }
@@ -1069,10 +1066,6 @@ function applyFilters() {
             return true;
         }
     );
-
-    applyFiltersToTable("deletedRows", "deletedSearch", function () {
-        return true;
-    });
 }
 
 function applyFiltersToTable(tbodyId, searchId, otherFiltersPass) {
@@ -1082,19 +1075,23 @@ function applyFiltersToTable(tbodyId, searchId, otherFiltersPass) {
 
     const rows = Array.from(tbody.children);
 
-    // Split the tbody into groups delimited by separation rows.
-    let currentGroup = [];
+    // A separation row labels the block of rows that follows it. Each block
+    // is grouped under its own header; rows placed before the first header
+    // form a header-less block.
     const groups = [];
-
+    let current = null;
     rows.forEach(row => {
         if (row.dataset && row.dataset.separation === "true") {
-            groups.push({ separation: row, rows: currentGroup });
-            currentGroup = [];
+            current = { separation: row, rows: [] };
+            groups.push(current);
         } else {
-            currentGroup.push(row);
+            if (!current) {
+                current = { separation: null, rows: [] };
+                groups.push(current);
+            }
+            current.rows.push(row);
         }
     });
-    groups.push({ separation: null, rows: currentGroup });
 
     groups.forEach(group => {
         let visible = 0;
@@ -1158,20 +1155,13 @@ function setupTabs() {
 
     buttons.forEach(button => {
         button.addEventListener("click", function () {
-            const target = this.dataset.target;
-
             buttons.forEach(b => {
                 const active = b === this;
                 b.classList.toggle("active", active);
                 b.setAttribute("aria-selected", active ? "true" : "false");
             });
 
-            document.getElementById("tab-current").classList.toggle(
-                "hidden", target !== "current"
-            );
-            document.getElementById("tab-deleted").classList.toggle(
-                "hidden", target !== "deleted"
-            );
+            document.getElementById("tab-current").classList.remove("hidden");
         });
     });
 }
@@ -1576,7 +1566,6 @@ function updateTitle(data) {
 // ============================================================
 
 let currentOffers = [];
-let deletedOffers = [];
 let lastScrapeDate = "";
 let lastData = null;
 let staleAlertShown = false;
@@ -1667,7 +1656,6 @@ function setupSortableColumns() {
             }
             updateSortHeaders();
             renderCurrent(currentOffers, lastScrapeDate);
-            renderDeleted(deletedOffers);
             applyFilters();
         });
     });
@@ -1921,16 +1909,13 @@ async function loadJsonWithFallback(url, tbody, failureMessage, colSpan) {
 
 async function reloadTables() {
     const tbodyCurrent = document.getElementById("currentRows");
-    const tbodyDeleted = document.getElementById("deletedRows");
 
     if (!dataUrl && dataUrl !== "all") {
         tbodyCurrent.innerHTML = "<tr><td colspan='9' class='no-scraping'>Aucun scraping sélectionné. Choisissez-en un dans le menu.</td></tr>";
-        tbodyDeleted.innerHTML = "";
         return;
     }
 
     let offers = [];
-    let deleted = [];
     let scrapeDate = "";
     let data = null;
 
@@ -1940,15 +1925,13 @@ async function reloadTables() {
         if (scrapings && scrapings.length) {
             const allData = await Promise.all(scrapings.map(async s => {
                 const d = await fetchJson(s.file);
-                const h = await fetchJson(s.history);
-                return { data: d, history: h, timestamp: s.scrape_timestamp, label: s.label };
+                return { data: d, timestamp: s.scrape_timestamp, label: s.label };
             }));
-            allData.forEach(({ data: d, history, timestamp, label }) => {
+            allData.forEach(({ data: d, timestamp }) => {
                 if (d) {
                     offers.push(...extractOffers(d));
                     if (timestamp && (!scrapeDate || timestamp > scrapeDate)) scrapeDate = timestamp;
                 }
-                if (history) deleted.push(...extractOffers(history));
             });
             // Use label from most recent scrape for title
             const mostRecent = allData.reduce((a, b) => a.timestamp > b.timestamp ? a : b, { label: "" });
@@ -1960,22 +1943,14 @@ async function reloadTables() {
             tbodyCurrent,
             "Impossible de charger " + dataUrl
         );
-        const history = await loadJsonWithFallback(
-            historyUrl,
-            tbodyDeleted,
-            "Impossible de charger " + historyUrl,
-            7
-        );
 
         if (!data) return;
 
         offers = extractOffers(data);
-        deleted = history ? extractOffers(history) : [];
         scrapeDate = data && data.scrape_timestamp ? data.scrape_timestamp : "";
     }
 
     currentOffers = offers;
-    deletedOffers = deleted;
     lastScrapeDate = scrapeDate;
     // Store metadata needed for stale alert command generation
     lastData = {
@@ -1986,9 +1961,7 @@ async function reloadTables() {
         label: data && data.label
     };
 
-    const currentNumbers = new Set(offers.map(o => String(o.number)));
-    const keepNumbers = new Set(currentNumbers);
-    deleted.forEach(o => keepNumbers.add(String(o.number)));
+    const keepNumbers = new Set(offers.map(o => String(o.number)));
 
     currentByNumber = new Map();
     offers.forEach(o => currentByNumber.set(String(o.number), o));
@@ -2002,7 +1975,6 @@ async function reloadTables() {
 
     try {
         renderCurrent(offers, scrapeDate);
-        renderDeleted(deleted);
         applyFilters();
         updateTitle(data);
         renderTrackedAlerts();
@@ -2032,9 +2004,9 @@ async function init() {
     setupSortableColumns();
     setupScraperRefresh();
     setupStorageSync();
-    // Default sort by modified_at descending
+    // Default sort: most recently published first
     sortTable = "currentRows";
-    sortKey = "modified_at";
+    sortKey = "published_on";
     sortDir = -1;
     updateSortHeaders();
     const exportBtn = document.getElementById("exportCsvBtn");
@@ -2149,11 +2121,19 @@ async function init() {
     const trackedAlertDismissBtn = document.getElementById("trackedAlertDismissBtn");
     if (trackedAlertDismissBtn) {
         trackedAlertDismissBtn.addEventListener("click", function () {
-            trackedAlertsDismissed = true;
+            dismissTrackedAlerts();
             const panel = document.getElementById("trackedAlertPanel");
             if (panel) {
                 panel.classList.add("hidden");
             }
+        });
+    }
+
+    const trackedAlertToggleBtn = document.getElementById("trackedAlertToggleBtn");
+    if (trackedAlertToggleBtn) {
+        trackedAlertToggleBtn.addEventListener("click", function () {
+            trackedAlertsExpanded = !trackedAlertsExpanded;
+            renderTrackedAlerts();
         });
     }
 
@@ -2197,7 +2177,7 @@ async function init() {
         }
     });
 
-    ["currentSearch", "deletedSearch"].forEach(id => {
+    ["currentSearch"].forEach(id => {
         const input = document.getElementById(id);
         if (input) {
             input.addEventListener("input", applyFilters);

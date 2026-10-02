@@ -59,7 +59,6 @@
     --success-text: #33604F;
     --success-border: #C6DED5;
     --warning-bg: #F7F1E6;
-    --warning-bg-hover: #EFE5D2;
     --warning-text: #77581F;
     --warning-border: #E4D4B2;
     --danger-bg: #F8ECEE;
@@ -120,7 +119,6 @@
     --success-text: #9CC7B8;
     --success-border: #2F4A41;
     --warning-bg: #352D1F;
-    --warning-bg-hover: #443825;
     --warning-text: #DCBE8A;
     --warning-border: #4C4130;
     --danger-bg: #382529;
@@ -515,6 +513,11 @@ body {
     color: var(--danger-text);
 }
 
+.state-modified {
+    background: var(--warning-bg);
+    color: var(--warning-text);
+}
+
 .date-hint {
     color: var(--text-muted);
     font-size: 12px;
@@ -523,6 +526,10 @@ body {
 
 .date-expiry {
     color: var(--star-color);
+}
+
+.date-removed {
+    color: var(--danger-text);
 }
 
 /* ============================================================
@@ -1882,6 +1889,7 @@ th.sortable.sort-desc::after {
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--text-secondary);
+    margin-right: auto;
 }
 
 .tracked-alert-dismiss {
@@ -1900,10 +1908,35 @@ th.sortable.sort-desc::after {
     color: var(--text-primary);
 }
 
+.tracked-alert-toggle {
+    border: none;
+    background: transparent;
+    color: var(--link);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 3px 8px;
+    border-radius: 8px;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.tracked-alert-toggle:hover {
+    background: var(--row-hover);
+    color: var(--text-primary);
+}
+
+.tracked-alert-toggle.hidden {
+    display: none;
+}
+
 .tracked-alert-list {
     display: flex;
     flex-direction: column;
     gap: 6px;
+}
+
+.tracked-alert-list.is-limited .tracked-alert-item:nth-child(n+6) {
+    display: none;
 }
 
 .tracked-alert-item {
@@ -1946,6 +1979,12 @@ th.sortable.sort-desc::after {
     background: var(--alert-back-bg);
     color: var(--alert-back-text);
     border-color: var(--alert-back-border);
+}
+
+.tracked-alert-modified .tracked-alert-badge {
+    background: var(--warning-bg);
+    color: var(--warning-text);
+    border-color: var(--warning-border);
 }
 
 /* ============================================================
@@ -2013,15 +2052,8 @@ tbody tr:hover {
     background: var(--row-hover);
 }
 
-/* Modified offer row */
-tbody tr.offer-modified {
-    background: var(--warning-bg);
-}
-
-tbody tr.offer-modified:hover {
-    background: var(--warning-bg-hover);
-}
-
+/* Modified offer row: the small tag is enough, the row keeps its normal
+   background. */
 .modified-tag {
     display: inline-flex;
     align-items: center;
@@ -2164,6 +2196,13 @@ a:hover {
     background: var(--warning-bg);
     color: var(--warning-text);
     border-left-color: var(--warning);
+}
+
+/* Deleted section: danger color */
+.separation-row.separ-deleted td {
+    background: var(--danger-bg);
+    color: var(--danger-text);
+    border-left-color: var(--danger);
 }
 
 /* ============================================================

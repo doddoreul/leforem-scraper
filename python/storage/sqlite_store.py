@@ -26,6 +26,9 @@ class SqliteStorage(Storage):
             return self._explicit_path
         return os.path.join(config.DATA_DIR, "leforem.db")
 
+    def describe(self) -> str:
+        return f"base SQLite ({self.db_path})"
+
     def _connect(self) -> sqlite3.Connection:
         path = self.db_path
         Path(path).parent.mkdir(parents=True, exist_ok=True)

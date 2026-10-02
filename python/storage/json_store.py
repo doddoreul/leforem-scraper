@@ -22,6 +22,9 @@ def _details_map_to_payload(details: Dict[str, Any]) -> Dict[str, Any]:
 
 
 class JsonStorage(Storage):
+    def describe(self) -> str:
+        return f"fichiers JSON ({config.DATA_DIR})"
+
     def get_scraping_names(self) -> List[str]:
         names: List[str] = []
         data_dir = config.DATA_DIR

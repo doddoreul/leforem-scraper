@@ -39,22 +39,6 @@
 
 </header>
 
-<div class="page-bar">
-
-    <nav class="tabs" role="tablist">
-
-        <button class="tab-btn active" type="button" data-target="current" role="tab" aria-selected="true">
-            Annonces actuelles
-        </button>
-
-        <button class="tab-btn" type="button" data-target="deleted" role="tab" aria-selected="false">
-            Annonces supprimées
-        </button>
-
-    </nav>
-
-</div>
-
 <!-- ============================================================
      TAB: CURRENT OFFERS
      ============================================================ -->
@@ -120,10 +104,11 @@
             <label class="filter" for="stateFilter">
                 <span>État :</span>
                 <select id="stateFilter">
-                    <option value="">Tous</option>
-                    <option value="new">Nouvelle</option>
+                    <option value="">Toutes (non supprimées)</option>
+                    <option value="new">Nouvelles</option>
                     <option value="reappeared">De retour</option>
-                    <option value="old">Ancienne</option>
+                    <option value="old">Anciennes</option>
+                    <option value="deleted">Supprimées</option>
                 </select>
             </label>
 
@@ -180,6 +165,8 @@
 
         <div class="tracked-alert-head">
             <span class="tracked-alert-title">Suivi d'offres</span>
+            <button type="button" class="tracked-alert-toggle hidden" id="trackedAlertToggleBtn"
+                    aria-expanded="false">Voir plus</button>
             <button type="button" class="tracked-alert-dismiss" id="trackedAlertDismissBtn"
                     title="Masquer ces alertes pour cette session">Masquer</button>
         </div>
@@ -226,62 +213,6 @@
             <tbody id="currentRows">
                 <tr class="info-row">
                     <td colspan="9">Chargement des annonces...</td>
-                </tr>
-            </tbody>
-
-        </table>
-
-    </div>
-
-</section>
-
-<!-- ============================================================
-     TAB: REMOVED OFFERS
-     ============================================================ -->
-
-<section id="tab-deleted" class="tab-content hidden">
-
-    <div class="toolbar">
-
-        <div class="stat-group">
-
-            <div class="stat">
-                <strong id="statDeleted">0</strong> annonce(s) supprimée(s)
-            </div>
-
-        </div>
-
-        <div class="tools">
-
-            <label class="search" for="deletedSearch">
-                <span>🔎</span>
-                <input type="search" id="deletedSearch" placeholder="Rechercher… (mots clés)">
-            </label>
-
-        </div>
-
-    </div>
-
-    <div class="table-container">
-
-        <table>
-
-            <thead>
-            <tr>
-                <th class="col-star" title="Favori">★</th>
-                <th class="col-forem-id" data-sort="number">ID Forem</th>
-                <th class="col-offer" data-sort="offer_title">Offre</th>
-                <th class="col-company" data-sort="company">Société</th>
-                <th class="col-details" data-sort="contract_type">Contrat · Horaire · Rémunération</th>
-                <th class="col-location" data-sort="location">Lieu</th>
-                <th class="col-removed-on" data-sort="removed_on">Supprimée le</th>
-                <th class="col-notes">Remarque</th>
-            </tr>
-            </thead>
-
-            <tbody id="deletedRows">
-                <tr class="info-row">
-                    <td colspan="8">Chargement des annonces supprimées...</td>
                 </tr>
             </tbody>
 

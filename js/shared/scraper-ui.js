@@ -250,7 +250,7 @@ export const ScraperUi = (function () {
         if (/\berror\b|\berreur\b|\bfailed\b/i.test(line)) {
             return "warn";
         }
-        if (/^(Done|Files written|Change detection)/.test(line)) {
+        if (/^(Done|Storage updated|Change detection)/.test(line)) {
             return "done";
         }
         return "";

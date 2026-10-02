@@ -118,6 +118,17 @@ class TestStates(unittest.TestCase):
         self.assertEqual(current_numbers, {"1"})
         self.assertEqual(states["deleted"], [])
 
+    def test_a_tombstoned_offer_that_returns_is_reappeared(self):
+        previous = [
+            make_offer("1"),
+            {"number": "2", "removed": True, "offer_state": "deleted"},
+        ]
+        current = [make_offer("1"), make_offer("2")]
+        states, _ = core.collect_states(previous, current, set())
+        self.assertEqual(states["reappeared"], ["2"])
+        self.assertEqual(states["unchanged"], ["1"])
+        self.assertEqual(states["deleted"], [])
+
     def test_summarize(self):
         states = {
             "new": ["1"],
@@ -130,6 +141,27 @@ class TestStates(unittest.TestCase):
         self.assertEqual(summary["inchangees"], 1)
         self.assertEqual(summary["supprimees"], 1)
         self.assertEqual(summary["total_offres"], 3)
+
+
+class TestTombstones(unittest.TestCase):
+    def test_disappeared_offers_are_returned_marked_deleted(self):
+        previous = [make_offer("1"), make_offer("2")]
+        current = [make_offer("1")]
+        tombstones = core.tombstone_offers(previous, current, "t2")
+        self.assertEqual([o["number"] for o in tombstones], ["2"])
+        self.assertEqual(tombstones[0]["offer_state"], "deleted")
+        self.assertTrue(tombstones[0]["removed"])
+        self.assertFalse(tombstones[0]["is_new"])
+        self.assertEqual(tombstones[0]["removed_on"], "t2")
+
+    def test_the_original_removal_date_is_not_overwritten(self):
+        previous = [{"number": "2", "removed": True, "removed_on": "t1"}]
+        tombstones = core.tombstone_offers(previous, [], "t2")
+        self.assertEqual(tombstones[0]["removed_on"], "t1")
+
+    def test_a_still_present_offer_is_not_a_tombstone(self):
+        previous = [make_offer("1")]
+        self.assertEqual(core.tombstone_offers(previous, previous, "t2"), [])
 
 
 class TestScrapeHistory(unittest.TestCase):

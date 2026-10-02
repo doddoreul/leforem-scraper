@@ -13,6 +13,10 @@ from typing import Any, Dict, List, Optional, Tuple
 class Storage(abc.ABC):
     """Abstract storage interface."""
 
+    def describe(self) -> str:
+        """Human-readable description of where the data is stored."""
+        return "storage"
+
     @abc.abstractmethod
     def get_scraping_names(self) -> List[str]:
         ...

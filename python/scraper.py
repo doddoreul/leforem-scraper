@@ -908,7 +908,6 @@ def run_scrape(occupation_guid, location_guid, base="", label="", limit=None,
     scrapes_file = config.scrapes_file()
     blacklist_file = config.blacklist_file()
     started_at = time.monotonic()
-    details_file_path = details_file(base_name)
 
     now = now_iso_timestamp()
 
@@ -943,9 +942,7 @@ def run_scrape(occupation_guid, location_guid, base="", label="", limit=None,
         log(f"Scrape: {base_name}")
     if label:
         log(f"Label: {label}")
-    log(f"Files: {data_file}, {history_file}")
-    log(f"Details: {details_file_path}")
-    log(f"Scrape history: {scrapes_file}")
+    log(f"Storage: {_storage.describe()}")
 
     if limit is not None:
         log(f"Limit requested: {limit} offer(s)")
@@ -984,7 +981,7 @@ def run_scrape(occupation_guid, location_guid, base="", label="", limit=None,
             f"{new_count} nouvelles annonces trouvées, "
             "souhaitez-vous les scraper?"
         ):
-            log("Annulation. Les fichiers existants sont conservés.")
+            log("Annulation. Les données existantes sont conservées.")
             return {
                 "status": "cancelled",
                 "name": base_name,
@@ -1220,6 +1217,8 @@ def run_scrape(occupation_guid, location_guid, base="", label="", limit=None,
         offer["is_new"] = state in ("new", "reappeared")
         if state == "reappeared":
             offer["reappeared"] = True
+            offer.pop("removed", None)
+            offer.pop("removed_on", None)
 
     # Apply 12-month temporal filter
     offers_before_filter = len(new_offers)
@@ -1229,6 +1228,12 @@ def run_scrape(occupation_guid, location_guid, base="", label="", limit=None,
     update_history(
         previous_offers, new_offers, history, now
     )
+
+    # Deleted offers are not dropped: they stay in the listing as tombstones
+    # (offer_state="deleted") so their whole content, and the raw detail
+    # payload kept below, stay available. The UI shows them as "Supprimée".
+    deleted_offers = core.tombstone_offers(previous_offers, new_offers, now)
+    listing_offers = new_offers + deleted_offers
 
     summary = core.summarize_scrape(states, total=len(new_offers))
     entry = {
@@ -1255,7 +1260,7 @@ def run_scrape(occupation_guid, location_guid, base="", label="", limit=None,
         "label": label,
         "occupation_guid": occupation_guid,
         "location_guid": location_guid,
-        "offers": new_offers,
+        "offers": listing_offers,
         "metier_index": metier_index,
     }
 
@@ -1264,11 +1269,17 @@ def run_scrape(occupation_guid, location_guid, base="", label="", limit=None,
     _storage.write_scraping(base_name, data)
     write_blacklist(blacklist, blacklist_file)
 
+    # Raw Forem payloads are kept for every offer still in the listing
+    # (tombstones included) and for every entry of the deleted history.
     keep_details_numbers = {
         clean_text(o.get("number"))
-        for o in new_offers
+        for o in listing_offers
         if isinstance(o, dict) and clean_text(o.get("number"))
-    } | set(deleted_numbers)
+    } | {
+        clean_text(entry.get("number"))
+        for entry in history.get("offers", [])
+        if isinstance(entry, dict) and clean_text(entry.get("number"))
+    }
     final_details = core.merge_details(
         previous=previous_details,
         fetched=new_details,
@@ -1281,6 +1292,11 @@ def run_scrape(occupation_guid, location_guid, base="", label="", limit=None,
         f"Done: {len(new_offers)} offer(s) "
         f"({fetched_count} fetched, {cached_count} from cache)"
     )
+    if deleted_offers:
+        log(
+            f"Deleted: {len(deleted_offers)} offer(s) kept in the listing "
+            "(marked Supprimée)"
+        )
     log(
         "States: {nouvelles} new, {reapparues} back, "
         "{inchangees} unchanged, {supprimees} deleted".format(**summary)
@@ -1303,10 +1319,7 @@ def run_scrape(occupation_guid, location_guid, base="", label="", limit=None,
     log(f"Métiers indexed: {len(metier_index)}")
     if errors:
         log(f"Errors: {len(errors)} offer(s) failed, data kept")
-    log(
-        f"Files written: {data_file}, {history_file}, "
-        f"{scrapes_file}, {details_file_path}"
-    )
+    log(f"Storage updated: {_storage.describe()}")
 
     return {
         "status": "done",

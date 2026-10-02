@@ -58,7 +58,7 @@ OFFERS = [
         "published_on": "2026-09-25",
         "removed_on": "",
         "modified_at": "2026-09-26T08:15:00",
-        "modified": "2026-09-26",
+        "modified": True,
         "date_fin_diffusion": "2026-11-30",
         "description": "<p>Tien de poste au sein d'une equipe.</p>",
         "email": "jobs@example.be",
@@ -87,6 +87,107 @@ OFFERS = [
         "modified": "2026-08-02",
         "date_fin_diffusion": "",
         "description": "<p>Maintenance preventive.</p>",
+        "email": "",
+        "is_new": False,
+        "offer_state": "old",
+        "diff": {},
+    },
+    {
+        "number": "1904",
+        "offer_title": "Technicien disparu",
+        "company": "Fonderie du Nord",
+        "location": "Charleroi",
+        "contract_type": "CDI",
+        "schedule": "temps plein",
+        "salary": "",
+        "pay": "",
+        "published_on": "2026-07-01",
+        "removed_on": "2026-09-30T10:00:00",
+        "modified_at": "2026-07-01T09:00:00",
+        "modified": False,
+        "date_fin_diffusion": "",
+        "description": "<p>Offre retiree du site.</p>",
+        "email": "",
+        "is_new": False,
+        "removed": True,
+        "offer_state": "deleted",
+        "diff": {},
+    },
+    {
+        "number": "1905",
+        "offer_title": "Offre de retour",
+        "company": "Ateliers du Sud",
+        "location": "Liege",
+        "contract_type": "CDI",
+        "schedule": "temps plein",
+        "salary": "",
+        "pay": "",
+        "published_on": "2026-06-01",
+        "removed_on": "",
+        "modified_at": "2026-06-01T09:00:00",
+        "modified": False,
+        "date_fin_diffusion": "",
+        "description": "<p>De nouveau en ligne.</p>",
+        "email": "",
+        "is_new": True,
+        "offer_state": "reappeared",
+        "diff": {},
+    },
+    {
+        "number": "1906",
+        "offer_title": "Poste modifie A",
+        "company": "Ateliers du Sud",
+        "location": "Liege",
+        "contract_type": "CDI",
+        "schedule": "temps plein",
+        "salary": "",
+        "pay": "",
+        "published_on": "2026-09-01",
+        "removed_on": "",
+        "modified_at": "2026-09-27T08:00:00",
+        "modified": True,
+        "date_fin_diffusion": "",
+        "description": "<p>Description A.</p>",
+        "email": "",
+        "is_new": False,
+        "offer_state": "old",
+        "diff": {},
+    },
+    {
+        "number": "1907",
+        "offer_title": "Poste modifie B",
+        "company": "Ateliers du Sud",
+        "location": "Liege",
+        "contract_type": "CDI",
+        "schedule": "temps plein",
+        "salary": "",
+        "pay": "",
+        "published_on": "2026-09-02",
+        "removed_on": "",
+        "modified_at": "2026-09-28T08:00:00",
+        "modified": True,
+        "date_fin_diffusion": "",
+        "description": "<p>Description B.</p>",
+        "email": "",
+        "is_new": False,
+        "offer_state": "old",
+        "diff": {},
+    },
+    {
+        "number": "1908",
+        "offer_title": "Poste modifie C",
+        "company": "Ateliers du Sud",
+        "location": "Liege",
+        "contract_type": "CDI",
+        "schedule": "temps plein",
+        "salary": "",
+        "pay": "",
+        "published_on": "2026-09-03",
+        "removed_on": "",
+        "modified_at": "2026-09-29T08:00:00",
+        "modified": True,
+        "date_fin_diffusion": "",
+        "description": "<p>Description C.</p>",
         "email": "",
         "is_new": False,
         "offer_state": "old",
@@ -247,6 +348,98 @@ log("done");
 </body></html>
 """
 
+# Loads the offers page in an iframe and clicks "Voir plus" on the tracked
+# alert panel, so a --dump-dom run shows the unfolded state.
+TRACKED_PROBE = """<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<iframe id="frame" src="/" width="1000" height="800"></iframe>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\\n"); }
+
+const frame = document.getElementById("frame");
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+for (let i = 0; i < 80; i += 1) {
+    await sleep(250);
+    const doc = frame.contentDocument;
+    if (!doc) continue;
+    const list = doc.getElementById("trackedAlertList");
+    const button = doc.getElementById("trackedAlertToggleBtn");
+    if (!list || !button) continue;
+    if (button.classList.contains("hidden")) continue;
+    if (!list.classList.contains("is-limited")) continue;
+
+    log("beforeLimited=" + list.classList.contains("is-limited"));
+    log("beforeText=" + button.textContent);
+    button.click();
+    await sleep(150);
+    log("afterLimited=" + list.classList.contains("is-limited"));
+    log("afterText=" + button.textContent);
+    log("TRACKED-OK");
+    break;
+}
+</script>
+</body></html>
+"""
+
+# Dismisses the tracked panel, opens the page again in the same origin and
+# checks the dismissal survives until a new scrape date replaces it.
+DISMISS_PROBE = """<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\\n"); }
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const KEY = "forem_tracked_alerts_dismissed";
+
+// A dismissal recorded for an older scrape must not hide the panel.
+localStorage.setItem(KEY, "1999-01-01T00:00:00");
+
+async function openPage() {
+    const frame = document.createElement("iframe");
+    frame.width = 1200;
+    frame.height = 900;
+    const loaded = new Promise(resolve => { frame.onload = resolve; });
+    frame.src = "/";
+    document.body.appendChild(frame);
+    await loaded;
+    const doc = frame.contentDocument;
+    for (let i = 0; i < 40; i += 1) {
+        const panel = doc.getElementById("trackedAlertPanel");
+        const items = panel ? panel.querySelectorAll(".tracked-alert-item") : [];
+        if (items.length > 0) return { frame: frame, doc: doc, panel: panel };
+        await sleep(250);
+    }
+    return { frame: frame, doc: doc, panel: doc.getElementById("trackedAlertPanel") };
+}
+
+let page = await openPage();
+log("staleVisible=" + !page.panel.classList.contains("hidden"));
+
+page.doc.getElementById("trackedAlertDismissBtn").click();
+await sleep(100);
+log("afterClickHidden=" + page.panel.classList.contains("hidden"));
+
+// A fresh render of the same scrape re-reads the marker and stays hidden.
+page.doc.dispatchEvent(new Event("foremsuiviimported"));
+await sleep(100);
+log("rerenderHidden=" + page.panel.classList.contains("hidden"));
+
+const stored = localStorage.getItem(KEY) || "";
+log("storedForScrape=" + (stored !== "" && stored !== "1999-01-01T00:00:00"));
+page.frame.remove();
+
+localStorage.removeItem(KEY);
+log("DISMISS-OK");
+</script>
+</body></html>
+"""
+
 # Imports every module and calls the shared helpers: the import errors a
 # --dump-dom run cannot show are reported here.
 PROBE = """<!DOCTYPE html>
@@ -317,8 +510,14 @@ class ProbeHandler(server.Handler):
     """The real handler, plus the page that exercises every module."""
 
     def _serve_file(self, path):
-        if path in ("/probe.html", "/diff-probe.html"):
-            body = (PROBE if path == "/probe.html" else DIFF_PROBE).encode("utf-8")
+        probes = {
+            "/probe.html": PROBE,
+            "/diff-probe.html": DIFF_PROBE,
+            "/tracked-probe.html": TRACKED_PROBE,
+            "/dismiss-probe.html": DISMISS_PROBE,
+        }
+        if path in probes:
+            body = probes[path].encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -464,6 +663,29 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         )
 
 
+    def test_the_tracked_panel_unfolds_on_demand(self):
+        report = self.report_of("/tracked-probe.html")
+
+        self.assertIn("beforeLimited=true", report)
+        self.assertIn("beforeText=Voir plus", report)
+        self.assertIn("afterLimited=false", report)
+        self.assertIn("afterText=Voir moins", report)
+        self.assertIn("TRACKED-OK", report)
+
+    def test_masking_the_tracked_panel_stays_until_the_next_scrape(self):
+        report = self.report_of("/dismiss-probe.html")
+
+        # A dismissal from an older scrape never hides the current alerts...
+        self.assertIn("staleVisible=true", report)
+        # ...clicking "Masquer" hides them...
+        self.assertIn("afterClickHidden=true", report)
+        # ...the marker is stored per scrape...
+        self.assertIn("storedForScrape=true", report)
+        # ...and re-rendering the same scrape keeps them hidden.
+        self.assertIn("rerenderHidden=true", report)
+        self.assertIn("DISMISS-OK", report)
+
+
 class TestPagesInBrowser(BrowserPagesTestCase):
     def assertDrawn(self, path, markers):
         dom = self.dump(path)
@@ -512,6 +734,47 @@ class TestPagesInBrowser(BrowserPagesTestCase):
             'id="exportCsvBtn"',
             'id="deleteScrapingGearBtn"',
         ])
+
+    def test_deleted_offers_stay_in_the_single_list(self):
+        dom = self.dump("")
+
+        # The separate "Annonces supprimées" tab is gone.
+        self.assertNotIn('id="tab-deleted"', dom)
+        self.assertNotIn('id="deletedRows"', dom)
+
+        # The disappeared offer is kept, grouped and badged in the list.
+        self.assertIn("Supprimées (1)", dom)
+        self.assertIn("Technicien disparu", dom)
+        self.assertIn("state-badge state-deleted", dom)
+
+        # A reappeared offer is badged as such.
+        self.assertIn("Offre de retour", dom)
+        self.assertIn("state-badge state-reappeared", dom)
+
+        # The tracked panel lists the three kinds of change.
+        self.assertIn("Disparue", dom)
+        self.assertIn("De retour", dom)
+        self.assertIn("Modifiée", dom)
+
+        # With more than 5 changes, the panel starts truncated and offers
+        # a "Voir plus" button to unfold it.
+        self.assertIn("tracked-alert-list is-limited", dom)
+        self.assertIn('id="trackedAlertToggleBtn"', dom)
+        self.assertIn("Voir plus", dom)
+
+    def test_the_listing_is_sorted_by_publication_date(self):
+        import re
+
+        dom = self.dump("")
+        tbody = re.search(
+            r'id="currentRows">(.*?)</tbody>', dom, re.S
+        ).group(1)
+        numbers = re.findall(r'<tr data-number="(\d+)"', tbody)
+        # Most recent publication first; deleted offers group at the end.
+        self.assertEqual(
+            numbers,
+            ["1902", "1908", "1907", "1906", "1903", "1905", "1904"],
+        )
 
     def test_the_dashboard_draws_its_kpis(self):
         self.assertDrawn("/insights.html", [

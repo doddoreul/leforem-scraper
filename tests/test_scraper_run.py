@@ -212,6 +212,23 @@ class TestFirstRun(RunScrapeTestCase):
                 os.path.exists(os.path.join(self.tmp.name, name)), name
             )
 
+    def test_the_run_reports_the_storage_not_the_json_files(self):
+        self.search = [{"number": "1", "published_on": iso_days_ago(5)}]
+        self.details = {"1": make_detail("1")}
+
+        self.run_scrape()
+
+        self.assertTrue(
+            any(line.startswith("Storage:") for line in self.logs)
+        )
+        self.assertTrue(
+            any(line.startswith("Storage updated:") for line in self.logs)
+        )
+        for line in self.logs:
+            self.assertNotIn("data_test.json", line)
+            self.assertNotIn("details_test.json", line)
+            self.assertNotIn("historique_test.json", line)
+
     def test_first_seen_at_is_not_overwritten_by_a_later_run(self):
         self.search = [{"number": "1", "published_on": iso_days_ago(5)}]
         self.details = {"1": make_detail("1")}
@@ -369,6 +386,53 @@ class TestTemporalFilter(RunScrapeTestCase):
         summary = self.run_scrape()
 
         self.assertEqual(summary["total_offres"], 1)
+
+
+class TestDeletedOffersAreKept(RunScrapeTestCase):
+    """A disappeared offer stays in the listing, marked "Supprimée"."""
+
+    def seed_two(self):
+        self.search = [
+            {"number": "1", "published_on": iso_days_ago(5)},
+            {"number": "2", "published_on": iso_days_ago(5)},
+        ]
+        self.details = {"1": make_detail("1"), "2": make_detail("2")}
+        self.run_scrape()
+
+    def test_a_disappeared_offer_stays_in_the_listing(self):
+        self.seed_two()
+        self.search = [{"number": "1", "published_on": iso_days_ago(5)}]
+
+        summary = self.run_scrape()
+
+        self.assertEqual(summary["supprimees"], 1)
+        offers = self.offers_by_number()
+        self.assertEqual(set(offers), {"1", "2"})
+        self.assertEqual(offers["2"]["offer_state"], "deleted")
+        self.assertTrue(offers["2"]["removed"])
+        self.assertFalse(offers["2"]["is_new"])
+        self.assertEqual(offers["2"]["offer_title"], "Electromecanicien")
+
+        # The raw Forem payload of the deleted offer is kept too.
+        self.assertIn("2", scraper._storage.read_details("test"))
+
+    def test_a_deleted_offer_that_returns_is_marked_reappeared(self):
+        self.seed_two()
+        self.search = [{"number": "1", "published_on": iso_days_ago(5)}]
+        self.run_scrape()
+
+        self.search = [
+            {"number": "1", "published_on": iso_days_ago(5)},
+            {"number": "2", "published_on": iso_days_ago(5)},
+        ]
+        summary = self.run_scrape()
+
+        self.assertEqual(summary["reapparues"], 1)
+        self.assertEqual(summary["supprimees"], 0)
+        offer = self.offers_by_number()["2"]
+        self.assertEqual(offer["offer_state"], "reappeared")
+        self.assertTrue(offer["is_new"])
+        self.assertNotIn("removed", offer)
 
 
 class TestErrorHandling(RunScrapeTestCase):
