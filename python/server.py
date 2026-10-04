@@ -16,6 +16,8 @@ Routes:
 ===========================  ==========================================
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -26,6 +28,7 @@ import time
 import traceback
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
 from urllib.parse import urlparse
 
 import requests
@@ -105,21 +108,21 @@ class StreamReporter:
     the background: the response is finished once scraper.py returns.
     """
 
-    def __init__(self, handler):
+    def __init__(self, handler: Any) -> None:
         self.handler = handler
 
-    def log(self, message=""):
+    def log(self, message: str = "") -> None:
         lines = str(message).splitlines() or [""]
         for line in lines:
             self.handler.log_message("scraper | %s", line)
             self.handler._write_event({"type": "log", "line": line})
 
-    def progress(self, done, total):
+    def progress(self, done: int, total: int) -> None:
         self.handler._write_event(
             {"type": "progress", "done": done, "total": total}
         )
 
-    def progress_done(self):
+    def progress_done(self) -> None:
         pass
 
 
@@ -128,11 +131,11 @@ class Handler(BaseHTTPRequestHandler):
     # Required to stream the scraper log while the request is still open.
     protocol_version = "HTTP/1.1"
 
-    def setup(self):
+    def setup(self) -> None:
         super().setup()
         self._stream_broken = False
 
-    def _send_json(self, code, content):
+    def _send_json(self, code: int, content: Any) -> None:
         body = json.dumps(content, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -141,7 +144,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _serve_file(self, path):
+    def _serve_file(self, path: str) -> None:
         if self._serve_data(path):
             return
         if JS_PATH.match(path):
@@ -182,7 +185,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _serve_data(self, path):
+    def _serve_data(self, path: str) -> bool:
         """Serve the JSON data routes from the storage layer.
 
         Returns True when the path belongs to the data API (even if the
@@ -222,12 +225,14 @@ class Handler(BaseHTTPRequestHandler):
             return True
 
         if name.startswith(data_prefix) and name.endswith(suffix):
-            base = config.scrape_base(name)
-            payload = store.read_scraping(base)
-            if payload is None:
+            scraping_base = config.scrape_base(name)
+            if scraping_base is None:
+                return False
+            data_payload = store.read_scraping(scraping_base)
+            if data_payload is None:
                 self.send_error(404)
             else:
-                self._send_json(200, payload)
+                self._send_json(200, data_payload)
             return True
 
         if name.startswith(history_prefix) and name.endswith(suffix):
@@ -238,7 +243,7 @@ class Handler(BaseHTTPRequestHandler):
 
         return False
 
-    def do_GET(self):
+    def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
         if path == "/api/scrapings":
@@ -259,7 +264,7 @@ class Handler(BaseHTTPRequestHandler):
 
         self._serve_file(path)
 
-    def do_POST(self):
+    def do_POST(self) -> None:
         path = urlparse(self.path).path
         if path == SCRAPER_RUN_PATH:
             self._handle_scraper_run()
@@ -270,7 +275,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self.send_error(404)
 
-    def _handle_companies_save(self):
+    def _handle_companies_save(self) -> None:
         """Save the employer index as edited by hand on the Employers page."""
         if not self._origin_allowed():
             self._send_json(403, {"error": "origin refused"})
@@ -299,7 +304,7 @@ class Handler(BaseHTTPRequestHandler):
             "employeurs": len(payload["employers"]),
         })
 
-    def _handle_scrapings(self):
+    def _handle_scrapings(self) -> None:
         store = get_storage()
         results = []
         for name in store.get_scraping_names():
@@ -321,7 +326,7 @@ class Handler(BaseHTTPRequestHandler):
         results.sort(key=lambda e: e["label"] or e["name"])
         self._send_json(200, results)
 
-    def _handle_occupations(self, q):
+    def _handle_occupations(self, q: str) -> None:
         if not q:
             self._send_json(200, [])
             return
@@ -339,7 +344,7 @@ class Handler(BaseHTTPRequestHandler):
         ]
         self._send_json(200, results)
 
-    def _handle_locations(self):
+    def _handle_locations(self) -> None:
         try:
             response = SESSION.get(LOCATIONS_ENDPOINT, timeout=30)
             response.raise_for_status()
@@ -362,12 +367,12 @@ class Handler(BaseHTTPRequestHandler):
     # SYNCHRONOUS SCRAPING (POST /api/scraper/run)
     # ============================================================
 
-    def _origin_allowed(self):
+    def _origin_allowed(self) -> bool:
         origin = self.headers.get("Origin")
         host = self.headers.get("Host") or ""
         return not origin or urlparse(origin).netloc == host
 
-    def _read_json_body(self, required=True):
+    def _read_json_body(self, required: bool = True) -> tuple[Any, str | None]:
         """Return (payload, error_message)."""
         try:
             length = int(self.headers.get("Content-Length") or 0)
@@ -386,7 +391,7 @@ class Handler(BaseHTTPRequestHandler):
             return None, "invalid JSON"
         return payload, None
 
-    def _start_stream(self):
+    def _start_stream(self) -> None:
         self.send_response(200)
         self.send_header(
             "Content-Type", "application/x-ndjson; charset=utf-8"
@@ -396,7 +401,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Transfer-Encoding", "chunked")
         self.end_headers()
 
-    def _write_event(self, event):
+    def _write_event(self, event: Any) -> None:
         if self._stream_broken:
             return
         body = json.dumps(event, ensure_ascii=False).encode("utf-8") + b"\n"
@@ -411,7 +416,7 @@ class Handler(BaseHTTPRequestHandler):
             self._stream_broken = True
             self.log_message("scraper stream closed: %s", exc)
 
-    def _end_stream(self):
+    def _end_stream(self) -> None:
         if self._stream_broken:
             self.close_connection = True
             return
@@ -421,7 +426,7 @@ class Handler(BaseHTTPRequestHandler):
         except OSError:
             self.close_connection = True
 
-    def _read_scraping_target(self, name, payload):
+    def _read_scraping_target(self, name: str, payload: Any) -> dict[str, str] | None:
         """GUIDs and label of one scraping. The stored values win, so the
         request cannot scrape another search than the selected one."""
         stored = get_storage().read_scraping(name) or {}
@@ -441,7 +446,7 @@ class Handler(BaseHTTPRequestHandler):
             "label": str(stored.get("label") or payload.get("label") or ""),
         }
 
-    def _handle_scraper_run(self):
+    def _handle_scraper_run(self) -> None:
         """Run scraper.py and answer only once it is finished.
 
         The response is streamed (one NDJSON line per real scraper event) so
@@ -485,7 +490,7 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             _scraper_lock.release()
 
-    def _run_scraper(self, name, target, refresh):
+    def _run_scraper(self, name: str, target: Any, refresh: bool) -> None:
         self.log_message("scraper run started for %s", name)
         self._start_stream()
         reporter = StreamReporter(self)
@@ -529,7 +534,7 @@ class Handler(BaseHTTPRequestHandler):
         self._write_event({"type": "done", "result": summary})
         self._end_stream()
 
-    def _refresh_employer_index(self):
+    def _refresh_employer_index(self) -> Any:
         """Rebuild data/companies.json after a scrape.
 
         Best effort: an unreadable or partial index is logged and the scrape
@@ -553,7 +558,7 @@ class Handler(BaseHTTPRequestHandler):
         )
         return stats
 
-    def _handle_delete_scraping(self):
+    def _handle_delete_scraping(self) -> None:
         """Move all files for a scraping to trash.
 
         The files are moved aside rather than removed, so a mistaken deletion
@@ -586,13 +591,13 @@ class Handler(BaseHTTPRequestHandler):
 
         self._send_json(200, {"ok": True, "moved": moved})
 
-    def log_message(self, format, *args):
+    def log_message(self, format: str, *args: Any) -> None:
         sys.stderr.write(
             "%s - %s\n" % (self.log_date_time_string(), format % args)
         )
 
 
-def open_browser(url):
+def open_browser(url: str) -> bool:
     """Ouvre l'adresse dans le navigateur par défaut (Edge, Chrome, Firefox).
 
     Le serveur écoute déjà quand cette fonction est appelée : la requête
@@ -607,7 +612,7 @@ def open_browser(url):
 
     # Petit délai : la page a le temps d'être servie, et l'utilisateur
     # voit d'abord la fenêtre du serveur.
-    def launch():
+    def launch() -> None:
         time.sleep(0.4)
         try:
             controller.open(url, new=1)
@@ -618,7 +623,7 @@ def open_browser(url):
     return True
 
 
-def main():
+def main() -> None:
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     url = f"http://localhost:{PORT}"
     opened = open_browser(url)

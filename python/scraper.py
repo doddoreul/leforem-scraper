@@ -11,6 +11,10 @@ Run it from the repository root::
     python scraper.py --occupation-guid GUID --location-guid GUID
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 import argparse
 import concurrent.futures
 import json
@@ -433,13 +437,13 @@ def extract_email(detail):
     if isinstance(how, dict):
         value = how.get("email")
         if EMAIL_PATTERN.fullmatch(str(value or "").strip()):
-            structured = value.strip()
+            structured = str(value).strip()
 
     if structured:
         return structured
 
     # 2) Fallback: scan the free-text fields written by employers.
-    found = []
+    found: list[str] = []
     seen = set()
 
     for field in EMAIL_TEXT_FIELDS:
@@ -1008,7 +1012,7 @@ def run_scrape(occupation_guid, location_guid, base="", label="", limit=None,
         # the previous run, and the ones that previously failed. The others
         # are kept from the cache without a single request.
         # --refresh downloads every offer again.
-        tasks = []
+        tasks: list[tuple[Any, ...]] = []
         for index, entry in enumerate(search_results, start=1):
             number = entry["number"]
             known = number in previous_by_number
@@ -1067,11 +1071,8 @@ def run_scrape(occupation_guid, location_guid, base="", label="", limit=None,
                     new_details[number] = detail
                 return task, offer, "fetched"
             except requests.HTTPError as e:
-                status = (
-                    getattr(e, "response", None).status_code
-                    if getattr(e, "response", None) is not None
-                    else "?"
-                )
+                response = getattr(e, "response", None)
+                status = response.status_code if response is not None else "?"
                 with _blacklist_lock:
                     core.note_miss(blacklist, number, now)
                 return task, None, f"HTTP {status}: {e}"

@@ -8,6 +8,8 @@ a temporary directory, and the command line accepts ``--data-dir``. Resolve
 it through :func:`data_dir` rather than caching it at import time.
 """
 
+from __future__ import annotations
+
 import os
 import re
 
@@ -28,38 +30,38 @@ SCRAPE_STATE_FILE_NAME = "scrape_state.json"
 VERSION = 1
 
 
-def data_dir():
+def data_dir() -> str:
     """The current data directory (read at call time, not cached)."""
     return DATA_DIR
 
 
-def trash_dir():
+def trash_dir() -> str:
     """Deleted searches are moved aside instead of being removed."""
     return os.path.join(data_dir(), "trash")
 
 
-def shared_file(name):
+def shared_file(name: str) -> str:
     """A file shared by every search, e.g. the blacklist."""
     return os.path.join(data_dir(), name)
 
 
-def scrapes_file():
+def scrapes_file() -> str:
     return shared_file(SCRAPES_FILE_NAME)
 
 
-def blacklist_file():
+def blacklist_file() -> str:
     return shared_file(BLACKLIST_FILE_NAME)
 
 
-def companies_file():
+def companies_file() -> str:
     return shared_file(COMPANIES_FILE_NAME)
 
 
-def modifications_file():
+def modifications_file() -> str:
     return shared_file(MODIFICATIONS_FILE_NAME)
 
 
-def scrape_state_file():
+def scrape_state_file() -> str:
     return shared_file(SCRAPE_STATE_FILE_NAME)
 
 
@@ -90,22 +92,22 @@ HISTORY_NAME_RE = re.compile(
 )
 
 
-def data_file_name(base_name):
+def data_file_name(base_name: str) -> str:
     """File name of the offers of one search."""
     return f"{DATA_PREFIX}{base_name}{JSON_SUFFIX}"
 
 
-def history_file_name(base_name):
+def history_file_name(base_name: str) -> str:
     """File name of the offers of one search that have disappeared."""
     return f"{HISTORY_PREFIX}{base_name}{JSON_SUFFIX}"
 
 
-def details_file_name(base_name):
+def details_file_name(base_name: str) -> str:
     """File name of the cached detail payloads of one search."""
     return f"{DETAILS_PREFIX}{base_name}{JSON_SUFFIX}"
 
 
-def scrape_base(file_name):
+def scrape_base(file_name: str) -> str | None:
     """The search name a data file belongs to.
 
     ``data_liege.json`` is ``liege``. Returns ``None`` for anything that is
@@ -117,7 +119,7 @@ def scrape_base(file_name):
     return file_name[len(DATA_PREFIX):-len(JSON_SUFFIX)]
 
 
-def history_base(file_name):
+def history_base(file_name: str) -> str | None:
     """The search name a history file belongs to.
 
     ``historique_liege.json`` is ``liege``. Returns ``None`` for anything
@@ -129,7 +131,7 @@ def history_base(file_name):
     return file_name[len(HISTORY_PREFIX):-len(JSON_SUFFIX)]
 
 
-def valid_search_name(name):
+def valid_search_name(name: str) -> bool:
     """True if `name` is safe to use as a file name and in a URL.
 
     The characters are restricted precisely so the name cannot escape the
@@ -138,27 +140,27 @@ def valid_search_name(name):
     return bool(SCRAPE_FILE_RE.match(data_file_name(name)))
 
 
-def data_file(base_name):
+def data_file(base_name: str) -> str:
     """The offers of one search, the file the page actually reads."""
     return os.path.join(data_dir(), data_file_name(base_name))
 
 
-def history_file(base_name):
+def history_file(base_name: str) -> str:
     """The offers of one search that have disappeared over time."""
     return os.path.join(data_dir(), history_file_name(base_name))
 
 
-def details_file(base_name):
+def details_file(base_name: str) -> str:
     """Cached detail payloads of one search, used for the extra fields."""
     return os.path.join(data_dir(), details_file_name(base_name))
 
 
-def scrape_files(base_name):
+def scrape_files(base_name: str) -> tuple[str, str]:
     """(offers, history) paths of one search."""
     return data_file(base_name), history_file(base_name)
 
 
-def delete_scrape_files(base_name):
+def delete_scrape_files(base_name: str) -> tuple[str, str, str]:
     """(data, history, details) paths of one search, in that order."""
     return (
         data_file(base_name),

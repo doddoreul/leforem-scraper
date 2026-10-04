@@ -6,6 +6,10 @@ keeps the interesting logic (state classification, hashes, dates, salaries)
 testable on its own.
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 import json
 import re
 from datetime import date, datetime
@@ -63,7 +67,7 @@ def collect_states(previous_offers, current_offers, deleted_numbers):
     previous_numbers = set(previous)
     current_numbers = set()
 
-    states = {
+    states: dict[str, list[Any]] = {
         "new": [],
         "unchanged": [],
         "reappeared": [],
@@ -523,7 +527,7 @@ def filter_recent_offers(offers, max_age_days=365):
 
 def build_metier_index(offers):
     """Build an index mapping métiers to offer numbers."""
-    index = {}
+    index: dict[str, list[Any]] = {}
     for offer in offers:
         if not isinstance(offer, dict):
             continue

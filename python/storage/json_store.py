@@ -38,7 +38,8 @@ class JsonStorage(Storage):
 
     def read_scraping(self, name: str) -> Optional[Dict[str, Any]]:
         path = config.data_file(name)
-        return read_json(path, None)
+        data = read_json(path, None)
+        return data if isinstance(data, dict) else None
 
     def write_scraping(self, name: str, payload: Dict[str, Any]) -> None:
         path = config.data_file(name)
@@ -191,8 +192,9 @@ class JsonStorage(Storage):
 
     def get_offer_details(self, base_name: str, offer_id: str) -> Optional[Dict[str, Any]]:
         details = self.read_details(base_name)
-        if offer_id in details and isinstance(details[offer_id], dict):
-            return details[offer_id]
+        record = details.get(offer_id)
+        if isinstance(record, dict):
+            return record
         return None
 
     def exists(self, kind: str, **kwargs: Any) -> bool:

@@ -5,17 +5,20 @@ interrupted run never leaves a half-written file behind: the content is
 written next to the target, flushed to disk, then moved into place.
 """
 
+from __future__ import annotations
+
 import json
 import os
 from datetime import datetime
+from typing import Any
 
 
-def now_iso_timestamp():
+def now_iso_timestamp() -> str:
     """Local time as ``YYYY-MM-DDTHH:MM:SS+HH:MM``."""
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
-def read_json(path, default=None):
+def read_json(path: str, default: Any = None) -> Any:
     """Read a JSON file, falling back to ``default``.
 
     A missing file, an unreadable one and invalid JSON all give ``default``:
@@ -31,7 +34,7 @@ def read_json(path, default=None):
     return data
 
 
-def write_json_atomically(path, content):
+def write_json_atomically(path: str, content: Any) -> None:
     """Write ``content`` as JSON, replacing ``path`` in one step."""
     directory = os.path.dirname(path)
     if directory:
@@ -46,7 +49,7 @@ def write_json_atomically(path, content):
     os.replace(tmp_path, path)
 
 
-def read_details(path):
+def read_details(path: str) -> dict[str, Any]:
     """The cached detail payloads of one search, keyed by offer number."""
     data = read_json(path, None)
     if isinstance(data, dict) and isinstance(data.get("details"), dict):

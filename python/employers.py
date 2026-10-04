@@ -19,6 +19,10 @@ Usage:
     python companies.py --stats     # affiche un résumé
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 import argparse
 import logging
 import re
@@ -103,7 +107,7 @@ def url_domain(value):
 def collapse_websites(values):
     """One URL per domain, so the many job-board pages of a same site
     (old or new) end up as a single entry."""
-    by_domain = {}
+    by_domain: dict[str, Any] = {}
     for value in values:
         url = normalize_url(value)
         if not url:
@@ -131,7 +135,7 @@ def compose_address(postal):
     elif street and number:
         street = f"{street}, {number}"
 
-    lines = []
+    lines: list[str] = []
     if not street:
         extra = postal.get("adresse")
         if isinstance(extra, list):
@@ -360,7 +364,7 @@ def edited_rename_map(previous, fresh):
     name behind as a duplicate.
     """
     employers = previous.get("employers") or {}
-    by_signature = {}
+    by_signature: dict[str, Any] = {}
     for record in employers.values():
         if not isinstance(record, dict) or not record.get("edited"):
             continue
@@ -368,7 +372,7 @@ def edited_rename_map(previous, fresh):
         if name:
             by_signature.setdefault(record_signature(record), name)
 
-    rename = {}
+    rename: dict[str, str] = {}
     for name, record in fresh.items():
         target = by_signature.get(record_signature(record))
         if not target or target == name or target in rename.values():
@@ -488,7 +492,7 @@ def build_index(previous=None, rebuild=False):
 
     names, observations = collect_observations()
 
-    fresh = {}
+    fresh: dict[str, Any] = {}
     for observation in observations:
         record = fresh.get(observation["name"])
         if record is None:
