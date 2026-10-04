@@ -166,19 +166,40 @@ class TestTombstones(unittest.TestCase):
 
 class TestScrapeHistory(unittest.TestCase):
     def test_record_dedup_and_cap(self):
-        history = core.empty_scrape_history()
-        core.record_scrape(history, {"timestamp": "t1", "search": "",
-                                    "total_offres": 3})
-        core.record_scrape(history, {"timestamp": "t1", "search": "",
-                                    "total_offres": 5})
-        self.assertEqual(len(history["scrapes"]), 1)
-        self.assertEqual(history["scrapes"][0]["total_offres"], 5)
+        scrapes = []
+        core.record_scrape(scrapes, {"timestamp": "t1", "search": "",
+                                     "total_offres": 3})
+        core.record_scrape(scrapes, {"timestamp": "t1", "search": "",
+                                     "total_offres": 5})
+        self.assertEqual(len(scrapes), 1)
+        self.assertEqual(scrapes[0]["total_offres"], 5)
 
-        history["scrapes"] = [{"timestamp": "s%d" % i, "search": "",
-                              "n": i} for i in range(600)]
-        core.record_scrape(history, {"timestamp": "s0", "search": ""})
-        self.assertLessEqual(len(history["scrapes"]),
-                             core.SCRAPES_MAX_ENTRIES)
+        scrapes[:] = [{"timestamp": "s%d" % i, "search": "",
+                       "n": i} for i in range(600)]
+        core.record_scrape(scrapes, {"timestamp": "s0", "search": ""})
+        self.assertLessEqual(len(scrapes), core.SCRAPES_MAX_ENTRIES)
+
+    def test_record_returns_the_same_list_it_mutates(self):
+        scrapes = []
+        self.assertIs(core.record_scrape(scrapes, {"timestamp": "t1"}),
+                      scrapes)
+        self.assertEqual(scrapes, [{"timestamp": "t1"}])
+
+    def test_a_different_search_keeps_both_entries(self):
+        scrapes = []
+        core.record_scrape(scrapes, {"timestamp": "t1", "search": "a"})
+        core.record_scrape(scrapes, {"timestamp": "t1", "search": "b"})
+        self.assertEqual([e["search"] for e in scrapes], ["a", "b"])
+
+    def test_the_cap_drops_the_oldest_entries(self):
+        # Exactly at the cap, then one more: the oldest entry must go.
+        cap = core.SCRAPES_MAX_ENTRIES
+        scrapes = [{"timestamp": "t%d" % i, "search": ""} for i in range(cap)]
+        core.record_scrape(scrapes, {"timestamp": "new", "search": ""})
+
+        self.assertEqual(len(scrapes), cap)
+        self.assertEqual(scrapes[0]["timestamp"], "t1")
+        self.assertEqual(scrapes[-1]["timestamp"], "new")
 
 
 class TestSalaryAnalysis(unittest.TestCase):

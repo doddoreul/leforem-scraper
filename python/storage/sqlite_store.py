@@ -371,7 +371,7 @@ class SqliteStorage(Storage):
             conn.commit()
 
     def list_data_files(self) -> List[str]:
-        # Pour compatibilitÃ© avec code existant (serveur liste fichiers)
+        # Pour compatibilité avec code existant (serveur liste fichiers)
         from python import jsonio
 
         return jsonio._list_data_files() if hasattr(jsonio, "_list_data_files") else []

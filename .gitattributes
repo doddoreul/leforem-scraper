@@ -1,0 +1,9 @@
+# Les fichiers sont normalises en LF dans le depot, quelle que soit la
+# plate-forme de developpement.
+#
+# Sans cette regle, core.autocrlf=true sous Windows reecrit les fichiers en CRLF
+# au moment du checkout. Un outil qui sauvegarde ensuite seulement les lignes
+# qu'il a modifiees produit alors un fichier melange CRLF/LF, et un editeur qui
+# relit l'encodage en latin-1 double-encode les accents. C'est l'origine des
+# corruption d'encodage et des diffs illisibles rencontres sur ce depot.
+* text=auto eol=lf

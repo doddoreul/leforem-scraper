@@ -737,6 +737,69 @@ class TestIncrementalRun(RunScrapeTestCase):
         self.assertEqual(summary["fetched"], 3)
         self.assertEqual(summary["cached"], 0)
 
+    def test_each_run_adds_one_line_to_the_scrape_history(self):
+        self.search = [{"number": "1", "published_on": iso_days_ago(5)}]
+        self.details = {"1": make_detail("1")}
+
+        # Two runs in the same second share their timestamp, and a re-run with
+        # the same timestamp replaces its entry: the history is given one
+        # second per run so both lines are kept.
+        saved_stamp = scraper.now_iso_timestamp
+        stamps = iter(["2026-01-01T10:00:00+01:00",
+                       "2026-01-01T10:00:01+01:00"])
+        scraper.now_iso_timestamp = lambda: next(stamps)
+        try:
+            self.run_scrape()
+            self.run_scrape()
+        finally:
+            scraper.now_iso_timestamp = saved_stamp
+
+        from python.storage import get_storage
+
+        entries = get_storage().read_history_scrapes()
+        self.assertEqual(len(entries), 2)
+        self.assertEqual([e["nouvelles"] for e in entries], [1, 0])
+
+    def test_a_real_run_writes_a_flat_scrapes_file(self):
+        # End-to-end lock on the nesting regression: a full run used to leave
+        # {"scrapes": {"version": 1, "scrapes": [...]}} on disk, which the
+        # browser cannot read (companies.js expects meta.scrapes to be an
+        # array). The raw file is inspected, not the storage layer, because
+        # the reader unwraps and would hide the problem.
+        self.search = [{"number": "1", "published_on": iso_days_ago(5)}]
+        self.details = {"1": make_detail("1")}
+
+        self.run_scrape()
+
+        with open(config.scrapes_file(), encoding="utf-8") as handle:
+            written = json.load(handle)
+
+        self.assertIsInstance(written["scrapes"], list)
+        self.assertEqual(len(written["scrapes"]), 1)
+        self.assertEqual(written["scrapes"][0]["nouvelles"], 1)
+
+    def test_a_second_run_appends_rather_than_nests(self):
+        self.search = [{"number": "1", "published_on": iso_days_ago(5)}]
+        self.details = {"1": make_detail("1")}
+
+        # Distinct timestamps, otherwise record_srapes dedupes the two runs
+        # into a single entry and nothing is appended.
+        saved_stamp = scraper.now_iso_timestamp
+        stamps = iter(["2026-01-01T10:00:00+01:00",
+                       "2026-01-01T10:00:01+01:00"])
+        scraper.now_iso_timestamp = lambda: next(stamps)
+        try:
+            self.run_scrape()
+            self.run_scrape()
+        finally:
+            scraper.now_iso_timestamp = saved_stamp
+
+        with open(config.scrapes_file(), encoding="utf-8") as handle:
+            written = json.load(handle)
+
+        self.assertIsInstance(written["scrapes"], list)
+        self.assertEqual(len(written["scrapes"]), 2)
+
     def test_progress_counts_the_downloads_only(self):
         # The terminal must not show "3 / 3420" for a run that downloads
         # 3 offers out of 3420.

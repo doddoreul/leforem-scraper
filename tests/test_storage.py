@@ -9,6 +9,7 @@ Run from the repository root:
     python -m unittest discover -s tests -v
 """
 
+import json
 import os
 import sys
 import tempfile
@@ -19,6 +20,7 @@ sys.path.insert(
 )
 
 from python import config  # noqa: E402
+from python.jsonio import write_json_atomically  # noqa: E402
 from python.storage.factory import get_storage, reset_storage  # noqa: E402
 from python.storage.json_store import JsonStorage  # noqa: E402
 from python.storage.sqlite_store import SqliteStorage  # noqa: E402
@@ -120,6 +122,51 @@ class StorageContract:
 class TestJsonStorage(StorageContract, unittest.TestCase):
     def make_storage(self):
         return JsonStorage()
+
+    def test_history_scrapes_unwraps_the_nested_legacy_format(self):
+        # Older runs wrote the whole history document inside the "scrapes"
+        # key: {"scrapes": {"version": 1, "scrapes": [...]}}.
+        legacy = {"version": 1, "scrapes": [{"timestamp": "t1"}]}
+        write_json_atomically(
+            config.scrapes_file(), {"scrapes": legacy}
+        )
+
+        self.assertEqual(
+            self.store.read_history_scrapes(), [{"timestamp": "t1"}]
+        )
+
+    def test_history_scrapes_survives_a_corrupted_file(self):
+        write_json_atomically(config.scrapes_file(), {"scrapes": 3})
+
+        self.assertEqual(self.store.read_history_scrapes(), [])
+
+    def test_write_history_scrapes_stores_a_flat_list(self):
+        # Regression: the writer used to nest the whole document under
+        # "scrapes". The round-trip contract above cannot catch it because the
+        # reader unwraps, so the raw file is inspected instead.
+        self.store.write_history_scrapes([{"timestamp": "t1"}])
+
+        with open(config.scrapes_file(), encoding="utf-8") as handle:
+            written = json.load(handle)
+
+        self.assertIsInstance(written["scrapes"], list)
+        self.assertEqual(written["scrapes"], [{"timestamp": "t1"}])
+
+    def test_write_then_read_flattens_a_nested_legacy_file(self):
+        # The migration branch must not keep the nesting alive: reading a
+        # legacy file and writing it back produces the flat format.
+        legacy = {"version": 1, "scrapes": [{"timestamp": "t1"}]}
+        write_json_atomically(config.scrapes_file(), {"scrapes": legacy})
+
+        self.store.write_history_scrapes(
+            self.store.read_history_scrapes()
+        )
+
+        with open(config.scrapes_file(), encoding="utf-8") as handle:
+            written = json.load(handle)
+
+        self.assertIsInstance(written["scrapes"], list)
+        self.assertEqual(written["scrapes"], [{"timestamp": "t1"}])
 
 
 class TestSqliteStorage(StorageContract, unittest.TestCase):

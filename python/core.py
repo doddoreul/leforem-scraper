@@ -139,30 +139,18 @@ def summarize_scrape(states, total=None):
 # SCRAPE HISTORY (per search)
 # ============================================================
 
-SCRAPES_VERSION = 1
 SCRAPES_MAX_ENTRIES = 500
 
 
-def empty_scrape_history():
-    return {"version": SCRAPES_VERSION, "scrapes": []}
+def record_scrape(scrapes, entry):
+    """Insert a scrape entry into the history list. A previous entry with the
+    identical timestamp and search is replaced (re-run of the same scrape),
+    and the list is capped to :data:`SCRAPES_MAX_ENTRIES` oldest-first.
 
-
-def read_scrape_history(path):
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict) or not isinstance(data.get("scrapes"), list):
-            return empty_scrape_history()
-        data.setdefault("version", SCRAPES_VERSION)
-        return data
-    except (OSError, json.JSONDecodeError):
-        return empty_scrape_history()
-
-
-def record_scrape(history, entry):
-    """Insert a scrape entry. A previous entry with the identical
-    timestamp is replaced (re-run of the same scrape)."""
-    scrapes = history.setdefault("scrapes", [])
+    The list is mutated in place and also returned, so callers can use either
+    form. It is a plain list on purpose: the storage layer reads and writes
+    bare lists, and the browser expects ``meta.scrapes`` to be an array.
+    """
     timestamp = entry.get("timestamp", "")
     search = entry.get("search", "")
     for index, current in enumerate(scrapes):
@@ -176,7 +164,7 @@ def record_scrape(history, entry):
         scrapes.append(entry)
     if len(scrapes) > SCRAPES_MAX_ENTRIES:
         del scrapes[: len(scrapes) - SCRAPES_MAX_ENTRIES]
-    return history
+    return scrapes
 
 
 def merge_details(previous, fetched, keep):

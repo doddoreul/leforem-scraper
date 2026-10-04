@@ -905,7 +905,6 @@ def run_scrape(occupation_guid, location_guid, base="", label="", limit=None,
         base_name = f"{occ8}-{loc8}"
 
     data_file, history_file = scraper_files(base_name)
-    scrapes_file = config.scrapes_file()
     blacklist_file = config.blacklist_file()
     started_at = time.monotonic()
 
@@ -928,7 +927,10 @@ def run_scrape(occupation_guid, location_guid, base="", label="", limit=None,
         if isinstance(entry, dict) and clean_text(entry.get("number"))
     }
 
-    scrapes = core.read_scrape_history(scrapes_file)
+    # The scrape history is read through the storage layer: with SQLite there
+    # is no scrapes.json to open, and the storage returns the bare list the
+    # writer expects.
+    scrapes = list(_storage.read_history_scrapes())
 
     previous_details = _storage.read_details(base_name)
 

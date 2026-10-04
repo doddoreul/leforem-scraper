@@ -55,8 +55,23 @@ class JsonStorage(Storage):
     def read_history_scrapes(self) -> List[Dict[str, Any]]:
         path = config.scrapes_file()
         data = read_json(path, None)
-        if isinstance(data, dict) and isinstance(data.get("scrapes"), list):
-            return list(data.get("scrapes"))
+        if not isinstance(data, dict):
+            return []
+        scrapes = data.get("scrapes")
+        if isinstance(scrapes, list):
+            return list(scrapes)
+        # Migration, kept deliberately: commit dc6038b introduced the storage
+        # layer by passing this whole document ({"version", "scrapes"}) to
+        # write_history_scrapes(), which nested it under its own "scrapes"
+        # key. Every JSON user ran since then has
+        # {"scrapes": {"version": 1, "scrapes": [...]}} on disk. Unwrapping it
+        # here recovers that history instead of silently discarding it, and
+        # the next write flattens the file. Remove this branch once no
+        # unflattened file can be encountered.
+        if isinstance(scrapes, dict):
+            nested = scrapes.get("scrapes")
+            if isinstance(nested, list):
+                return list(nested)
         return []
 
     def write_history_scrapes(self, scrapes: List[Dict[str, Any]]) -> None:
