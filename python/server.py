@@ -17,6 +17,7 @@ Routes:
 """
 
 import json
+import logging
 import os
 import re
 import sys
@@ -32,6 +33,8 @@ import requests
 from python import config
 from python import scraper
 from python.employers import refresh_index, summarize
+
+logger = logging.getLogger(__name__)
 from python.storage import get_storage
 
 BASE_DIR = config.BASE_DIR
@@ -619,23 +622,21 @@ def main():
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     url = f"http://localhost:{PORT}"
     opened = open_browser(url)
-    # flush=True : le message s'affiche tout de suite même si la sortie
-    # est redirigée dans un fichier.
-    print("=" * 58, flush=True)
-    print("  Le scraper Le Forem est démarré.", flush=True)
-    print(flush=True)
+    logger.info("=" * 58)
+    logger.info("  Le scraper Le Forem est démarré.")
+    logger.info("")
     if opened:
-        print("  Le navigateur par défaut s'ouvre sur :", flush=True)
+        logger.info("  Le navigateur par défaut s'ouvre sur :")
     else:
-        print("  Ouvre cette adresse dans ton navigateur :", flush=True)
-    print(f"    {url}", flush=True)
-    print(flush=True)
-    print("  Ctrl+C pour arrêter le serveur.", flush=True)
-    print("=" * 58, flush=True)
+        logger.info("  Ouvre cette adresse dans ton navigateur :")
+    logger.info("    %s", url)
+    logger.info("")
+    logger.info("  Ctrl+C pour arrêter le serveur.")
+    logger.info("=" * 58)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nServeur arrêté.")
+        logger.info("Serveur arrêté.")
     finally:
         server.server_close()
 

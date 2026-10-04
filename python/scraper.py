@@ -14,6 +14,7 @@ Run it from the repository root::
 import argparse
 import concurrent.futures
 import json
+import logging
 import os
 import random
 import re
@@ -32,6 +33,8 @@ from python.jsonio import (
     read_json,
     write_json_atomically,
 )
+
+logger = logging.getLogger(__name__)
 from python.storage import get_storage
 
 _storage = get_storage()
@@ -802,7 +805,7 @@ class ConsoleReporter:
     """Default reporter: writes to stdout (command-line behaviour)."""
 
     def log(self, message=""):
-        print(message)
+        logger.info("%s", message)
 
     def progress(self, done, total):
         sys.stdout.write(

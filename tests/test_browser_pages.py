@@ -698,7 +698,7 @@ class TestPagesInBrowser(BrowserPagesTestCase):
         for page in ("", "/insights.html", "/companies.html", "/detail.html"):
             with self.subTest(page=page):
                 dom = self.dump(page)
-                self.assertRegex(dom, r'data-theme="(light|dark)"')
+                self.assertRegex(dom, r'data-theme="(light|dark|mono|neon|warm|pastel|jewel|vibrancy)"')
 
     def test_every_page_draws_its_cogwheel(self):
         for page in ("", "/insights.html", "/companies.html", "/detail.html"):

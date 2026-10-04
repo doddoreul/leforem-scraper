@@ -1,0 +1,43 @@
+   LAYOUT PARTAGÉ (index / dashboard / fiche)
+   ============================================================ */
+
+.page-head,
+.page-bar,
+.tab-content,
+.dashboard,
+.detail {
+    max-width: var(--content-max);
+    margin: 0 auto;
+}
+
+/* ============================================================
+   GLOBAL
+   ============================================================ */
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
+
+body {
+    font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        Arial,
+        sans-serif;
+    background: var(--bg-page);
+    color: var(--text-primary);
+    padding: 24px;
+    overflow-x: hidden;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ============================================================

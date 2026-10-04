@@ -89,7 +89,7 @@ class TestPages(StaticFilesTestCase):
         for page in PAGES:
             with self.subTest(page=page):
                 body = self.get(f"/{page}.html").text
-                self.assertIn('href="/css/style.css', body)
+                self.assertIn('href="/css/theme.css', body)
 
     def test_the_navbar_partial_is_served(self):
         response = self.get("/navbar_include.html")
@@ -173,11 +173,13 @@ class TestModules(StaticFilesTestCase):
 
 class TestStyles(StaticFilesTestCase):
     def test_the_stylesheet_is_served_from_the_css_folder(self):
-        response = self.get("/css/style.css")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.headers["Content-Type"], "text/css; charset=utf-8"
-        )
+        for css in ("theme.css", "base.css", "components.css", "pages.css", "widgets.css"):
+            with self.subTest(css=css):
+                response = self.get("/css/" + css)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    response.headers["Content-Type"], "text/css; charset=utf-8"
+                )
 
     def test_the_stylesheet_is_not_served_from_the_root(self):
         self.assertEqual(self.get("/style.css").status_code, 404)

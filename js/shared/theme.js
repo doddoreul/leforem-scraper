@@ -14,10 +14,12 @@ const GEAR_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" st
     '2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 ' +
     '2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>';
 
+const THEMES = ["light", "dark", "mono", "neon", "warm", "pastel", "jewel", "vibrancy"];
+
 function storedTheme() {
     try {
         const saved = localStorage.getItem(THEME_KEY);
-        return saved === "light" || saved === "dark" ? saved : null;
+        return THEMES.includes(saved) ? saved : null;
     } catch (error) {
         return null;
     }
@@ -33,7 +35,7 @@ export function currentTheme() {
 }
 
 export function applyTheme(theme) {
-    const next = theme === "dark" ? "dark" : "light";
+    const next = THEMES.includes(theme) ? theme : "light";
     document.documentElement.setAttribute("data-theme", next);
     try {
         localStorage.setItem(THEME_KEY, next);
@@ -83,9 +85,9 @@ export function renderGearActions(actions) {
         list.map(gearActionMarkup).join("");
 }
 
-function syncThemeSwitch() {
-    const toggle = document.getElementById("themeSwitch");
-    if (toggle) toggle.checked = currentTheme() === "dark";
+function syncThemeSelect() {
+    const select = document.getElementById("themeSelect");
+    if (select) select.value = currentTheme();
 }
 
 function buildThemeSettings() {
@@ -101,8 +103,17 @@ function buildThemeSettings() {
         '<div class="theme-menu" id="themeMenu" hidden>' +
         '<p class="theme-menu-title">Paramètres</p>' +
         '<div class="theme-switch-row">' +
-        '<label class="theme-switch-label" for="themeSwitch">Mode sombre</label>' +
-        '<input type="checkbox" id="themeSwitch" class="theme-switch" role="switch">' +
+        '<label class="theme-switch-label" for="themeSelect">Thème</label>' +
+        '<select id="themeSelect" class="theme-select">' +
+        '<option value="light">Clair</option>' +
+        '<option value="dark">Sombre</option>' +
+        '<option value="mono">Monochrome</option>' +
+        '<option value="neon">Neon</option>' +
+        '<option value="warm">Warm</option>' +
+        '<option value="pastel">Pastel</option>' +
+        '<option value="jewel">Jewel</option>' +
+        '<option value="vibrancy">Vibrancy</option>' +
+        '</select>' +
         '</div>' +
         '</div>';
 
@@ -110,12 +121,12 @@ function buildThemeSettings() {
 
     const gear = document.getElementById("themeGear");
     const menu = document.getElementById("themeMenu");
-    const toggle = document.getElementById("themeSwitch");
+    const select = document.getElementById("themeSelect");
 
     function openMenu(open) {
         menu.hidden = !open;
         gear.setAttribute("aria-expanded", open ? "true" : "false");
-        if (open) syncThemeSwitch();
+        if (open) syncThemeSelect();
     }
 
     gear.addEventListener("click", function (event) {
@@ -123,11 +134,11 @@ function buildThemeSettings() {
         openMenu(menu.hidden);
     });
 
-    toggle.addEventListener("change", function () {
-        applyTheme(toggle.checked ? "dark" : "light");
+    select.addEventListener("change", function () {
+        applyTheme(select.value);
     });
 
-    document.addEventListener(THEME_EVENT, syncThemeSwitch);
+    document.addEventListener(THEME_EVENT, syncThemeSelect);
 
     menu.addEventListener("click", function (event) {
         if (event.target.closest(".theme-action")) openMenu(false);
@@ -144,7 +155,7 @@ function buildThemeSettings() {
         }
     });
 
-    syncThemeSwitch();
+    syncThemeSelect();
 }
 
 /**

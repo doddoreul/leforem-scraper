@@ -1,6 +1,7 @@
 """Migrate JSON files to SQLite storage."""
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -9,6 +10,8 @@ from typing import Optional
 from python import config
 from python.jsonio import read_json, read_details
 from python.storage.sqlite_store import SqliteStorage
+
+logger = logging.getLogger(__name__)
 
 
 def _load_json_safe(path: str, default=None):
@@ -82,7 +85,7 @@ def migrate_all(data_dir: Optional[str] = None, db_path: Optional[str] = None) -
 
 def main() -> None:
     migrate_all()
-    print("Migration terminée.")
+    logger.info("Migration terminée.")
 
 
 if __name__ == "__main__":

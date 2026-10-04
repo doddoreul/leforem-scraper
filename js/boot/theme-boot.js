@@ -19,7 +19,10 @@
         saved = null;
     }
 
-    if (saved !== "light" && saved !== "dark") {
+    // No validation here: js/shared/theme.js owns the THEMES list and
+    // normalises whatever lands in localStorage via applyTheme(). This
+    // script only has to pick a value before the first paint.
+    if (!saved) {
         var prefersDark = window.matchMedia &&
             window.matchMedia("(prefers-color-scheme: dark)").matches;
         saved = prefersDark ? "dark" : "light";

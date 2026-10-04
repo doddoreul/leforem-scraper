@@ -20,6 +20,7 @@ Usage:
 """
 
 import argparse
+import logging
 import re
 from urllib.parse import urlsplit, urlunsplit
 
@@ -27,6 +28,8 @@ from python import config
 from python import core
 from python import scraper
 from python.storage import get_storage
+
+logger = logging.getLogger(__name__)
 
 VERSION = config.VERSION
 
@@ -657,30 +660,30 @@ def main():
     index = build_index(previous=previous, rebuild=args.rebuild)
 
     stats = index["stats"]
-    print(f"Recherches lues : {', '.join(n or '(défaut)' for n in index['scrapes'])}")
-    print(f"Employeurs indexés : {stats['employeurs']}")
-    print(f"  avec email      : {stats['avecEmail']} ({stats['emails']} adresses)")
-    print(f"  avec téléphone  : {stats['avecTelephone']}")
-    print(f"  avec adresse    : {stats['avecAdresse']}")
-    print(f"  avec site       : {stats['avecSite']}")
-    print(f"Offres actives    : {stats['offresActives']}")
-    print(f"Offres supprimées : {stats['offresSupprimees']}")
+    logger.info("Recherches lues : %s", ", ".join(n or "(défaut)" for n in index["scrapes"]))
+    logger.info("Employeurs indexés : %s", stats["employeurs"])
+    logger.info("  avec email      : %s (%s adresses)", stats["avecEmail"], stats["emails"])
+    logger.info("  avec téléphone  : %s", stats["avecTelephone"])
+    logger.info("  avec adresse    : %s", stats["avecAdresse"])
+    logger.info("  avec site       : %s", stats["avecSite"])
+    logger.info("Offres actives    : %s", stats["offresActives"])
+    logger.info("Offres supprimées : %s", stats["offresSupprimees"])
     if stats["employeursSansNom"]:
-        print(f"Offres sans nom d'employeur : {stats['employeursSansNom']}")
+        logger.info("Offres sans nom d'employeur : %s", stats["employeursSansNom"])
 
     if args.dry_run:
-        print("\n(--dry-run : aucun fichier écrit)")
+        logger.info("(--dry-run : aucun fichier écrit)")
         return
 
     get_storage().write_companies(index)
-    print(f"\nÉcrit : {config.companies_file()}")
+    logger.info("Écrit : %s", config.companies_file())
 
     if args.stats:
         for name, record in sorted(
             index["employers"].items(), key=lambda kv: kv[0].casefold()
         ):
             contacts = ", ".join(record["emails"]) or "-"
-            print(f"  {name} | {record['offerCount']} offre(s) | {contacts}")
+            logger.info("  %s | %s offre(s) | %s", name, record["offerCount"], contacts)
 
 
 if __name__ == "__main__":

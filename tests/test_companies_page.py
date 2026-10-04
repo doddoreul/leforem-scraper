@@ -45,7 +45,7 @@ class TestCompaniesJs(unittest.TestCase):
         self.assertIn('type="module"', self.html)
         self.assertIn("/js/pages/companies.js", self.html)
         self.assertIn("/js/boot/theme-boot.js", self.html)
-        self.assertIn("/css/style.css", self.html)
+        self.assertIn("/css/theme.css", self.html)
 
     def test_no_inner_html_with_data(self):
         # Company names come from the API: never injected as HTML.
@@ -85,7 +85,9 @@ class TestCompaniesJs(unittest.TestCase):
             self.assertIn(fragment, saved)
 
     def test_no_orphan_css(self):
-        css = read(os.path.join("css", "style.css"))
+        css = ""
+        for name in ("theme.css", "base.css", "components.css", "pages.css", "widgets.css"):
+            css += read(os.path.join("css", name))
         for block in (".company-offer-head", ".company-offer-meta",
                       ".company-offer-fields", ".company-offer-label",
                       ".company-dates-row", ".company-textarea",
