@@ -71,6 +71,7 @@ HTML_FILES = {
     "/insights.html": "insights.html",
     "/companies.html": "companies.html",
     "/detail.html": "detail.html",
+    "/profil.html": "profil.html",
     "/navbar_include.html": "navbar_include.html",
 }
 
@@ -268,6 +269,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._handle_tracking_get(base)
                 return
 
+        if path == "/api/profil":
+            self._send_json(200, get_storage().read_profile())
+            return
+
         self._serve_file(path)
 
     def do_POST(self) -> None:
@@ -288,6 +293,9 @@ class Handler(BaseHTTPRequestHandler):
             if len(parts) == 2 and parts[0] and parts[1]:
                 self._handle_tracking_put(parts[0], parts[1])
                 return
+        if path == "/api/profil":
+            self._handle_profile_save()
+            return
         self.send_error(404)
 
     def do_DELETE(self) -> None:
@@ -325,6 +333,23 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(403, {"error": "origin refused"})
             return
         get_storage().delete_tracking(base, offer_id)
+        self._send_json(200, {"ok": True})
+
+    def _handle_profile_save(self) -> None:
+        """Save the single candidate profile sent by the Profil page."""
+        if not self._origin_allowed():
+            self._send_json(403, {"error": "origin refused"})
+            return
+
+        payload, error = self._read_json_body()
+        if error:
+            self._send_json(400, {"error": error})
+            return
+        if not isinstance(payload, dict):
+            self._send_json(400, {"error": "invalid payload"})
+            return
+
+        get_storage().write_profile(payload)
         self._send_json(200, {"ok": True})
 
     def _handle_companies_save(self) -> None:

@@ -501,6 +501,62 @@ log("PERSIST-OK");
 </body></html>
 """
 
+# validateProfile is pure, so the browser is only needed to load the module
+# and check the real rejections on the real page.
+PROFILE_PROBE = r"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+import {
+    validateProfile,
+    parseKeywords,
+    emptyProfile,
+} from "/js/shared/profile.js";
+
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\n"); }
+
+try {
+// An empty profile is valid: every field is optional.
+log("emptyOk=" + validateProfile(emptyProfile()).ok);
+
+// A postal code of three digits is refused.
+log("postal3Rejected=" + Boolean(validateProfile({ postalCode: "400" }).errors.postalCode));
+
+// A negative hourly rate is refused.
+log("rateNegRejected=" + Boolean(validateProfile({ hourlyRate: "-5" }).errors.hourlyRate));
+
+// A distance over 500 km is refused.
+log("distanceBigRejected=" + Boolean(validateProfile({ maxDistanceKm: "900" }).errors.maxDistanceKm));
+
+// Valid values pass and the keyword list is built: "Nuit" is a duplicate of
+// "nuit" once case and accents are ignored.
+const good = validateProfile({
+    postalCode: "4000",
+    keywordsText: "nuit, maintenance\nNuit , electricite",
+    hourlyRate: "15,50",
+    maxDistanceKm: "25",
+    contractTypes: ["CDI"],
+});
+log("goodOk=" + good.ok);
+log("rate=" + good.value.hourlyRate);
+log("distance=" + good.value.maxDistanceKm);
+log("keywords=" + good.value.keywords.join("|"));
+
+// Commas and newlines are both separators, and only the empties are dropped.
+log("parseEmpty=" + JSON.stringify(parseKeywords("  ,  ,  ")));
+log("parseMixed=" + JSON.stringify(
+    parseKeywords("nuit\n  ," + String.fromCharCode(10) + " electricite")));
+
+log("PROFILE-OK");
+} catch (error) {
+    log("PROBE-ERROR=" + (error && error.message ? error.message : String(error)));
+}
+</script>
+</body></html>
+"""
+
 # Imports every module and calls the shared helpers: the import errors a
 # --dump-dom run cannot show are reported here.
 PROBE = """<!DOCTYPE html>
@@ -577,6 +633,7 @@ class ProbeHandler(server.Handler):
             "/tracked-probe.html": TRACKED_PROBE,
             "/dismiss-probe.html": DISMISS_PROBE,
             "/persist-probe.html": PERSIST_PROBE,
+            "/profile-probe.html": PROFILE_PROBE,
         }
         if path in probes:
             body = probes[path].encode("utf-8")
@@ -746,6 +803,22 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         # ...and re-rendering the same scrape keeps them hidden.
         self.assertIn("rerenderHidden=true", report)
         self.assertIn("DISMISS-OK", report)
+
+    def test_validate_profile_rejects_the_impossible_values(self):
+        report = self.report_of("/profile-probe.html")
+
+        self.assertIn("PROFILE-OK", report)
+        self.assertIn("emptyOk=true", report)
+        self.assertIn("postal3Rejected=true", report)
+        self.assertIn("rateNegRejected=true", report)
+        self.assertIn("distanceBigRejected=true", report)
+        self.assertIn("goodOk=true", report)
+        self.assertIn("rate=15.5", report)
+        self.assertIn("distance=25", report)
+        # "Nuit" appears twice with different case: only the first survives.
+        self.assertIn("keywords=nuit|maintenance|electricite", report)
+        self.assertIn("parseEmpty=[]", report)
+        self.assertIn('parseMixed=["nuit","electricite"]', report)
 
     def test_the_follow_up_survives_a_cleared_browser(self):
         report = self.report_of("/persist-probe.html")

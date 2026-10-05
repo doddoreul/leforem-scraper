@@ -197,6 +197,13 @@ class JsonStorage(Storage):
             return record
         return None
 
+    def read_profile(self) -> Dict[str, Any]:
+        data = read_json(config.shared_file("profil.json"), None)
+        return data if isinstance(data, dict) else {}
+
+    def write_profile(self, payload: Dict[str, Any]) -> None:
+        write_json_atomically(config.shared_file("profil.json"), payload)
+
     def read_tracking(self, base_name: str) -> Dict[str, Dict[str, Any]]:
         """Return the follow-up, with every field present on every offer.
 

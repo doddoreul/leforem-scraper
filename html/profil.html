@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Profil — Suivi Forem</title>
+
+<link rel="stylesheet" href="/css/theme.css?v=42">
+<link rel="stylesheet" href="/css/base.css?v=42">
+<link rel="stylesheet" href="/css/components.css?v=42">
+<link rel="stylesheet" href="/css/pages.css?v=42">
+<link rel="stylesheet" href="/css/widgets.css?v=42">
+
+<script src="/js/boot/theme-boot.js"></script>
+
+</head>
+<body>
+
+<div id="navbar-placeholder"></div>
+
+<main class="dashboard">
+
+    <header class="page-head">
+
+        <div class="page-head-titles">
+
+            <h1 class="page-title">Profil</h1>
+            <p class="page-sub">
+                Ton profil candidat : utilisé pour comparer les offres aux
+                offres. Tous les champs sont facultatifs.
+            </p>
+
+        </div>
+
+    </header>
+
+    <form class="profile-form" id="profileForm" novalidate>
+
+        <section class="dash-card profile-field">
+            <h2 class="dash-card-title">Code postal</h2>
+            <p class="dash-note">4 chiffres, entre 1000 et 9999.</p>
+            <label class="filter" for="postalCode">
+                <span>Code postal :</span>
+                <input type="text" id="postalCode" name="postalCode"
+                       inputmode="numeric" autocomplete="postal-code"
+                       maxlength="4" placeholder="4000">
+            </label>
+            <p class="field-error" id="postalCodeError" role="alert" hidden></p>
+        </section>
+
+        <section class="dash-card profile-field">
+            <h2 class="dash-card-title">Mots-clés</h2>
+            <p class="dash-note">
+                Séparés par des virgules ou des retours à la ligne.
+            </p>
+            <label class="filter" for="keywordsText">
+                <span>Mots-clés :</span>
+                <textarea id="keywordsText" name="keywordsText" rows="4"
+                          placeholder="électromécanicien, maintenance, nuit"></textarea>
+            </label>
+            <p class="dash-note" id="keywordsPreview"></p>
+            <p class="field-error" id="keywordsError" role="alert" hidden></p>
+        </section>
+
+        <section class="dash-card profile-field">
+            <h2 class="dash-card-title">Taux horaire souhaité</h2>
+            <p class="dash-note">En euros <strong>brut</strong> de l'heure, 2 décimales max.</p>
+            <label class="filter" for="hourlyRate">
+                <span>€/h brut :</span>
+                <input type="text" id="hourlyRate" name="hourlyRate"
+                       inputmode="decimal" placeholder="15,50">
+            </label>
+            <p class="field-error" id="hourlyRateError" role="alert" hidden></p>
+        </section>
+
+        <section class="dash-card profile-field">
+            <h2 class="dash-card-title">Types de contrat souhaités</h2>
+            <p class="dash-note">Plusieurs choix possibles.</p>
+            <div class="contract-list" id="contractTypes" role="group"
+                 aria-label="Types de contrat souhaités"></div>
+            <p class="field-error" id="contractTypesError" role="alert" hidden></p>
+        </section>
+
+        <section class="dash-card profile-field">
+            <h2 class="dash-card-title">Distance maximale</h2>
+            <p class="dash-note">En kilomètres, de 0 à 500.</p>
+            <label class="filter" for="maxDistanceKm">
+                <span>Km :</span>
+                <input type="text" id="maxDistanceKm" name="maxDistanceKm"
+                       inputmode="numeric" placeholder="25">
+            </label>
+            <p class="field-error" id="maxDistanceKmError" role="alert" hidden></p>
+        </section>
+
+        <div class="profile-actions">
+            <button type="submit" class="btn-primary" id="saveProfileBtn">
+                Enregistrer
+            </button>
+            <button type="button" class="btn-secondary" id="resetProfileBtn">
+                Réinitialiser
+            </button>
+        </div>
+
+        <p class="profile-message" id="profileMessage" role="status"></p>
+
+    </form>
+
+</main>
+
+<script type="module" src="/js/pages/profil.js"></script>
+
+</body>
+</html>

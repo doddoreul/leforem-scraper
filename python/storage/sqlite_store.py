@@ -122,6 +122,12 @@ class SqliteStorage(Storage):
                   UNIQUE(base_name, offer_id)
                 );
                 CREATE INDEX IF NOT EXISTS idx_tracking_base ON offer_tracking(base_name);
+
+                CREATE TABLE IF NOT EXISTS profile (
+                  id INTEGER PRIMARY KEY CHECK (id=1),
+                  payload_json TEXT NOT NULL,
+                  updated_at TEXT DEFAULT (datetime('now'))
+                );
                 """
         )
         self._upgrade_history_offers(conn)
@@ -445,6 +451,29 @@ class SqliteStorage(Storage):
                     ).fetchone()
                 return row is not None
         return False
+
+    def read_profile(self) -> Dict[str, Any]:
+        """The single candidate profile, {} when it was never saved."""
+        with self._session() as conn:
+            row = conn.execute("SELECT payload_json FROM profile WHERE id=1").fetchone()
+            data = self._json_loads(row["payload_json"] if row else None)
+            if isinstance(data, dict):
+                return data
+            return {}
+
+    def write_profile(self, payload: Dict[str, Any]) -> None:
+        with self._session() as conn:
+            conn.execute(
+                """
+                INSERT INTO profile (id, payload_json)
+                VALUES (1, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  payload_json=excluded.payload_json,
+                  updated_at=datetime('now')
+                """,
+                (self._json_dumps(payload),),
+            )
+            conn.commit()
 
     def read_tracking(self, base_name: str) -> Dict[str, Dict[str, Any]]:
         out: Dict[str, Dict[str, Any]] = {}

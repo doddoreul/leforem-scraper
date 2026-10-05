@@ -215,7 +215,7 @@ base SQLite unique :
 
 | Fichier | Contenu |
 |---|---|
-| `leforem.db` | offres, détails, historiques, blacklist et index des employeurs |
+| `leforem.db` | offres, détails, historiques, blacklist, index des employeurs, suivi (`offer_tracking`) et profil candidat (`profile`) |
 | `trash/` | les recherches supprimées depuis la page (corbeille) |
 
 Le format JSON reste disponible en le demandant explicitement
@@ -260,7 +260,9 @@ La barre de navigation en haut de page relie trois écrans :
 
 - **Offres** (`index.html`) : le tableau, les filtres, le bouton *Actualiser* ;
 - **Dashboard** (`html/insights.html`) : les statistiques de tes recherches ;
-- **Employeurs** (`html/companies.html`) : les entreprises et leurs logos.
+- **Employeurs** (`html/companies.html`) : les entreprises et leurs logos ;
+- **Profil** (`html/profil.html`) : ton profil candidat, un seul pour toute
+  l'application (pas un profil par recherche), qui servira à comparer les offres.
 
 | Fichier | Rôle |
 |---|---|
@@ -268,6 +270,7 @@ La barre de navigation en haut de page relie trois écrans :
 | `python/` | le code : `config.py` (chemins), `jsonio.py` (lecture/écriture JSON), `core.py` (logique pure), `storage/` (stockage SQLite/JSON interchangeable), `scraper.py`, `employers.py`, `server.py` — lancés par `python -m python.scraper`, `python -m python.employers`, `python -m python.server` |
 | `index.html`, `css/style.css`, `js/pages/index.js` | le tableau des offres, ses filtres et son style |
 | `html/detail.html`, `js/pages/detail.js` | la fiche d'une offre (statut, remarque, priorité) |
+| `html/profil.html`, `js/pages/profil.js` | le profil candidat (code postal, mots-clés, taux horaire brut, contrats, distance) |
 | `html/insights.html`, `js/pages/insights.js` | le dashboard |
 | `html/companies.html`, `js/pages/companies.js` | la page Employeurs |
 | `js/shared/` | les modules communs : `api.js`, `dates.js`, `dom.js`, `links.js`, `navbar.js`, `scraper-ui.js`, `scraping-selector.js`, `statuses.js`, `storage.js`, `suivi.js`, `text.js`, `theme.js` |
