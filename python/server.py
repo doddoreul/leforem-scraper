@@ -88,6 +88,7 @@ CSS_MIME = "text/css; charset=utf-8"
 SCRAPER_RUN_PATH = "/api/scraper/run"
 DELETE_SCRAPING_PATH = "/delete-scraping"
 COMPANIES_PATH = "/companies.json"
+PROFILE_PATH = "/api/profil"
 
 # Synchronous scraping: the browser blocks on SCRAPER_RUN_PATH until the
 # scraper has finished writing its files.
@@ -269,7 +270,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._handle_tracking_get(base)
                 return
 
-        if path == "/api/profil":
+        if path == PROFILE_PATH:
             self._send_json(200, get_storage().read_profile())
             return
 
@@ -283,6 +284,8 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_delete_scraping()
         elif path == COMPANIES_PATH:
             self._handle_companies_save()
+        elif path == PROFILE_PATH:
+            self._handle_profile_save()
         else:
             self.send_error(404)
 
@@ -293,9 +296,7 @@ class Handler(BaseHTTPRequestHandler):
             if len(parts) == 2 and parts[0] and parts[1]:
                 self._handle_tracking_put(parts[0], parts[1])
                 return
-        if path == "/api/profil":
-            self._handle_profile_save()
-            return
+        self._drain_body()
         self.send_error(404)
 
     def do_DELETE(self) -> None:
@@ -305,7 +306,25 @@ class Handler(BaseHTTPRequestHandler):
             if len(parts) == 2 and parts[0] and parts[1]:
                 self._handle_tracking_delete(parts[0], parts[1])
                 return
+        self._drain_body()
         self.send_error(404)
+
+    def _drain_body(self) -> None:
+        """Consume an unread request body before answering.
+
+        The server speaks HTTP/1.1 with keep-alive, so a body left in the
+        socket is read as the start of the next request and desynchronises the
+        connection. Answering 404 on a PUT without reading it aborted the
+        client's next call at random.
+        """
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        if length <= 0 or length > MAX_EDIT_BODY:
+            self.close_connection = True
+            return
+        self.rfile.read(length)
 
     def _handle_tracking_get(self, base: str) -> None:
         if not self._origin_allowed():
