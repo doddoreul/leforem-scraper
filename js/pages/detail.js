@@ -295,17 +295,18 @@ function loadEntry(entry, root) {
 /**
  * The offer's row in the listing, where the scraper stores the diff.
  * @param {Object|null} offersData the data_*.json payload
- * @returns {{diff: Object, modifiedAt: string}|null}
+ * @returns {Object|null} the stored offer row, with its `diff` and its
+ *          `modified_at`, plus the fields python/salary.py derived
  */
 function findOffer(offersData) {
     const offers = (offersData && Array.isArray(offersData.offers))
         ? offersData.offers : [];
     const offer = offers.find(item => str(item && item.number) === numberStr);
     if (!offer) return null;
-    return {
-        diff: (offer.diff && typeof offer.diff === "object") ? offer.diff : {},
-        modifiedAt: str(offer.modified_at),
-    };
+    // The whole stored offer is passed on: the derived remuneration fields
+    // (salary_kind, meal_voucher_*) live there and are read by
+    // buildRemuneration().
+    return offer;
 }
 
 function renderNotAvailable(root, message) {
@@ -455,6 +456,12 @@ function renderFiche(root, payload, offer) {
         card.appendChild(el("h2", "card-title", "Description de la fonction"));
         card.appendChild(richBlock(payload.descriptionJob));
         mainCol.appendChild(card);
+    }
+
+    // Rémunération : la nature lue par python/salary.py, pas le texte tronqué.
+    const remuneration = buildRemuneration(offer);
+    if (remuneration) {
+        mainCol.appendChild(remuneration);
     }
 
     // Profil recherché
@@ -755,7 +762,8 @@ function buildDiffRow(row) {
 }
 
 /**
- * @param {{diff: Object, modifiedAt: string}|null} offer
+ * @param {Object|null} offer the stored offer row, carrying `diff` and
+ *                 `modified_at`
  * @returns {HTMLElement|null} null when nothing changed
  */
 function buildDiffCard(offer) {
@@ -766,10 +774,10 @@ function buildDiffCard(offer) {
     card.appendChild(el("h2", "card-title",
         "Modifications (" + rows.length + ")"));
 
-    const when = parseForemDate(offer.modifiedAt);
+    const when = parseForemDate(offer.modified_at);
     card.appendChild(el("p", "diff-meta", when
         ? "Dernière modification : " + formatLongDate(when)
-        : "Dernière modification : " + str(offer.modifiedAt)));
+        : "Dernière modification : " + str(offer.modified_at)));
 
     const toggle = el("button", "btn btn-outline diff-toggle",
         "Afficher le diff");
@@ -810,6 +818,108 @@ function profileBlock(titleText, values) {
         block.appendChild(list);
     }
     return block;
+}
+
+// ============================================================
+// REMUNÉRATION
+//
+// Reads the fields derived by python/salary.py: the nature of the pay,
+// its gross/hourly form, and the meal vouchers. The wording stays neutral
+// when the parser could not read anything.
+// ============================================================
+
+/** French formatting of a wage, with two decimals when useful. */
+function formatAmount(value) {
+    const number = Number(value);
+    if (!isFinite(number)) return "";
+    const rounded = Math.round(number * 100) / 100;
+    const decimals = Number.isInteger(rounded) ? 0 : 2;
+    return rounded.toLocaleString("fr-BE", {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: 2,
+    }) + " €";
+}
+
+/** "brut", "net" or nothing when the ad does not say. */
+function grossLabel(gross) {
+    if (gross === true) return " brut";
+    if (gross === false) return " net";
+    return "";
+}
+
+/** "14,50 €/h", "de 2 500 à 3 200 € bruts / mois". */
+function remunerationLine(offer) {
+    const kind = str(offer.salary_kind);
+    if (kind !== "hourly" && kind !== "monthly" && kind !== "annual") {
+        return "";
+    }
+
+    const low = offer.salary_min;
+    const high = offer.salary_max;
+    if (typeof low !== "number" || !isFinite(low)) return "";
+
+    const suffix = kind === "hourly" ? "/h"
+        : kind === "monthly" ? " / mois"
+        : " / an";
+    const gross = grossLabel(offer.salary_gross);
+
+    if (typeof high === "number" && isFinite(high) && high !== low) {
+        return "de " + formatAmount(low) + " à " + formatAmount(high)
+            + gross + suffix;
+    }
+    return formatAmount(low) + gross + suffix;
+}
+
+/** "estimation : 15,18 €/h brut", or nothing when there is no estimate. */
+function estimateLine(offer) {
+    const estimate = offer.salary_hourly_estimate;
+    if (typeof estimate !== "number" || !isFinite(estimate)) return "";
+    if (str(offer.salary_kind) === "hourly") return "";
+    return "estimation : " + formatAmount(estimate) + " brut/h";
+}
+
+/** "chèques-repas de 8 € par jour", or nothing when absent. */
+function mealVoucherLine(offer) {
+    if (!offer.meal_voucher_mentioned) return "";
+    const amount = offer.meal_voucher_amount;
+    if (typeof amount !== "number" || !isFinite(amount)) {
+        return "chèques-repas mentionnés, montant non précisé";
+    }
+    const per = str(offer.meal_voucher_period) === "day" ? " par jour"
+        : str(offer.meal_voucher_period) === "month" ? " par mois"
+        : "";
+    return "chèques-repas : " + formatAmount(amount) + per;
+}
+
+/** The whole remuneration card, or null when nothing can be said. */
+function buildRemuneration(offer) {
+    if (!offer) return null;
+
+    const lines = [
+        remunerationLine(offer),
+        estimateLine(offer),
+        mealVoucherLine(offer),
+    ].filter(Boolean);
+
+    if (!lines.length) return null;
+
+    const card = el("section", "card");
+    card.appendChild(el("h2", "card-title", "Rémunération"));
+
+    const block = el("div", "profile-block");
+    const list = el("ul", "profile-list");
+    lines.forEach(line => list.appendChild(el("li", "", line)));
+    block.appendChild(list);
+    card.appendChild(block);
+
+    // Say so when the reading is a guess, rather than presenting it as fact.
+    const confidence = str(offer.salary_confidence);
+    if (confidence === "low" && remunerationLine(offer)) {
+        card.appendChild(el("p", "dash-note",
+            "Nature et montant déduits de la taille du chiffre, sans unité écrite dans l'offre."));
+    }
+
+    return card;
 }
 
 function buildBenefits(payload) {

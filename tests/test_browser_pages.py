@@ -57,6 +57,16 @@ OFFERS = [
         "pay": '{"min": 2800, "max": 3400}',
         "published_on": "2026-09-25",
         "removed_on": "",
+        # Fields derived by python/salary.py, shown on the offer sheet.
+        "salary_kind": "monthly",
+        "salary_min": 2800.0,
+        "salary_max": 3400.0,
+        "salary_gross": True,
+        "salary_hourly_estimate": 17.0,
+        "salary_confidence": "high",
+        "meal_voucher_amount": 8.0,
+        "meal_voucher_period": "day",
+        "meal_voucher_mentioned": True,
         "modified_at": "2026-09-26T08:15:00",
         "modified": True,
         "date_fin_diffusion": "2026-11-30",
@@ -501,6 +511,55 @@ log("PERSIST-OK");
 </body></html>
 """
 
+# Reads the rendered offer sheet and reports the remuneration lines, so a
+# --dump-dom run shows what the user actually gets.
+REMUN_PROBE = r"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<iframe id="frame" src="/detail.html?number=1902&base=metier_liege"
+        width="1000" height="900"></iframe>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\n"); }
+
+const frame = document.getElementById("frame");
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+for (let i = 0; i < 80; i += 1) {
+    await sleep(250);
+    const doc = frame.contentDocument;
+    if (!doc) continue;
+    const root = doc.getElementById("detailRoot");
+    if (!root) continue;
+
+    const titles = Array.from(root.querySelectorAll(".card-title"))
+        .map(node => node.textContent);
+    if (titles.indexOf("Remuneration") === -1
+            && titles.indexOf("Rémunération") === -1) {
+        if (i === 79) {
+            log("cards=" + titles.join("|"));
+            log("NO-RUN");
+        }
+        continue;
+    }
+
+    const items = Array.from(root.querySelectorAll(".card .profile-list li"))
+        .map(node => node.textContent);
+    log("titles=" + titles.join("|"));
+    items.forEach((item, index) => log("item" + index + "=" + item));
+
+    // The diff card must still work after findOffer changed shape.
+    const diff = root.querySelector(".diff-card .diff-meta");
+    log("diffMeta=" + (diff ? diff.textContent : "absent"));
+
+    log("RUN-OK");
+    break;
+}
+</script>
+</body></html>
+"""
+
 # validateProfile is pure, so the browser is only needed to load the module
 # and check the real rejections on the real page.
 PROFILE_PROBE = r"""<!DOCTYPE html>
@@ -634,6 +693,7 @@ class ProbeHandler(server.Handler):
             "/dismiss-probe.html": DISMISS_PROBE,
             "/persist-probe.html": PERSIST_PROBE,
             "/profile-probe.html": PROFILE_PROBE,
+            "/remun-probe.html": REMUN_PROBE,
         }
         if path in probes:
             body = probes[path].encode("utf-8")
@@ -803,6 +863,25 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         # ...and re-rendering the same scrape keeps them hidden.
         self.assertIn("rerenderHidden=true", report)
         self.assertIn("DISMISS-OK", report)
+
+    def test_the_offer_sheet_shows_the_remuneration(self):
+        report = self.report_of("/remun-probe.html")
+        # fr-BE separates thousands with U+202F, not a plain space.
+        report = report.replace("\u202f", " ").replace("\u00a0", " ")
+
+        self.assertIn("RUN-OK", report)
+        # A monthly range, gross, with the hourly equivalent.
+        self.assertIn("de 2 800 € à 3 400 € brut / mois", report)
+        self.assertIn("estimation : 17 € brut/h", report)
+        # Meal vouchers, per day.
+        self.assertIn("chèques-repas : 8", report)
+        self.assertIn("par jour", report)
+        # The diff card still renders after findOffer started passing the
+        # whole stored offer.
+        self.assertIn("Dernière modification", report)
+
+        # Nothing is injected as HTML: the euro sign is text, not markup.
+        self.assertNotIn("<li>de 2", report)
 
     def test_validate_profile_rejects_the_impossible_values(self):
         report = self.report_of("/profile-probe.html")
