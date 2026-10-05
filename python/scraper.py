@@ -371,6 +371,46 @@ FRINGE_BENEFITS = re.compile(
 )
 
 
+def backfill_cached_pay_fields(base_name, offers, details):
+    """Add the derived pay fields to offers cached before they existed.
+
+    Offers already in the store were built without salary_kind and friends.
+    They are recomputed from the raw detail payload, so a run after an upgrade
+    fills them in without re-downloading anything.
+
+    Only the derived keys are written: content_hash, modified, first_seen_at
+    and the follow-up data are left exactly as they are, so no offer is
+    wrongly reported as modified.
+    """
+    from python.salary import backfill_offer
+
+    touched = 0
+    for offer in offers:
+        if not isinstance(offer, dict):
+            continue
+        if offer.get("salary_kind") is not None:
+            # Already derived: the offer came from build_offer.
+            continue
+        number = clean_text(offer.get("number"))
+        detail = details.get(number) if number else None
+        if not isinstance(detail, dict):
+            continue
+        if backfill_offer(detail, offer):
+            touched += 1
+    return touched
+
+
+def derive_remuneration_fields(detail):
+    """The derived pay fields of an offer, read from the raw detail.
+
+    Imported lazily so the salary module stays out of the way when only the
+    scraper's own fields are needed.
+    """
+    from python.salary import derive_remuneration_fields as _derive
+
+    return _derive(detail)
+
+
 def extract_salary(detail, max_chars=75):
     sources = (
         detail.get("benefitsComments")
@@ -527,6 +567,8 @@ def build_offer(detail, published_on=""):
         "url": url,
         "contract_type": format_contract_type(detail.get("typeContrat")),
         "schedule": extract_schedule(detail),
+        # The raw texts feed the parsers before truncation: the truncated
+        # values below often lose their unit ("2797" instead of "2 797 EUR/mois").
         "pay": extract_pay(detail.get("benefits")),
         "salary": extract_salary(detail),
         "location": extract_location(detail.get("lieuxTravail")),
@@ -536,6 +578,11 @@ def build_offer(detail, published_on=""):
         "metier": clean_text(detail.get("metier")),
         "summary": build_summary(description),
     }
+
+    # The derived pay fields are added after the content hash on purpose:
+    # they are read back from the text, so including them would mark offers as
+    # modified whenever the parser is improved. CONTENT_HASH_RULE is untouched.
+    offer.update(derive_remuneration_fields(detail))
 
     # Add content hash for change detection
     offer["content_hash"] = core.compute_content_hash(offer)
@@ -1108,7 +1155,18 @@ def run_scrape(occupation_guid, location_guid, base="", label="", limit=None,
                 elif outcome == "cached":
                     cached = previous_by_number.get(number)
                     if cached is not None:
-                        new_offers.append(dict(cached))
+                        reused = dict(cached)
+                        # An offer cached before the derived pay fields existed
+                        # is filled in from its raw detail payload, so an
+                        # upgrade needs no re-download. content_hash and the
+                        # modification flags are left alone.
+                        if reused.get("salary_kind") is None:
+                            # The raw payload of a cached offer lives in the
+                            # previous details, not in this run's fetches.
+                            backfill_cached_pay_fields(
+                                base_name, [reused], previous_details
+                            )
+                        new_offers.append(reused)
                 else:
                     # Temporary failure: keep the previous data so a
                     # single bad request never wipes an offer out.
