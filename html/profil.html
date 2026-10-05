@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Profil — Suivi Forem</title>
 
-<link rel="stylesheet" href="/css/theme.css?v=42">
-<link rel="stylesheet" href="/css/base.css?v=42">
-<link rel="stylesheet" href="/css/components.css?v=42">
-<link rel="stylesheet" href="/css/pages.css?v=42">
-<link rel="stylesheet" href="/css/widgets.css?v=42">
+<link rel="stylesheet" href="/css/theme.css?v=43">
+<link rel="stylesheet" href="/css/base.css?v=43">
+<link rel="stylesheet" href="/css/components.css?v=43">
+<link rel="stylesheet" href="/css/pages.css?v=43">
+<link rel="stylesheet" href="/css/widgets.css?v=43">
 
 <script src="/js/boot/theme-boot.js"></script>
 
@@ -27,8 +27,8 @@
 
             <h1 class="page-title">Profil</h1>
             <p class="page-sub">
-                Ton profil candidat : utilisé pour comparer les offres aux
-                offres. Tous les champs sont facultatifs.
+                Ton profil candidat : il servira à comparer les offres.
+                Tous les champs sont facultatifs.
             </p>
 
         </div>
@@ -37,7 +37,7 @@
 
     <form class="profile-form" id="profileForm" novalidate>
 
-        <section class="dash-card profile-field">
+        <section class="profile-field">
             <h2 class="dash-card-title">Code postal</h2>
             <p class="dash-note">4 chiffres, entre 1000 et 9999.</p>
             <label class="filter" for="postalCode">
@@ -49,7 +49,7 @@
             <p class="field-error" id="postalCodeError" role="alert" hidden></p>
         </section>
 
-        <section class="dash-card profile-field">
+        <section class="profile-field">
             <h2 class="dash-card-title">Mots-clés</h2>
             <p class="dash-note">
                 Séparés par des virgules ou des retours à la ligne.
@@ -63,7 +63,7 @@
             <p class="field-error" id="keywordsError" role="alert" hidden></p>
         </section>
 
-        <section class="dash-card profile-field">
+        <section class="profile-field">
             <h2 class="dash-card-title">Taux horaire souhaité</h2>
             <p class="dash-note">En euros <strong>brut</strong> de l'heure, 2 décimales max.</p>
             <label class="filter" for="hourlyRate">
@@ -74,7 +74,7 @@
             <p class="field-error" id="hourlyRateError" role="alert" hidden></p>
         </section>
 
-        <section class="dash-card profile-field">
+        <section class="profile-field">
             <h2 class="dash-card-title">Types de contrat souhaités</h2>
             <p class="dash-note">Plusieurs choix possibles.</p>
             <div class="contract-list" id="contractTypes" role="group"
@@ -82,7 +82,7 @@
             <p class="field-error" id="contractTypesError" role="alert" hidden></p>
         </section>
 
-        <section class="dash-card profile-field">
+        <section class="profile-field">
             <h2 class="dash-card-title">Distance maximale</h2>
             <p class="dash-note">En kilomètres, de 0 à 500.</p>
             <label class="filter" for="maxDistanceKm">
@@ -100,9 +100,8 @@
             <button type="button" class="btn-secondary" id="resetProfileBtn">
                 Réinitialiser
             </button>
+            <span class="profile-message" id="profileMessage" role="status"></span>
         </div>
-
-        <p class="profile-message" id="profileMessage" role="status"></p>
 
     </form>
 

@@ -1231,6 +1231,184 @@ th.col-forem-id {
 }
 
 /* ============================================================
+   PROFIL — le formulaire reprend les contrôles des filtres
+   ============================================================ */
+
+.profile-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    max-width: 760px;
+}
+
+.profile-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-4);
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+}
+
+.profile-field .dash-card-title {
+    margin: 0;
+}
+
+.profile-field .dash-note {
+    margin: 0;
+}
+
+/* Le libellé et le contrôle, comme sur la page des offres. */
+.profile-field .filter,
+.profile-field .search {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.profile-field .filter > span {
+    font-size: var(--font-sm);
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    min-width: 132px;
+}
+
+/* Un champ multiligne prend sa propre ligne, le libellé au-dessus. */
+.profile-field .filter:has(textarea) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+}
+
+/* Les champs texte et la zone de texte rejoignent la famille des selects :
+   même hauteur, même bordure, même anneau de focus. */
+.profile-field input[type="text"],
+.profile-field textarea {
+    padding: 0 var(--space-3);
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: var(--font-md);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Les champs courts gardent la largeur des filtres de l'index. */
+.profile-field input[type="text"] {
+    flex: 0 1 260px;
+    min-width: 180px;
+    max-width: 320px;
+}
+
+.profile-field textarea {
+    width: 100%;
+    min-height: 92px;
+    padding: var(--space-2) var(--space-3);
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.profile-field input[type="text"] {
+    height: var(--control-h);
+}
+
+.profile-field input[type="text"]:hover,
+.profile-field textarea:hover {
+    border-color: var(--accent);
+}
+
+.profile-field input[type="text"]:focus,
+.profile-field textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+/* Cases à cocher en pastilles. */
+.contract-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.contract-item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 5px 12px;
+    border: 1px solid var(--border);
+    background: var(--bg-surface-soft);
+    color: var(--text-secondary);
+    font-size: var(--font-sm);
+    cursor: pointer;
+    user-select: none;
+    transition: border-color 0.15s ease, background-color 0.15s ease,
+        color 0.15s ease;
+}
+
+.contract-item:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.contract-item__box {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    accent-color: var(--accent-fill);
+    cursor: pointer;
+}
+
+.contract-item:has(.contract-item__box:checked) {
+    border-color: var(--accent);
+    background: var(--accent-fill);
+    color: var(--accent-text);
+}
+
+.contract-item__box:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* Messages. */
+.field-error {
+    margin: 0;
+    font-size: var(--font-sm);
+    font-weight: 600;
+    color: var(--danger-text);
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-border);
+    padding: 5px 10px;
+}
+
+.profile-actions {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+}
+
+.profile-message {
+    margin: 0;
+    min-height: 20px;
+    font-size: var(--font-sm);
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.profile-message--ok {
+    color: var(--success-text);
+}
+
+.profile-message--warn {
+    color: var(--warning-text);
+}
+
+.profile-message--error {
+    color: var(--danger-text);
+}
+
+/* ============================================================
    BOUTON « ACTUALISER » + FAUX TERMINAL DU SCRAPING
    ============================================================ */
 
