@@ -108,6 +108,20 @@ class SqliteStorage(Storage):
                   id INTEGER PRIMARY KEY CHECK (id=1),
                   payload_json TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS offer_tracking (
+                  id INTEGER PRIMARY KEY,
+                  base_name TEXT NOT NULL,
+                  offer_id TEXT NOT NULL,
+                  statut TEXT,
+                  statut_date TEXT,
+                  remarque TEXT,
+                  favori INTEGER DEFAULT 0,
+                  priorite INTEGER,
+                  updated_at TEXT DEFAULT (datetime('now')),
+                  UNIQUE(base_name, offer_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_tracking_base ON offer_tracking(base_name);
                 """
         )
         self._upgrade_history_offers(conn)
@@ -431,3 +445,85 @@ class SqliteStorage(Storage):
                     ).fetchone()
                 return row is not None
         return False
+
+    def read_tracking(self, base_name: str) -> Dict[str, Dict[str, Any]]:
+        out: Dict[str, Dict[str, Any]] = {}
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT offer_id, statut, statut_date, remarque, favori, priorite "
+                "FROM offer_tracking WHERE base_name=?",
+                (base_name,),
+            ).fetchall()
+            for r in rows:
+                out[str(r["offer_id"])] = {
+                    "statut": r["statut"],
+                    "statut_date": r["statut_date"],
+                    "remarque": r["remarque"],
+                    "favori": bool(r["favori"]),
+                    "priorite": r["priorite"],
+                }
+        return out
+
+    # localStorage suffix -> tracking column.
+    TRACKING_FIELDS = {
+        "statut": "statut",
+        "statut_date": "statut_date",
+        "remarque": "remarque",
+        "favori": "favori",
+        "priorite": "priorite",
+    }
+
+    def write_tracking(
+        self, base_name: str, offer_id: str, fields: Dict[str, Any]
+    ) -> None:
+        """Upsert the tracking of one offer.
+
+        Only the keys present in ``fields`` are written: an absent key leaves
+        the stored value untouched, while an explicit ``None`` clears it.
+        """
+        if not isinstance(fields, dict):
+            return
+
+        columns: List[str] = []
+        values: List[Any] = []
+        for key, column in self.TRACKING_FIELDS.items():
+            if key not in fields:
+                continue
+            value = fields[key]
+            if key == "favori":
+                value = 1 if value else 0
+            columns.append(column)
+            values.append(value)
+
+        if not columns:
+            return
+
+        insert_columns = ["base_name", "offer_id"] + columns
+        insert_values = [base_name, str(offer_id)] + values
+        assignments = ", ".join("%s=?" % column for column in columns)
+
+        sql = (
+            "INSERT INTO offer_tracking (%s) VALUES (%s) "
+            "ON CONFLICT(base_name, offer_id) DO UPDATE SET %s, "
+            "updated_at=datetime('now')"
+            % (
+                ", ".join(insert_columns),
+                ", ".join("?" for _ in insert_columns),
+                assignments,
+            )
+        )
+
+        # In an upsert the placeholders are numbered across the whole
+        # statement, so the SET clause re-binds the inserted values after
+        # the INSERT ones.
+        with self._session() as conn:
+            conn.execute(sql, insert_values + values)
+            conn.commit()
+
+    def delete_tracking(self, base_name: str, offer_id: str) -> None:
+        with self._session() as conn:
+            conn.execute(
+                "DELETE FROM offer_tracking WHERE base_name=? AND offer_id=?",
+                (base_name, str(offer_id)),
+            )
+            conn.commit()

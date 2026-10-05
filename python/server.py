@@ -262,6 +262,12 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_occupations(q)
             return
 
+        if path.startswith("/api/tracking/"):
+            base = path[len("/api/tracking/"):]
+            if base:
+                self._handle_tracking_get(base)
+                return
+
         self._serve_file(path)
 
     def do_POST(self) -> None:
@@ -274,6 +280,52 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_companies_save()
         else:
             self.send_error(404)
+
+    def do_PUT(self) -> None:
+        path = urlparse(self.path).path
+        if path.startswith("/api/tracking/"):
+            parts = path[len("/api/tracking/"):].split("/")
+            if len(parts) == 2 and parts[0] and parts[1]:
+                self._handle_tracking_put(parts[0], parts[1])
+                return
+        self.send_error(404)
+
+    def do_DELETE(self) -> None:
+        path = urlparse(self.path).path
+        if path.startswith("/api/tracking/"):
+            parts = path[len("/api/tracking/"):].split("/")
+            if len(parts) == 2 and parts[0] and parts[1]:
+                self._handle_tracking_delete(parts[0], parts[1])
+                return
+        self.send_error(404)
+
+    def _handle_tracking_get(self, base: str) -> None:
+        if not self._origin_allowed():
+            self._send_json(403, {"error": "origin refused"})
+            return
+        tracking = get_storage().read_tracking(base)
+        self._send_json(200, tracking)
+
+    def _handle_tracking_put(self, base: str, offer_id: str) -> None:
+        if not self._origin_allowed():
+            self._send_json(403, {"error": "origin refused"})
+            return
+        payload, error = self._read_json_body()
+        if error:
+            self._send_json(400, {"error": error})
+            return
+        if not isinstance(payload, dict):
+            self._send_json(400, {"error": "invalid payload"})
+            return
+        get_storage().write_tracking(base, offer_id, payload)
+        self._send_json(200, {"ok": True})
+
+    def _handle_tracking_delete(self, base: str, offer_id: str) -> None:
+        if not self._origin_allowed():
+            self._send_json(403, {"error": "origin refused"})
+            return
+        get_storage().delete_tracking(base, offer_id)
+        self._send_json(200, {"ok": True})
 
     def _handle_companies_save(self) -> None:
         """Save the employer index as edited by hand on the Employers page."""

@@ -197,6 +197,58 @@ class JsonStorage(Storage):
             return record
         return None
 
+    def read_tracking(self, base_name: str) -> Dict[str, Dict[str, Any]]:
+        """Return the follow-up, with every field present on every offer.
+
+        The SQLite backend has one column per field, so an unset field always
+        reads back as NULL. A JSON file only stores what was written, so the
+        missing keys are filled in here to keep both backends returning the
+        same shape.
+        """
+        path = config.shared_file(f"tracking_{base_name}.json")
+        data = read_json(path, None)
+        if not isinstance(data, dict):
+            return {}
+        out: Dict[str, Dict[str, Any]] = {}
+        for offer_id, entry in data.items():
+            record = entry if isinstance(entry, dict) else {}
+            out[str(offer_id)] = {
+                "statut": record.get("statut"),
+                "statut_date": record.get("statut_date"),
+                "remarque": record.get("remarque"),
+                "favori": bool(record.get("favori")),
+                "priorite": record.get("priorite"),
+            }
+        return out
+
+    def write_tracking(
+        self, base_name: str, offer_id: str, fields: Dict[str, Any]
+    ) -> None:
+        """Upsert the tracking of one offer, merging like the SQLite backend.
+
+        Only the keys present in ``fields`` are written: an absent key leaves
+        the stored value untouched, while an explicit ``None`` clears it.
+        """
+        if not isinstance(fields, dict) or not fields:
+            return
+        path = config.shared_file("tracking_%s.json" % base_name)
+        data = read_json(path, {})
+        if not isinstance(data, dict):
+            data = {}
+        entry = data.get(str(offer_id))
+        merged = dict(entry) if isinstance(entry, dict) else {}
+        for key, value in fields.items():
+            merged[key] = bool(value) if key == "favori" else value
+        data[str(offer_id)] = merged
+        write_json_atomically(path, data)
+
+    def delete_tracking(self, base_name: str, offer_id: str) -> None:
+        path = config.shared_file(f"tracking_{base_name}.json")
+        data = read_json(path, {})
+        if isinstance(data, dict) and str(offer_id) in data:
+            del data[str(offer_id)]
+            write_json_atomically(path, data)
+
     def exists(self, kind: str, **kwargs: Any) -> bool:
         if kind == "scraping":
             name = kwargs.get("name", "")

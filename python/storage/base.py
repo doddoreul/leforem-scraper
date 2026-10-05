@@ -108,3 +108,17 @@ class Storage(abc.ABC):
     @abc.abstractmethod
     def exists(self, kind: str, **kwargs: Any) -> bool:
         ...
+
+    @abc.abstractmethod
+    def read_tracking(self, base_name: str) -> Dict[str, Dict[str, Any]]:
+        ...
+
+    @abc.abstractmethod
+    def write_tracking(
+        self, base_name: str, offer_id: str, fields: Dict[str, Any]
+    ) -> None:
+        ...
+
+    @abc.abstractmethod
+    def delete_tracking(self, base_name: str, offer_id: str) -> None:
+        ...

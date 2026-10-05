@@ -235,15 +235,21 @@ p. ex. `liege`) :
 | `blacklist.json` | les numéros d'annonces en 404, ignorés automatiquement |
 | `companies.json` | l'index des employeurs (coordonnées, contacts, offres), reconstruit après chaque scraping |
 
-**Tes suivis** (statut, favori, remarque, priorité, dates de relance) ne sont
-**pas** dans ces fichiers : ils vivent dans le `localStorage` de ton navigateur,
-avec une clé par recherche (`forem_<base>_statuts`, `forem_<base>_favoris`, …).
+**Tes suivis** (statut, favori, remarque, priorité, dates de relance) sont dans
+la table `offer_tracking` de `data/leforem.db`, une ligne par offre suivie
+(`base_name`, `offer_id`, `statut`, `statut_date`, `remarque`, `favori`,
+`priorite`). Le navigateur les lit et écrit via `/api/tracking`, et en garde
+aussi une copie dans son `localStorage` (`forem_<base>_statuts`,
+`forem_<base>_favoris`, …) qui sert de miroir.
 Conséquences pratiques :
 
-- tout est locaux, rien n'est envoyé sur Internet ;
-- effacer les données du navigateur efface tes suivis ;
-- la page de détail d'une offre (`html/detail.html`) lit et écrit les mêmes clés :
-  un statut changé dans une fiche apparaît dans le tableau, même sans
+- tout est local, rien n'est envoyé sur Internet ;
+- effacer les données du navigateur n'efface plus tes suivis : ils sont dans la
+  base, et réapparaissent au prochain chargement de la page ;
+- un suivi fait sur un autre PC n'est pas visible tant que tu n'importes pas le
+  fichier de suivi, qui pushes aussi vers la base ;
+- la page de détail d'une offre (`html/detail.html`) lit et écrit les mêmes
+  données : un statut changé dans une fiche apparaît dans le tableau, même sans
   recharger, et inversement ;
 - les compteurs de statut, filtres et relances sont recalculés à chaque
   changement.

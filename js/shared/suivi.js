@@ -5,7 +5,7 @@
    le suivi sur un autre PC.
    ============================================================ */
 
-import { isTrackedStorageKey } from "./storage.js";
+import { importTrackedData, isTrackedStorageKey } from "./storage.js";
 
 export const SUIVI_EVENT = "foremsuiviimported";
 
@@ -106,24 +106,33 @@ export function importTrackingFile(file) {
             return;
         }
         const payload = parsed && typeof parsed === "object" ? parsed : {};
-        const data = payload.data && typeof payload.data === "object"
-            ? payload.data : {};
-        let imported = 0;
-        Object.keys(data).forEach(function (key) {
-            if (!isTrackedStorageKey(key)) return;
-            try {
-                localStorage.setItem(key, JSON.stringify(data[key]));
-                imported++;
-            } catch (error) {
-                console.error("Unable to store imported key", key, error);
+    const data = payload.data && typeof payload.data === "object"
+        ? payload.data : {};
+
+    // Recognise the keys first so an unusable file is reported before any
+    // request is sent.
+    let recognised = 0;
+    Object.keys(data).forEach(function (key) {
+        if (isTrackedStorageKey(key)) recognised++;
+    });
+    if (recognised === 0) {
+        showTrackingMessage("Aucune donnée de suivi reconnue dans ce fichier.");
+        return;
+    }
+
+    importTrackedData(data)
+        .then(function (imported) {
+            document.dispatchEvent(new CustomEvent(SUIVI_EVENT));
+            if (imported === 0) {
+                showTrackingMessage("Aucune donnée de suivi reconnue dans ce fichier.");
+                return;
             }
+            showTrackingMessage(imported + " offre(s) importée(s).");
+        })
+        .catch(function () {
+            document.dispatchEvent(new CustomEvent(SUIVI_EVENT));
+            showTrackingMessage("Import impossible : le serveur ne répond pas.");
         });
-        if (imported === 0) {
-            showTrackingMessage("Aucune donnée de suivi reconnue dans ce fichier.");
-            return;
-        }
-        document.dispatchEvent(new CustomEvent(SUIVI_EVENT));
-        showTrackingMessage(imported + " jeu(x) de données importé(s).");
     };
     reader.onerror = function () {
         showTrackingMessage("Impossible de lire le fichier.");

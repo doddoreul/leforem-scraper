@@ -440,6 +440,67 @@ log("DISMISS-OK");
 </body></html>
 """
 
+# Proves the follow-up really lives in the backend: a follow-up is seeded in
+# localStorage, pushed to /api/tracking, then localStorage is wiped and the
+# same follow-up is read back. If the reads still came from localStorage the
+# second read would be empty.
+PERSIST_PROBE = """<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\\n"); }
+
+import {
+    migrateLegacyStorage,
+    loadAllTracking,
+    readTrackedMap,
+    writeTrackedMap,
+} from "/js/shared/storage.js";
+
+const BASE = "persiste";
+const PREFIX = "forem_" + BASE + "_";
+
+// A follow-up that only exists in the browser so far.
+localStorage.setItem(PREFIX + "statuts", JSON.stringify({ "9001": "postule" }));
+localStorage.setItem(PREFIX + "remarques", JSON.stringify({ "9001": "a relancer" }));
+localStorage.removeItem("forem_tracking_synced");
+
+await migrateLegacyStorage();
+
+// 1. The backend received it.
+const raw = await fetch("/api/tracking/" + BASE).then(r => r.json());
+log("backendStatut=" + ((raw["9001"] || {}).statut || ""));
+log("backendRemarque=" + ((raw["9001"] || {}).remarque || ""));
+
+// 2. Clearing the browser must not clear the follow-up: the reads have to
+//    come from the backend now.
+localStorage.removeItem(PREFIX + "statuts");
+localStorage.removeItem(PREFIX + "remarques");
+await loadAllTracking();
+const statuts = readTrackedMap(PREFIX, "statuts");
+log("afterWipeStatut=" + (statuts["9001"] || ""));
+log("afterWipeRemarque=" + (readTrackedMap(PREFIX, "remarques")["9001"] || ""));
+
+// 3. A status set through the tracking module reaches the backend and is
+//    readable again straight away (the cache updates before the network).
+await writeTrackedMap(PREFIX, "statuts", { "9001": "contacte", "9002": "refuse" });
+log("immediateRead=" + (readTrackedMap(PREFIX, "statuts")["9001"] || ""));
+
+await new Promise(resolve => setTimeout(resolve, 400));
+const after = await fetch("/api/tracking/" + BASE).then(r => r.json());
+log("backendUpdated=" + ((after["9001"] || {}).statut || ""));
+log("backendSecond=" + ((after["9002"] || {}).statut || ""));
+
+await fetch("/api/tracking/" + BASE + "/9001", { method: "DELETE" });
+await fetch("/api/tracking/" + BASE + "/9002", { method: "DELETE" });
+localStorage.removeItem("forem_tracking_synced");
+log("PERSIST-OK");
+</script>
+</body></html>
+"""
+
 # Imports every module and calls the shared helpers: the import errors a
 # --dump-dom run cannot show are reported here.
 PROBE = """<!DOCTYPE html>
@@ -515,6 +576,7 @@ class ProbeHandler(server.Handler):
             "/diff-probe.html": DIFF_PROBE,
             "/tracked-probe.html": TRACKED_PROBE,
             "/dismiss-probe.html": DISMISS_PROBE,
+            "/persist-probe.html": PERSIST_PROBE,
         }
         if path in probes:
             body = probes[path].encode("utf-8")
@@ -684,6 +746,23 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         # ...and re-rendering the same scrape keeps them hidden.
         self.assertIn("rerenderHidden=true", report)
         self.assertIn("DISMISS-OK", report)
+
+    def test_the_follow_up_survives_a_cleared_browser(self):
+        report = self.report_of("/persist-probe.html")
+
+        self.assertIn("PERSIST-OK", report)
+        # A follow-up seeded in localStorage reaches the backend...
+        self.assertIn("backendStatut=postule", report)
+        self.assertIn("backendRemarque=a relancer", report)
+        # ...and is still readable after localStorage is wiped, which only
+        # happens if the reads come from the backend and not from the mirror.
+        self.assertIn("afterWipeStatut=postule", report)
+        self.assertIn("afterWipeRemarque=a relancer", report)
+        # A status set through the module is visible immediately (the cache
+        # is updated before the network) and persisted after it.
+        self.assertIn("immediateRead=contacte", report)
+        self.assertIn("backendUpdated=contacte", report)
+        self.assertIn("backendSecond=refuse", report)
 
 
 class TestPagesInBrowser(BrowserPagesTestCase):
