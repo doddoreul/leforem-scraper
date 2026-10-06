@@ -21,6 +21,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import urllib.request
 from http.server import ThreadingHTTPServer
 
 sys.path.insert(
@@ -577,7 +578,6 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const KEYWORDS = "Mecanicien, equipe";
 const profile = {
     version: 1,
-    postalCode: "",
     keywordsText: KEYWORDS,
     keywords: KEYWORDS.split(",").map(s => s.trim()),
     hourlyRate: null,
@@ -942,6 +942,7 @@ import {
     validateProfile,
     parseKeywords,
     emptyProfile,
+    normaliseProfile,
 } from "/js/shared/profile.js";
 
 const out = document.getElementById("out");
@@ -952,9 +953,6 @@ try {
 // An empty profile is valid: every field is optional.
 log("emptyOk=" + validateProfile(emptyProfile()).ok);
 
-// A postal code of three digits is refused.
-log("postal3Rejected=" + Boolean(validateProfile({ postalCode: "400" }).errors.postalCode));
-
 // A negative hourly rate is refused.
 log("rateNegRejected=" + Boolean(validateProfile({ hourlyRate: "-5" }).errors.hourlyRate));
 
@@ -964,7 +962,6 @@ log("distanceBigRejected=" + Boolean(validateProfile({ maxDistanceKm: "900" }).e
 // Valid values pass and the keyword list is built: "Nuit" is a duplicate of
 // "nuit" once case and accents are ignored.
 const good = validateProfile({
-    postalCode: "4000",
     keywordsText: "nuit, maintenance\nNuit , electricite",
     hourlyRate: "15,50",
     maxDistanceKm: "25",
@@ -979,6 +976,15 @@ log("keywords=" + good.value.keywords.join("|"));
 log("parseEmpty=" + JSON.stringify(parseKeywords("  ,  ,  ")));
 log("parseMixed=" + JSON.stringify(
     parseKeywords("nuit\n  ," + String.fromCharCode(10) + " electricite")));
+
+// The postal code is gone: the field no longer exists in the empty profile, is
+// not validated, and a stored profile that still carries one drops it.
+log("emptyHasPostal=" + ("postalCode" in emptyProfile()));
+log("storedPostalDropped=" + (
+    normaliseProfile({ version: 1, postalCode: "4000", keywordsText: "nuit" })
+        .postalCode === undefined));
+log("postalIgnored=" + (
+    validateProfile({ postalCode: "abcd" }).ok === true));
 
 log("PROFILE-OK");
 } catch (error) {
@@ -1351,7 +1357,6 @@ class TestModulesInBrowser(BrowserPagesTestCase):
 
         self.assertIn("PROFILE-OK", report)
         self.assertIn("emptyOk=true", report)
-        self.assertIn("postal3Rejected=true", report)
         self.assertIn("rateNegRejected=true", report)
         self.assertIn("distanceBigRejected=true", report)
         self.assertIn("goodOk=true", report)
@@ -1361,6 +1366,21 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         self.assertIn("keywords=nuit|maintenance|electricite", report)
         self.assertIn("parseEmpty=[]", report)
         self.assertIn('parseMixed=["nuit","electricite"]', report)
+        # The postal code is out of the profile for good.
+        self.assertIn("emptyHasPostal=false", report)
+        self.assertIn("storedPostalDropped=true", report)
+        self.assertIn("postalIgnored=true", report)
+
+    def test_the_profile_page_has_no_postal_code_field(self):
+        url = "http://127.0.0.1:%d/profil.html" % self.port
+        with urllib.request.urlopen(url, timeout=10) as response:
+            page = response.read().decode("utf-8")
+
+        self.assertNotIn("postalCode", page)
+        self.assertNotIn("Code postal", page)
+        self.assertNotIn("postal-code", page)
+        # The fields that remain still render.
+        self.assertIn("keywordsText", page)
 
     def test_the_follow_up_survives_a_cleared_browser(self):
         report = self.report_of("/persist-probe.html")

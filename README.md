@@ -1,4 +1,4 @@
-# Forem Offers Scraper
+# leforem.be scraper
 
 > Récupère automatiquement les offres d'emploi publiées sur le site du Forem
 > et les affiche dans une petite page web chez toi (sur ton PC), avec des
@@ -293,9 +293,9 @@ un « et », pas un « ou »), et vider la boîte réaffiche tout.
 ## Le profil candidat et le surlignage
 
 La page **Profil** (un seul profil pour toute l'application, pas un par
-recherche) retient tes mots-clés, ton code postal, ton taux horaire brut, les
-types de contrat qui t'intéressent et la distance maximale. Les mots-clés sont
-ensuite **surlignés** dans le tableau et dans la fiche d'une offre, ce qui évite
+recherche) retient tes mots-clés, ton taux horaire brut, les types de contrat
+qui t'intéressent et la distance maximale. Les mots-clés sont ensuite
+**surlignés** dans le tableau et dans la fiche d'une offre, ce qui évite
 d'ouvrir chaque annonce pour voir si elle colle.
 
 Le profil est enregistré dans la table `profile` de `data/leforem.db`, avec un
@@ -343,7 +343,7 @@ arrive en cliquant une ligne du tableau.
 | `python/` | le code : `config.py` (chemins), `jsonio.py` (lecture/écriture JSON), `core.py` (logique pure), `storage/` (stockage SQLite/JSON interchangeable), `salary.py` (rémunérations et chèques-repas), `scraper.py`, `employers.py`, `server.py`, `migrate_to_sqlite.py` — lancés par `python -m python.scraper`, `python -m python.employers`, `python -m python.salary`, `python -m python.server` |
 | `index.html`, `css/style.css`, `js/pages/index.js` | le tableau des offres, ses filtres et son style |
 | `html/detail.html`, `js/pages/detail.js` | la fiche d'une offre (statut, remarque, priorité) |
-| `html/profil.html`, `js/pages/profil.js` | le profil candidat (code postal, mots-clés, taux horaire brut, contrats, distance) |
+| `html/profil.html`, `js/pages/profil.js` | le profil candidat (mots-clés, taux horaire brut, contrats, distance) |
 | `html/insights.html`, `js/pages/insights.js` | le dashboard |
 | `html/companies.html`, `js/pages/companies.js` | la page Employeurs |
 | `js/shared/` | les modules communs : `api.js`, `dates.js`, `dom.js`, `highlight.js`, `html.js`, `links.js`, `navbar.js`, `profile.js`, `scraper-ui.js`, `scraping-selector.js`, `statuses.js`, `storage.js`, `suivi.js`, `text.js`, `theme.js` |

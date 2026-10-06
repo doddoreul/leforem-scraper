@@ -142,7 +142,6 @@ class TestProfileRoute(ScraperRouteTestCase):
     def test_post_saves_the_profile(self):
         profile = {
             "version": 1,
-            "postalCode": "4000",
             "keywordsText": "nuit, maintenance",
             "keywords": ["nuit", "maintenance"],
             "hourlyRate": 15.5,
@@ -155,7 +154,6 @@ class TestProfileRoute(ScraperRouteTestCase):
         self.assertEqual(response.status_code, 200, response.text)
 
         stored = requests.get(self.url("/api/profil"), timeout=10).json()
-        self.assertEqual(stored["postalCode"], "4000")
         self.assertEqual(stored["hourlyRate"], 15.5)
         self.assertEqual(stored["keywords"], ["nuit", "maintenance"])
         self.assertEqual(stored["contractTypes"], ["CDI"])
@@ -163,18 +161,18 @@ class TestProfileRoute(ScraperRouteTestCase):
 
     def test_a_second_post_replaces_the_profile(self):
         requests.post(self.url("/api/profil"),
-                      json={"version": 1, "postalCode": "4000"}, timeout=10)
+                      json={"version": 1, "keywordsText": "nuit"}, timeout=10)
         requests.post(self.url("/api/profil"),
-                      json={"version": 1, "postalCode": "5000"}, timeout=10)
+                      json={"version": 1, "keywordsText": "jour"}, timeout=10)
 
         stored = requests.get(self.url("/api/profil"), timeout=10).json()
-        self.assertEqual(stored["postalCode"], "5000")
+        self.assertEqual(stored["keywordsText"], "jour")
         self.assertNotIn("hourlyRate", stored)
 
     def test_put_is_not_the_save_method(self):
         # Guards the regression itself: the route moved out of do_PUT.
         response = requests.put(self.url("/api/profil"),
-                                json={"version": 1, "postalCode": "4000"},
+                                json={"version": 1, "keywordsText": "nuit"},
                                 timeout=10)
         self.assertEqual(response.status_code, 404)
 

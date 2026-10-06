@@ -22,7 +22,7 @@ import {
 } from "../shared/profile.js";
 import { SUIVI_EVENT } from "../shared/suivi.js";
 
-const FORM_FIELDS = ["postalCode", "keywordsText", "hourlyRate", "maxDistanceKm"];
+const FORM_FIELDS = ["keywordsText", "hourlyRate", "maxDistanceKm"];
 
 let saved = emptyProfile();
 let dirty = false;
@@ -82,7 +82,6 @@ function currentFormValue() {
         if (box && box.checked) types.push(type);
     });
     return {
-        postalCode: byId("postalCode").value,
         keywordsText: byId("keywordsText").value,
         hourlyRate: byId("hourlyRate").value,
         maxDistanceKm: byId("maxDistanceKm").value,
@@ -120,7 +119,6 @@ function renderContracts(selected) {
 }
 
 function fillForm(profile) {
-    byId("postalCode").value = profile.postalCode || "";
     byId("keywordsText").value = profile.keywordsText || "";
     byId("hourlyRate").value = profile.hourlyRate === null || profile.hourlyRate === undefined
         ? ""

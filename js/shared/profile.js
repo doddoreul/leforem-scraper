@@ -25,10 +25,6 @@ export const FALLBACK_CONTRACT_TYPES = [
     "Stage",
 ];
 
-/** postal code bounds. */
-const POSTAL_MIN = 1000;
-const POSTAL_MAX = 9999;
-
 /** Hourly gross rate bounds, in euros. */
 const RATE_MIN_EXCLUSIVE = 0;
 const RATE_MAX = 200;
@@ -44,7 +40,6 @@ const DISTANCE_MAX = 500;
 export function emptyProfile() {
     return {
         version: PROFILE_VERSION,
-        postalCode: "",
         keywordsText: "",
         keywords: [],
         hourlyRate: null,
@@ -99,7 +94,6 @@ export function normaliseProfile(raw) {
 
     return {
         version: PROFILE_VERSION,
-        postalCode: typeof raw.postalCode === "string" ? raw.postalCode : "",
         keywordsText: typeof raw.keywordsText === "string" ? raw.keywordsText : "",
         keywords: keywords,
         hourlyRate: typeof raw.hourlyRate === "number" && isFinite(raw.hourlyRate)
@@ -125,28 +119,13 @@ export function validateProfile(raw) {
     const errors = {};
     const input = raw && typeof raw === "object" ? raw : {};
 
-    // 1. Postal code: four digits between 1000 and 9999.
-    const postalRaw = String(input.postalCode === null || input.postalCode === undefined
-        ? ""
-        : input.postalCode).trim();
-    let postalCode = "";
-    if (postalRaw !== "") {
-        if (!/^\d+$/.test(postalRaw)) {
-            errors.postalCode = "Le code postal doit contenir uniquement des chiffres.";
-        } else if (Number(postalRaw) < POSTAL_MIN || Number(postalRaw) > POSTAL_MAX) {
-            errors.postalCode = "Le code postal doit être compris entre 1000 et 9999.";
-        } else {
-            postalCode = postalRaw;
-        }
-    }
-
-    // 2. Keywords: free text, commas or newlines as separators.
+    // 1. Keywords: free text, commas or newlines as separators.
     const keywordsText = String(input.keywordsText === null || input.keywordsText === undefined
         ? ""
         : input.keywordsText);
     const keywords = parseKeywords(keywordsText);
 
-    // 3. Hourly gross rate: > 0, at most 200, at most two decimals.
+    // 2. Hourly gross rate: > 0, at most 200, at most two decimals.
     const rateRaw = String(input.hourlyRate === null || input.hourlyRate === undefined
         ? ""
         : input.hourlyRate).trim().replace(",", ".");
@@ -167,14 +146,14 @@ export function validateProfile(raw) {
         }
     }
 
-    // 4. Contract types: any list of non-empty strings.
+    // 3. Contract types: any list of non-empty strings.
     const contractTypes = Array.isArray(input.contractTypes)
         ? input.contractTypes
             .filter(function (v) { return typeof v === "string" && v.trim() !== ""; })
             .map(function (v) { return v.trim(); })
         : [];
 
-    // 5. Maximum distance: whole kilometres between 0 and 500.
+    // 4. Maximum distance: whole kilometres between 0 and 500.
     const distanceRaw = String(input.maxDistanceKm === null || input.maxDistanceKm === undefined
         ? ""
         : input.maxDistanceKm).trim();
@@ -199,7 +178,6 @@ export function validateProfile(raw) {
         errors: errors,
         value: ok ? {
             version: PROFILE_VERSION,
-            postalCode: postalCode,
             keywordsText: keywordsText,
             keywords: keywords,
             hourlyRate: hourlyRate,

@@ -18,7 +18,6 @@ from python.storage.sqlite_store import SqliteStorage  # noqa: E402
 def a_profile():
     return {
         "version": 1,
-        "postalCode": "4000",
         "keywordsText": "nuit, maintenance",
         "keywords": ["nuit", "maintenance"],
         "hourlyRate": 15.5,
@@ -58,9 +57,9 @@ class ProfileContract:
 
     def test_writing_twice_replaces_the_profile(self):
         self.store.write_profile(a_profile())
-        self.store.write_profile({"version": 1, "postalCode": "5000"})
+        self.store.write_profile({"version": 1, "keywordsText": "jour"})
         found = self.store.read_profile()
-        self.assertEqual(found["postalCode"], "5000")
+        self.assertEqual(found["keywordsText"], "jour")
         self.assertNotIn("hourlyRate", found)
 
     def test_the_profile_is_readable_by_a_new_instance(self):
