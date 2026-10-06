@@ -178,5 +178,77 @@ class StatsTest(unittest.TestCase):
         self.assertEqual(summary["codes"], 4)
 
 
+class LiveReloadTest(unittest.TestCase):
+    """A server already running must notice a dataset written under it.
+
+    Caching the index for the life of the process looked cheaper, but a server
+    started before "python -m python.postal --refresh" then never found a
+    postal code and nothing said why.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self._saved = config.DATA_DIR
+        config.DATA_DIR = self.tmp.name
+        postal._INDEX = None
+
+    def tearDown(self):
+        config.DATA_DIR = self._saved
+        postal._INDEX = None
+        self.tmp.cleanup()
+
+    def test_a_dataset_appearing_is_picked_up(self):
+        # The server answers before anything is downloaded.
+        self.assertEqual(postal.postal_codes_for("Liège"), [])
+        self.assertEqual(postal.enrich_offers([{"location": "Liège"}]), 0)
+
+        postal.write_dataset(ROWS)
+
+        self.assertEqual(postal.postal_codes_for("Liège"), ["4000", "4020"])
+        offers = [{"location": "Liège"}]
+        self.assertEqual(postal.enrich_offers(offers), 1)
+        self.assertEqual(offers[0][config.POSTAL_CODES_FIELD], ["4000", "4020"])
+
+    def test_a_removed_dataset_is_forgotten(self):
+        postal.write_dataset(ROWS)
+        self.assertEqual(postal.postal_codes_for("Liège"), ["4000", "4020"])
+
+        os.remove(postal.dataset_path())
+
+        self.assertEqual(postal.postal_codes_for("Liège"), [])
+
+    def test_rewriting_the_dataset_changes_the_answer(self):
+        postal.write_dataset(ROWS)
+        self.assertEqual(postal.postal_codes_for("Herstal"), [])
+
+        postal.write_dataset(ROWS + [
+            {"column_1": "4040", "column_2": "Herstal",
+             "municipality_name_french": "Herstal"},
+        ])
+
+        self.assertEqual(postal.postal_codes_for("Herstal"), ["4040"])
+
+    def test_the_signature_changes_with_the_file(self):
+        self.assertIsNone(postal.dataset_signature())
+        postal.write_dataset(ROWS)
+        first = postal.dataset_signature()
+        self.assertIsNotNone(first)
+
+        # A different length always invalidates, whatever the timestamps do.
+        postal.write_dataset(ROWS + [{"column_1": "9999", "column_2": "Autre"}])
+        self.assertNotEqual(first, postal.dataset_signature())
+
+    def test_a_later_refresh_is_seen(self):
+        postal.write_dataset(ROWS)
+        first = postal.dataset_signature()
+
+        # Same length, so only the timestamp can tell them apart. Windows
+        # timestamps are coarse, so move it on rather than race the clock.
+        stamp = first[0] + 10_000_000_000
+        os.utime(postal.dataset_path(), ns=(stamp, stamp))
+
+        self.assertNotEqual(first, postal.dataset_signature())
+
+
 if __name__ == "__main__":
     unittest.main()
