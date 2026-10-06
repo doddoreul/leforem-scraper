@@ -20,6 +20,8 @@ import {
     STATUS_OPTIONS as CANONICAL_STATUS_OPTIONS,
     priorityLabel,
     statusRank,
+    // Aliased: a local element variable already uses the plain name.
+    statusLabel as statusText,
 } from "../shared/statuses.js";
 import {
     TRACKED_SUFFIXES,
@@ -1113,8 +1115,11 @@ function applyFiltersToTable(tbodyId, searchId, otherFiltersPass) {
             let shown = otherFiltersPass(row);
 
             if (shown && keywords.length > 0) {
-                const text = normalizeText(row.textContent);
-                shown = keywords.every(word => text.includes(word));
+                // Match on the offer data, never on the rendered row: the row
+                // text also holds the status option labels, the state badges
+                // and the remarks textarea, so "postule" matched every row and
+                // typing it looked like it did nothing.
+                shown = offerMatchesRow(row, searchId, keywords);
             }
 
             row.style.display = shown ? "" : "none";
@@ -1706,6 +1711,14 @@ function offerMatchesKeys(offer, inputId) {
     if (!input) return true;
     const keywords = getKeywords(input.value);
     if (!keywords.length) return true;
+
+    const number = String(offer.number);
+    // The user's own follow-up is searched too: "postule", "haute" or a word
+    // from a remark are exactly what someone looks for in that box.
+    const status = getStatus(number);
+    const remark = getRemark(number);
+    const priority = getPriority(number);
+
     const text = normalizeText([
         offer.number,
         offer.published_on,
@@ -1716,7 +1729,31 @@ function offerMatchesKeys(offer, inputId) {
         offer.schedule,
         offer.pay,
         offer.location,
+        statusText(status),
+        priorityLabel(priority),
+        remark,
     ].filter(Boolean).join(" "));
+    return keywords.every(word => text.includes(word));
+}
+
+/**
+ * Whether one rendered row matches the typed keywords.
+ *
+ * The offer is the only reliable source: reading the row's text would also
+ * match the fixed chrome around it. Rows whose offer is unknown fall back to
+ * their text, so nothing disappears silently.
+ * @param {HTMLElement} row
+ * @param {string} inputId
+ * @param {Array<string>} keywords already folded
+ * @returns {boolean}
+ */
+function offerMatchesRow(row, inputId, keywords) {
+    const number = row.dataset && row.dataset.number;
+    const offer = number ? currentByNumber.get(number) : null;
+
+    if (offer) return offerMatchesKeys(offer, inputId);
+
+    const text = normalizeText(row.textContent);
     return keywords.every(word => text.includes(word));
 }
 

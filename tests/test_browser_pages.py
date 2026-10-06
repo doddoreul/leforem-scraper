@@ -714,6 +714,74 @@ log(failed.length ? "FOLD-FAILED:" + failed.join("|") : "FOLD-OK");
 </body></html>
 """
 
+# The listing search must look at the offer data, not at the rendered row.
+# The row text also carries the status option labels, the state badges and the
+# remarks textarea, so typing "postule" used to match every row and looked like
+# the search did nothing.
+SEARCH_PROBE = r"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\n"); }
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+const frame = document.createElement("iframe");
+frame.width = 1200;
+frame.height = 900;
+const loaded = new Promise(resolve => { frame.onload = resolve; });
+frame.src = "/";
+document.body.appendChild(frame);
+await loaded;
+
+let doc = null;
+for (let i = 0; i < 120; i += 1) {
+    await sleep(200);
+    doc = frame.contentDocument;
+    if (doc && doc.querySelectorAll("#currentRows tr[data-number]").length > 1) break;
+}
+await sleep(500);
+
+const rows = Array.from(doc.querySelectorAll("#currentRows tr[data-number]"));
+const input = doc.getElementById("currentSearch");
+const visible = () => rows.filter(r => r.style.display !== "none").length;
+const total = rows.length;
+
+log("total=" + total);
+
+// The rendered row carries the whole status menu.
+log("rowHasOptionLabels=" + rows[0].querySelectorAll("option").length);
+
+async function type(term) {
+    input.value = term;
+    input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    await sleep(350);
+    return visible();
+}
+
+log("title=" + await type("Electromecanicien"));
+log("location=" + await type("liege"));
+// Chrome words: they must not match every row.
+log("statusLabel=" + await type("postule"));
+log("stateBadge=" + await type("nouvelle"));
+log("starButton=" + await type("favori"));
+log("cleared=" + await type(""));
+
+// One offer is marked "Postulé", so the word must now find exactly it.
+const select = rows[0].querySelector("select.status-select");
+if (select) {
+    select.value = "postule";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await sleep(450);
+    log("markedThenSearched=" + await type("postule"));
+}
+
+log("SEARCH-OK");
+</script>
+</body></html>
+"""
+
 # validateProfile is pure, so the browser is only needed to load the module
 # and check the real rejections on the real page.
 PROFILE_PROBE = r"""<!DOCTYPE html>
@@ -850,6 +918,7 @@ class ProbeHandler(server.Handler):
             "/remun-probe.html": REMUN_PROBE,
             "/keyword-probe.html": KEYWORD_PROBE,
             "/fold-probe.html": FOLD_PROBE,
+            "/search-probe.html": SEARCH_PROBE,
         }
         if path in probes:
             body = probes[path].encode("utf-8")
@@ -1019,6 +1088,23 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         # ...and re-rendering the same scrape keeps them hidden.
         self.assertIn("rerenderHidden=true", report)
         self.assertIn("DISMISS-OK", report)
+
+    def test_the_listing_search_filters_on_the_offer_data(self):
+        report = self.report_of("/search-probe.html")
+
+        self.assertIn("SEARCH-OK", report)
+        # The rendered row really does carry the whole status menu...
+        self.assertNotIn("rowHasOptionLabels=0", report)
+        # ...and the search filters on the offer instead.
+        self.assertIn("title=1", report)
+        self.assertIn("location=5", report)
+        # A word from the status menu must not match every row.
+        self.assertIn("statusLabel=0", report)
+        self.assertIn("stateBadge=0", report)
+        self.assertIn("starButton=0", report)
+        # With a status actually set, the word finds exactly that offer.
+        self.assertIn("markedThenSearched=1", report)
+        self.assertIn("cleared=6", report)
 
     def test_the_letters_without_accents_are_folded_too(self):
         # "manœuvre" has to answer to "manoeuvre": NFD leaves a ligature alone,
