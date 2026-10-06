@@ -14,7 +14,24 @@ Ce guide suppose **Windows**. Toutes les commandes se tapent dans PowerShell.
 
 Touche `Windows`, tape `powershell`, puis Entrée.
 
-## 2 — Vérifie Python et installe l'unique dépendance
+## 2 — Installe Python et la dépendance
+
+Dans le dossier du projet :
+
+```
+.\install.ps1
+```
+
+Le script télécharge et installe Python (version 3.13, celle que vise le
+projet), puis installe `requirements.txt`. Il ne réinstalle rien si Python est
+déjà là. S'il doit réellement installer Python, il demande les droits
+administrateur : clique droit sur PowerShell, **Exécuter en tant
+qu'administrateur**, puis relance la commande.
+
+> Si PowerShell refuse le script, autorise son exécution pour ton compte :
+> `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+
+**Sans le script**, fais les deux étapes à la main :
 
 ```
 python --version
@@ -23,7 +40,8 @@ python -m pip install -r requirements.txt
 
 - Si `python --version` affiche un numéro, c'est bon.
 - S'il affiche une erreur, essaie `py --version`. Si `py` marche, remplace
-  `python` par `py` dans toutes les commandes de ce guide.
+  `python` par `py` dans toutes les commandes de ce guide. C'est aussi ce que
+  fait le script tout seul quand `python` pointe vers l'alias Microsoft Store.
 - Si Python n'est pas installé : <https://www.python.org/downloads/>, en
   **cochant « Add python.exe to PATH »** avant *Install Now*. Ferme puis rouvre
   PowerShell ensuite.
@@ -60,6 +78,7 @@ recopier.
 
 | Je veux… | Ce que je fais |
 |---|---|
+| Installer Python et les dépendances | `.\install.ps1` |
 | Démarrer le programme | `python serveur.py` (terminal laissé ouvert) |
 | Ouvrir la page | <http://localhost:8123> |
 | Mettre à jour les offres | bouton **Actualiser**, ou la date de dernier scraping |
@@ -73,7 +92,8 @@ recopier.
 
 | Problème | Solution |
 |---|---|
-| `python n'est pas reconnu…` | Python absent ou hors du PATH : relis l'étape 2, ou utilise `py`. |
+| `python n'est pas reconnu…` | Python absent ou hors du PATH : lance `.\install.ps1`, ou utilise `py`. |
+| `install.ps1 ne peut pas être chargé car ses scripts sont désactivés` | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, puis relance. |
 | `No module named requests` | `python -m pip install -r requirements.txt` |
 | `error: the following arguments are required: --occupation-guid, --location-guid` | Utilise **Nouvelle recherche** puis **Lancer le scraping** : la page fournit les deux identifiants. |
 | La page affiche une erreur | Le serveur est-il lancé et sa fenêtre toujours ouverte ? |
@@ -297,6 +317,7 @@ arrive en cliquant une ligne du tableau.
 | Fichier | Rôle |
 |---|---|
 | `serveur.py` | le point de démarrage : `python serveur.py` |
+| `install.ps1` | installe Python et les dépendances du projet, pour un poste neuf |
 | `python/` | le code : `config.py` (chemins), `jsonio.py` (lecture/écriture JSON), `core.py` (logique pure), `storage/` (stockage SQLite/JSON interchangeable), `salary.py` (rémunérations et chèques-repas), `scraper.py`, `employers.py`, `server.py`, `migrate_to_sqlite.py` — lancés par `python -m python.scraper`, `python -m python.employers`, `python -m python.salary`, `python -m python.server` |
 | `index.html`, `css/style.css`, `js/pages/index.js` | le tableau des offres, ses filtres et son style |
 | `html/detail.html`, `js/pages/detail.js` | la fiche d'une offre (statut, remarque, priorité) |

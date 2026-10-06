@@ -140,7 +140,7 @@ class TestPages(StaticFilesTestCase):
     def test_the_removed_root_scripts_are_not_served(self):
         for name in ("script.js", "insights.js", "companies.js", "detail.js",
                      "theme.js", "suivi-io.js", "scraping-selector.js",
-                     "scraper-ui.js", "navbar-loader.js"):
+                     "scraper-ui.js", "navbar-loader.js", "install.ps1"):
             with self.subTest(name=name):
                 self.assertEqual(self.get(f"/{name}").status_code, 404)
 
