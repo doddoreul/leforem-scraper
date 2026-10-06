@@ -10,17 +10,23 @@
 
 Ce guide suppose **Windows**. Toutes les commandes se tapent dans PowerShell.
 
+Si Python est déja installé sur ton PC, passe directement a l'étape 3
+
 ## 1 — Ouvre PowerShell
 
-Touche `Windows`, tape `powershell`, puis Entrée.
+Télécharge le projet github: https://github.com/doddoreul/leforem-scraper/archive/refs/heads/main.zip
 
-## 2 — Installe Python et la dépendance
+Décompresse l'archive .zip
 
-Dans le dossier du projet :
+Dans le dossier, click droit -> terminal
+
+Tape dans le terminal:
 
 ```
 .\install.ps1
 ```
+
+## 2 — Si le script échoue
 
 Le script télécharge et installe Python (version 3.13, celle que vise le
 projet), puis installe `requirements.txt`. Il ne réinstalle rien si Python est
@@ -50,6 +56,8 @@ python -m pip install -r requirements.txt
   PowerShell ensuite.
 
 ## 3 — Lance le programme
+
+Dans le dossier décompressé précédemment, toujours dans le terminal:
 
 ```
 cd leforem-scraper
