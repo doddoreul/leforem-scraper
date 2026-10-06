@@ -1452,10 +1452,10 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         report = self.report_of("/diff-probe.html")
 
         self.assertIn("DIFF-OK", report)
-        self.assertIn("button=Afficher le diff", report)
+        self.assertIn("button=Comparer la modification", report)
         self.assertIn("hiddenBefore=true", report)
         self.assertIn("blocksBefore=0", report)
-        self.assertIn("buttonAfter=Masquer le diff", report)
+        self.assertIn("buttonAfter=Masquer la comparaison", report)
         self.assertIn("hiddenAfter=false", report)
         self.assertIn("blocksAfter=2", report)
         self.assertIn("fields=Description|Type de contrat", report)
@@ -1752,16 +1752,16 @@ class TestPagesInBrowser(BrowserPagesTestCase):
 
     def test_the_diff_is_hidden_until_asked(self):
         dom = self.dump("/detail.html?number=1902&base=metier_liege")
-        self.assertIn("Afficher le diff", dom)
+        self.assertIn("Comparer la modification", dom)
         self.assertIn("Modifications (2)", dom)
         # The offer is shown, not the diff.
-        self.assertNotIn("Masquer le diff", dom)
+        self.assertNotIn("Masquer la comparaison", dom)
         self.assertNotIn('class="diff-block"', dom)
 
     def test_an_offer_without_changes_has_no_diff_button(self):
         dom = self.dump("/detail.html?number=1903&base=metier_liege")
         self.assertNotIn("diff-card", dom)
-        self.assertNotIn("Afficher le diff", dom)
+        self.assertNotIn("Comparer la modification", dom)
 
     def test_no_page_reports_a_missing_module(self):
         for page in ("", "/insights.html", "/companies.html", "/detail.html"):
