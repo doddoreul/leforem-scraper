@@ -34,7 +34,6 @@ from urllib.parse import urlparse
 import requests
 
 from python import config
-from python import postal
 from python import scraper
 from python.employers import refresh_index, summarize
 
@@ -235,9 +234,6 @@ class Handler(BaseHTTPRequestHandler):
             if data_payload is None:
                 self.send_error(404)
             else:
-                # Attach the postal codes on the way out, never on the way in:
-                # what is stored stays untouched and the hashes stay valid.
-                postal.enrich_offers(data_payload.get("offers"))
                 self._send_json(200, data_payload)
             return True
 

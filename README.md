@@ -235,7 +235,6 @@ base SQLite unique :
 |---|---|
 | `leforem.db` | offres, détails, historiques, blacklist, index des employeurs, suivi (`offer_tracking`) et profil candidat (`profile`) |
 | `trash/` | les recherches supprimées depuis la page (corbeille) |
-| `postal_codes.json` | le jeu ouvert des codes postaux, mis en cache par `python -m python.postal --refresh` |
 
 Le format JSON reste disponible en le demandant explicitement
 (`LEFOREM_STORAGE=json`), notamment pour l'export, les tests et la migration.
@@ -290,41 +289,6 @@ première lettre garde sa capitale, donc `LIÈGE` devient `Liège` et
 tel quel, l'employeur l'avait écrit ainsi ; un lieu sans lettre, comme `4000`,
 n'est pas touché non plus.
 
-### La recherche par code postal
-
-Le Forem donne le lieu de travail en texte libre et jamais sous forme de code
-postal. Un jeu de données ouvert relie les deux : il est téléchargé une fois,
-mis en cache dans `data/postal_codes.json`, et le serveur rattache ensuite les
-codes à chaque annonce au moment de l'envoyer. Un seul appel réseau, à
-l'installation.
-
-```
-python -m python.postal --refresh
-```
-
-Les codes sont alors trouvables **dans la barre de recherche** : taper `4000`
-affiche les offres de Liège, sans filtre supplémentaire. Le nom du lieu reste
-utilisable, dans n'importe quelle graphie.
-
-Trois règles à connaître :
-
-- un code postal ne désigne pas un seul lieu : `4000` couvre Liège, Glain et
-  Rocourt ;
-- une localité peut être servie par plusieurs codes, et un code par plusieurs
-  localités ;
-- un *arrondissement* (`Arrondissement de Liège`) ne correspond à aucun code :
-  il couvre des dizaines de communes, donc aucun code ne le désigne. Ces offres
-  échappent à la recherche par code postal, ce qui touche environ 4 % des
-  annonces.
-
-Le repli se fait dans les deux sens : sans le jeu en cache, l'application
-fonctionne normalement, seule la recherche par code postal ne trouve rien.
-`python -m python.postal --stats` dit ce qui est en cache.
-
-Le jeu vient de [ODWB](https://www.odwb.be/), service public de données
-ouvertes de la Région de Bruxelles-Capitale. Son URL « api » documentée répond
-du HTML ; le JSON se trouve sur la route OpenDataSoft v2.
-
 ## La barre de recherche
 
 La boîte en haut du tableau filtre **à chaque frappe**. Elle cherche dans toutes
@@ -370,8 +334,6 @@ Sur des offres déjà téléchargées, la réanalyse se lance à la main :
 |---|---|
 | Recalculer la rémunération des offres en cache | `python -m python.salary --backfill` |
 | Voir la répartition | `python -m python.salary --stats` |
-| Activer la recherche par code postal | `python -m python.postal --refresh` |
-| Voir ce qui est en cache pour les codes postaux | `python -m python.postal --stats` |
 
 Une grande partie des offres reste en rémunération inconnue : le Forem ne la
 publie pas toujours, et une annonce qui la cache dans son texte libre n'est pas
@@ -395,7 +357,7 @@ arrive en cliquant une ligne du tableau.
 |---|---|
 | `serveur.py` | le point de démarrage : `python serveur.py` |
 | `install.ps1` | installe Python et les dépendances du projet, pour un poste neuf |
-| `python/` | le code : `config.py` (chemins), `jsonio.py` (lecture/écriture JSON), `core.py` (logique pure), `storage/` (stockage SQLite/JSON interchangeable), `salary.py` (rémunérations et chèques-repas), `postal.py` (codes postaux), `scraper.py`, `employers.py`, `server.py`, `migrate_to_sqlite.py` — lancés par `python -m python.scraper`, `python -m python.employers`, `python -m python.salary`, `python -m python.postal`, `python -m python.server` |
+| `python/` | le code : `config.py` (chemins), `jsonio.py` (lecture/écriture JSON), `core.py` (logique pure), `storage/` (stockage SQLite/JSON interchangeable), `salary.py` (rémunérations et chèques-repas), `scraper.py`, `employers.py`, `server.py`, `migrate_to_sqlite.py` — lancés par `python -m python.scraper`, `python -m python.employers`, `python -m python.salary`, `python -m python.server` |
 | `index.html`, `css/style.css`, `js/pages/index.js` | le tableau des offres, ses filtres et son style |
 | `html/detail.html`, `js/pages/detail.js` | la fiche d'une offre (statut, remarque, priorité) |
 | `html/profil.html`, `js/pages/profil.js` | le profil candidat (mots-clés, taux horaire brut, contrats, distance) |

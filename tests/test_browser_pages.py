@@ -1132,75 +1132,6 @@ log("LOC-OK");
 </body></html>
 """
 
-# Typing a postal code in the search box must reach the offers of that place:
-# the server attaches postalCodes to the listing, and the search already walks
-# every field of an offer.
-POSTAL_PROBE = r"""<!DOCTYPE html>
-<html lang="fr"><head><meta charset="utf-8"></head><body>
-<pre id="out">pending</pre>
-<script type="module">
-const out = document.getElementById("out");
-const lines = [];
-function log(line) { lines.push(line); out.textContent = lines.join("\n"); }
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-const frame = document.createElement("iframe");
-frame.width = 1400;
-frame.height = 900;
-const loaded = new Promise(resolve => { frame.onload = resolve; });
-frame.src = "/";
-document.body.appendChild(frame);
-await loaded;
-
-let doc = null;
-for (let i = 0; i < 120; i += 1) {
-    await sleep(200);
-    doc = frame.contentDocument;
-    if (doc && doc.querySelectorAll("#currentRows tr[data-number]").length > 1) break;
-}
-await sleep(500);
-
-const rows = Array.from(doc.querySelectorAll("#currentRows tr[data-number]"));
-const input = doc.getElementById("currentSearch");
-const visible = () => rows.filter(r => r.style.display !== "none").length;
-
-log("baseline=" + visible() + "/" + rows.length);
-
-// What the server attached.
-const payload = await (await fetch("/data_metier_liege.json")).json();
-const codes = {};
-(payload.offers || []).forEach(function (offer) {
-    const place = (offer.location || "?").toLowerCase();
-    codes[place] = codes[place] || [];
-    (offer.postalCodes || []).forEach(function (code) {
-        if (codes[place].indexOf(code) === -1) codes[place].push(code);
-    });
-});
-log("codesLiege=" + (codes["liege"] || []).join("|"));
-log("codesCharleroi=" + (codes["charleroi"] || []).join("|"));
-
-async function type(term) {
-    input.value = term;
-    input.dispatchEvent(new InputEvent("input", { bubbles: true }));
-    await sleep(320);
-    return visible();
-}
-
-// A postal code reaches the offers of that place.
-log("cp4000=" + await type("4000"));
-log("cp4020=" + await type("4020"));
-log("cp7100=" + await type("7100"));
-// 4040 is in the dataset but no offer sits there.
-log("cp4040=" + await type("4040"));
-// A place name still works, in any spelling.
-log("lieuLiege=" + await type("liege"));
-log("cleared=" + await type(""));
-
-log("CP-OK");
-</script>
-</body></html>
-"""
-
 class ProbeHandler(server.Handler):
     """The real handler, plus the page that exercises every module."""
 
@@ -1219,7 +1150,6 @@ class ProbeHandler(server.Handler):
             "/keys-probe.html": KEYS_PROBE,
             "/fields-probe.html": FIELDS_PROBE,
             "/location-probe.html": LOCATION_PROBE,
-            "/postal-probe.html": POSTAL_PROBE,
         }
         if path in probes:
             body = probes[path].encode("utf-8")
@@ -1306,25 +1236,6 @@ def seed(folder):
     write("historique_scrapes.json", {"scrapes": []})
     write("historique_modifications.json", {"modifications": []})
     write("companies.json", COMPANIES)
-    # The cached postal dataset the server reads. One place can be served by
-    # several codes, one code by several places, and an arrondissement is in
-    # there but never resolves on its own.
-    write("postal_codes.json", {
-        "source": "test",
-        "dataset": "code-postaux-belge",
-        "rows": [
-            {"column_1": "4000", "column_2": "Liege",
-             "municipality_name_french": "Liege"},
-            {"column_1": "4020", "column_2": "Liege",
-             "municipality_name_french": "Liege"},
-            {"column_1": "7100", "column_2": "Charleroi",
-             "municipality_name_french": "Charleroi"},
-            {"column_1": "4040", "column_2": "Herstal",
-             "municipality_name_french": "Herstal"},
-            {"column_1": "4100", "column_2": "Arrondissement de Liege",
-             "municipality_name_french": "Liege"},
-        ],
-    })
 
 
 class TestModulesInBrowser(BrowserPagesTestCase):
@@ -1339,23 +1250,6 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         self.assertIn("imported=12", report)
         self.assertNotIn("PROBE-FAIL", report)
 
-    def test_a_postal_code_finds_the_offers_of_that_place(self):
-        report = self.report_of("/postal-probe.html")
-
-        self.assertIn("CP-OK", report)
-        self.assertIn("baseline=6/7", report)
-        # The server attached the codes, both of Liège's, and Charleroi's.
-        self.assertIn("codesLiege=4000|4020", report)
-        self.assertIn("codesCharleroi=7100", report)
-        # Typing a code reaches the offers...
-        self.assertIn("cp4000=5", report)
-        self.assertIn("cp4020=5", report)
-        self.assertIn("cp7100=1", report)
-        # ...and a code no offer serves selects nothing.
-        self.assertIn("cp4040=0", report)
-        # The place name still works.
-        self.assertIn("lieuLiege=5", report)
-        self.assertIn("cleared=6", report)
     def test_the_pasted_styles_can_be_switched_off(self):
         report = self.report_of("/diff-probe.html")
 

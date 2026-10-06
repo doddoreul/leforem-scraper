@@ -25,9 +25,6 @@ BLACKLIST_FILE_NAME = "blacklist.json"
 COMPANIES_FILE_NAME = "companies.json"
 MODIFICATIONS_FILE_NAME = "historique_modifications.json"
 SCRAPE_STATE_FILE_NAME = "scrape_state.json"
-# The open Belgian postal-code dataset, cached here so the mapping costs
-# nothing at request time.
-POSTAL_CODES_FILE_NAME = "postal_codes.json"
 
 # Format version of the scraper history files.
 VERSION = 1
@@ -68,10 +65,6 @@ def scrape_state_file() -> str:
     return shared_file(SCRAPE_STATE_FILE_NAME)
 
 
-def postal_codes_file() -> str:
-    return shared_file(POSTAL_CODES_FILE_NAME)
-
-
 # One search owns exactly three files, named after it: the offers
 # (data_liege.json), the offers that disappeared over time
 # (historique_liege.json) and the cached detail payloads
@@ -81,13 +74,6 @@ DATA_PREFIX = "data_"
 HISTORY_PREFIX = "historique_"
 DETAILS_PREFIX = "details_"
 JSON_SUFFIX = ".json"
-
-# Field names of the cached postal dataset (ODWB keeps them unlabelled) and
-# the key the resolved codes are attached to on an offer.
-POSTAL_CODE_FIELD = "column_1"
-POSTAL_LOCALITY_FIELD = "column_2"
-POSTAL_COMMUNE_FIELD = "municipality_name_french"
-POSTAL_CODES_FIELD = "postalCodes"
 
 # What a search name may contain, and therefore what a generated file name
 # may look like. Kept here so the server never has to repeat the pattern.
