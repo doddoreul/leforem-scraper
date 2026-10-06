@@ -11,6 +11,7 @@
 // ============================================================
 
 import { readProfile } from "./profile.js";
+import { foldCharacter } from "./text.js";
 
 /** The profile keywords, lowercased without accents. Empty when unset. */
 let keywords = [];
@@ -36,11 +37,14 @@ const pending = [];
 /**
  * Fold one character: lowercase and without accents. Kept as a helper so the
  * mapping back to the original text stays exact.
+ *
+ * It delegates to text.js so the highlighting and the filters fold identically:
+ * a keyword that filters must also be found by the highlighting.
  * @param {string} ch
- * @returns {string}
+ * @returns {string} may be two characters when a ligature is folded
  */
 function foldChar(ch) {
-    return ch.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    return foldCharacter(ch);
 }
 
 /**

@@ -642,6 +642,78 @@ log("KEYWORD-OK");
 </body></html>
 """
 
+# Accent and case folding, for the filters and for the highlighting. The
+# letters NFD cannot decompose (oe, ae, o-slash, sharp s) are handled
+# explicitly, and a ligature must not shift the indexes of what follows.
+FOLD_PROBE = r"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+import { matchRanges, highlightIn } from "/js/shared/highlight.js";
+import { normalizeText } from "/js/shared/text.js";
+
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\\n"); }
+
+const failed = [];
+function check(label, got, expected) {
+    const same = JSON.stringify(got) === JSON.stringify(expected);
+    if (same) {
+        log("ok " + label);
+    } else {
+        log("FAIL " + label + " got=" + JSON.stringify(got)
+            + " expected=" + JSON.stringify(expected));
+        failed.push(label);
+    }
+}
+
+// normalizeText: what the filters rely on.
+check("filter folds accents and case",
+    normalizeText("Électromécanicien"), "electromecanicien");
+check("filter folds the oe ligature",
+    normalizeText("Manœuvre"), "manoeuvre");
+check("filter folds oe in coeur",
+    normalizeText("Cœur"), "coeur");
+check("filter folds oe uppercase",
+    normalizeText("ŒUVRE"), "oeuvre");
+check("filter folds the ae ligature",
+    normalizeText("Cæsar"), "caesar");
+check("filter folds the o-slash",
+    normalizeText("Møller"), "moller");
+check("filter folds the sharp s",
+    normalizeText("Straße"), "strasse");
+
+// matchRanges: the highlighting. "Manœuvre" is 8 characters even though the
+// oe counts for 2 once folded.
+check("highlight finds a plain keyword in accented text",
+    matchRanges("Électromécanicien", ["electromecanicien"]), [[0, 17]]);
+check("highlight finds an accented keyword",
+    matchRanges("électromécanicien", ["ÉLECTROMÉCANICIEN"]), [[0, 17]]);
+check("highlight finds the oe ligature",
+    matchRanges("Manœuvre", ["manoeuvre"]), [[0, 8]]);
+check("highlight finds an oe keyword in accented text",
+    matchRanges("Manœuvre en électromécanicien", ["manoeuvre"]), [[0, 8]]);
+check("highlight ignores case",
+    matchRanges("maintenance", ["MAINTENANCE"]), [[0, 11]]);
+
+// The text after a ligature must still be cut at the right place.
+const host = document.createElement("div");
+host.textContent = "";
+host.appendChild(document.createTextNode("Manœuvre en électromécanicien"));
+highlightIn(host, ["manoeuvre", "electromecanicien"]);
+const marks = Array.from(host.querySelectorAll("mark"));
+check("two marks", marks.length, 2);
+check("mark texts", marks.map(m => m.textContent),
+    ["Manœuvre", "électromécanicien"]);
+check("the whole text is unchanged",
+    host.textContent, "Manœuvre en électromécanicien");
+
+log(failed.length ? "FOLD-FAILED:" + failed.join("|") : "FOLD-OK");
+</script>
+</body></html>
+"""
+
 # validateProfile is pure, so the browser is only needed to load the module
 # and check the real rejections on the real page.
 PROFILE_PROBE = r"""<!DOCTYPE html>
@@ -777,6 +849,7 @@ class ProbeHandler(server.Handler):
             "/profile-probe.html": PROFILE_PROBE,
             "/remun-probe.html": REMUN_PROBE,
             "/keyword-probe.html": KEYWORD_PROBE,
+            "/fold-probe.html": FOLD_PROBE,
         }
         if path in probes:
             body = probes[path].encode("utf-8")
@@ -946,6 +1019,19 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         # ...and re-rendering the same scrape keeps them hidden.
         self.assertIn("rerenderHidden=true", report)
         self.assertIn("DISMISS-OK", report)
+
+    def test_the_letters_without_accents_are_folded_too(self):
+        # "manœuvre" has to answer to "manoeuvre": NFD leaves a ligature alone,
+        # so it needs an explicit table. Both the filters and the highlighting
+        # share that rule.
+        report = self.report_of("/fold-probe.html")
+
+        self.assertIn("FOLD-OK", report)
+        self.assertIn("ok filter folds the oe ligature", report)
+        self.assertIn("ok highlight finds the oe ligature", report)
+        self.assertIn("ok highlight finds an oe keyword in accented text", report)
+        self.assertIn("ok two marks", report)
+        self.assertIn("ok the whole text is unchanged", report)
 
     def test_the_profile_keywords_are_highlighted(self):
         report = self.report_of("/keyword-probe.html")
