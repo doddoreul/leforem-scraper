@@ -1095,31 +1095,34 @@ await sleep(500);
 const rows = Array.from(doc.querySelectorAll("#currentRows tr[data-number]"));
 const select = doc.getElementById("locationFilter");
 const visible = () => rows.filter(r => r.style.display !== "none").length;
-const options = Array.from(select.options).map(o => o.textContent);
+// The label may carry the postal code; the value never does.
+const labels = Array.from(select.options).map(o => o.textContent);
+const values = Array.from(select.options).map(o => o.value);
 
 log("total=" + rows.length);
 log("baseline=" + visible());
 // Sorted for the log: the menu order follows the French collation, which is
 // not what this test is about.
-log("options=" + options.slice().sort().join(" | "));
-log("liegeOptions=" + options.filter(o => /li/i.test(o)).length);
-log("herstalOptions=" + options.filter(o => /herstal/i.test(o)).length);
+log("options=" + labels.slice().sort().join(" | "));
+log("values=" + values.slice().sort().join(" | "));
+log("liegeOptions=" + labels.filter(o => /li/i.test(o)).length);
+log("herstalOptions=" + labels.filter(o => /herstal/i.test(o)).length);
 // Nothing shouted survives.
-log("shoutedLeft=" + options.filter(o => /[A-Z]{2}/.test(o)).length);
+log("shoutedLeft=" + labels.filter(o => /[A-Z]{2}/.test(o)).length);
 
-async function pick(label) {
-    select.value = label;
+async function pick(value) {
+    select.value = value;
     select.dispatchEvent(new Event("change", { bubbles: true }));
     await sleep(320);
     return visible();
 }
 
-["Liège", "Herstal", "Namur", "Grâce-hollogne", "4000",
+["Liège (4000, 4020)", "Herstal (4040)", "Namur", "Grâce-hollogne", "4000",
     "Arrondissement de Namur"].forEach(function (label) {
-    log("has[" + label + "]=" + options.includes(label));
+    log("has[" + label + "]=" + labels.includes(label));
 });
-for (const label of options.slice(1)) {
-    log("pick[" + label + "]=" + await pick(label));
+for (const value of values.slice(1)) {
+    log("pick[" + value + "]=" + await pick(value));
 }
 
 select.value = "";
@@ -1165,6 +1168,10 @@ const input = doc.getElementById("currentSearch");
 const visible = () => rows.filter(r => r.style.display !== "none").length;
 
 log("baseline=" + visible() + "/" + rows.length);
+
+// The box has to say a postal code is welcome, or nobody ever tries.
+log("placeholder=" + input.getAttribute("placeholder"));
+log("annonceCP=" + /code postal/.test(input.getAttribute("placeholder")));
 
 // What the server attached.
 const payload = await (await fetch("/data_metier_liege.json")).json();
@@ -1344,6 +1351,8 @@ class TestModulesInBrowser(BrowserPagesTestCase):
 
         self.assertIn("CP-OK", report)
         self.assertIn("baseline=6/7", report)
+        # The box advertises what it accepts.
+        self.assertIn("annonceCP=true", report)
         # The server attached the codes, both of Liège's, and Charleroi's.
         self.assertIn("codesLiege=4000|4020", report)
         self.assertIn("codesCharleroi=7100", report)
@@ -1769,8 +1778,13 @@ class TestLocalityFilter(BrowserPagesTestCase):
         # A shouted place is written the way a person would: only the very
         # first letter keeps its capital, so "GRÂCE-HOLLOGNE" becomes
         # "Grâce-hollogne".
-        self.assertIn("has[Liège]=true", report)
         self.assertIn("has[Grâce-hollogne]=true", report)
+        # A place the server resolved shows its codes, and its value stays the
+        # bare place, which is what the offers carry.
+        self.assertIn("has[Herstal (4040)]=true", report)
+        self.assertIn("has[Liège (4000, 4020)]=true", report)
+        self.assertIn("values= | 4000 | Arrondissement de Namur | Grâce-hollogne | "
+                      "Herstal | Liège | Namur", report)
         # A place without a letter, and one the employer already shaped, are
         # left exactly as they were written.
         self.assertIn("has[4000]=true", report)
