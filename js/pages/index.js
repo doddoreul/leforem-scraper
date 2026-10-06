@@ -1007,9 +1007,49 @@ function tidyLocation(value) {
         + text.slice(1).toLocaleLowerCase();
 }
 
+/**
+ * Every place one offer sits in, as a list.
+ *
+ * An offer may name several: "Arrondissement de Waremme, Arrondissement de
+ * Liège, Hannut". They are three distinct places. The scraper stores them
+ * apart in `locations`; offers scraped before that only have the joined
+ * string, so it is split on commas. No single workplace from the Forem
+ * contains a comma, which was checked against the stored data.
+ * @param {Object} offer
+ * @returns {Array<string>}
+ */
+function offerLocations(offer) {
+    if (!offer) return [];
+
+    if (Array.isArray(offer.locations) && offer.locations.length > 0) {
+        return offer.locations
+            .map(function (value) { return String(value || "").trim(); })
+            .filter(Boolean);
+    }
+
+    return String(offer.location || "")
+        .split(",")
+        .map(function (part) { return part.trim(); })
+        .filter(Boolean);
+}
+
+/**
+ * Whether an offer sits in the picked place.
+ *
+ * One locality out of several is enough: picking "Hannut" keeps an offer that
+ * also covers two arrondissements. The places are folded on both sides, since
+ * the employers type them freely.
+ * @param {Object} offer
+ * @param {string} value
+ * @returns {boolean}
+ */
 function locationMatches(offer, value) {
     if (!value) return true;
-    return normalizeText(offer.location || "") === normalizeText(value);
+    const wanted = normalizeText(value);
+    if (wanted === "") return true;
+    return offerLocations(offer).some(function (place) {
+        return normalizeText(place) === wanted;
+    });
 }
 
 /**
@@ -1028,13 +1068,14 @@ function fillLocationFilter(offers) {
     const seen = new Map();
 
     offers.forEach(function (offer) {
-        const raw = String((offer && offer.location) || "").trim();
-        if (raw === "") return;
-        // One option per place, whichever spelling the employer used, shown
-        // with its capitals tamed.
-        const key = normalizeText(raw);
-        if (key === "" || seen.has(key)) return;
-        seen.set(key, tidyLocation(raw));
+        // An offer naming three places contributes three entries, not one.
+        offerLocations(offer).forEach(function (raw) {
+            // One option per place, whichever spelling the employer used, shown
+            // with its capitals tamed.
+            const key = normalizeText(raw);
+            if (key === "" || seen.has(key)) return;
+            seen.set(key, tidyLocation(raw));
+        });
     });
 
     const values = Array.from(seen.values())
@@ -1048,16 +1089,16 @@ function fillLocationFilter(offers) {
     all.textContent = "Toutes";
     select.appendChild(all);
 
-    values.forEach(function (label) {
+    values.forEach(function (place) {
         const option = document.createElement("option");
-        option.value = label;
-        option.textContent = label;
+        option.value = place;
+        option.textContent = place;
         select.appendChild(option);
     });
 
     // Keep the choice when it is still on offer, drop it otherwise.
-    const stillThere = values.some(function (label) {
-        return normalizeText(label) === normalizeText(chosen);
+    const stillThere = values.some(function (place) {
+        return normalizeText(place) === normalizeText(chosen);
     });
     select.value = stillThere ? chosen : "";
 }

@@ -503,16 +503,27 @@ def extract_email(detail):
     return ", ".join(found)
 
 
-def extract_location(workplaces):
+def extract_locations(workplaces):
+    """Every workplace of an offer, as a list.
+
+    An offer may name several: "Arrondissement de Waremme, Arrondissement de
+    Liege, Hannut". They are three distinct places and have to be searchable as
+    such, so they are returned separately instead of one joined string.
+    """
     if not workplaces:
-        return ""
+        return []
 
     values = []
+
+    def add(value):
+        v = clean_text(value)
+        if v and v not in values:
+            values.append(v)
 
     if isinstance(workplaces, list):
         for item in workplaces:
             if isinstance(item, dict):
-                v = (
+                add(
                     item.get("nom")
                     or item.get("libelle")
                     or item.get("ville")
@@ -520,22 +531,21 @@ def extract_location(workplaces):
                     or ""
                 )
             else:
-                v = str(item)
-            v = clean_text(v)
-            if v and v not in values:
-                values.append(v)
+                add(item)
     elif isinstance(workplaces, dict):
-        v = (
+        add(
             workplaces.get("nom")
             or workplaces.get("libelle")
             or workplaces.get("ville")
             or ""
         )
-        v = clean_text(v)
-        if v:
-            values.append(v)
 
-    return ", ".join(values)
+    return values
+
+
+def extract_location(workplaces):
+    """The workplaces as one readable string, for display and for export."""
+    return ", ".join(extract_locations(workplaces))
 
 
 def build_offer(detail, published_on=""):
@@ -572,6 +582,9 @@ def build_offer(detail, published_on=""):
         "pay": extract_pay(detail.get("benefits")),
         "salary": extract_salary(detail),
         "location": extract_location(detail.get("lieuxTravail")),
+        # Same places, kept apart, so the locality filter can offer and match
+        # each one. "location" stays the joined string for display.
+        "locations": extract_locations(detail.get("lieuxTravail")),
         "published_on": clean_text(published_on),
         "date_publication": date_publication,
         "date_fin_diffusion": clean_text(detail.get("dateFinDiffusion")),

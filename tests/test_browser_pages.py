@@ -1132,6 +1132,69 @@ log("LOC-OK");
 </body></html>
 """
 
+# One offer may name several workplaces, "Arrondissement de Waremme,
+# Arrondissement de Liège, Hannut". The menu must offer three places, not one
+# joined string, and picking any of them must keep that offer. The fixture only
+# carries the joined string, so this also covers offers scraped before the
+# scraper started storing the list.
+MULTI_LOCATIONS_PROBE = r"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\n"); }
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+localStorage.setItem("forem_scraping_select", "data_multi.json");
+
+const frame = document.createElement("iframe");
+frame.width = 1400;
+frame.height = 900;
+const loaded = new Promise(resolve => { frame.onload = resolve; });
+frame.src = "/";
+document.body.appendChild(frame);
+await loaded;
+
+let doc = null;
+for (let i = 0; i < 120; i += 1) {
+    await sleep(200);
+    doc = frame.contentDocument;
+    if (doc && doc.querySelectorAll("#currentRows tr[data-number]").length > 4) break;
+}
+await sleep(500);
+
+const rows = Array.from(doc.querySelectorAll("#currentRows tr[data-number]"));
+const select = doc.getElementById("locationFilter");
+const visible = () => rows.filter(r => r.style.display !== "none").length;
+const values = Array.from(select.options).map(o => o.value);
+
+log("total=" + rows.length);
+log("baseline=" + visible());
+log("values=" + values.slice().sort().join(" | "));
+// No entry may still hold a comma.
+log("joinedEntryLeft=" + values.filter(v => v.indexOf(",") !== -1).length);
+
+async function pick(place) {
+    select.value = place;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await sleep(320);
+    return visible();
+}
+
+log("pick[Hannut]=" + await pick("Hannut"));
+log("pick[Arrondissement de Liège]=" + await pick("Arrondissement de Liège"));
+log("pick[Arrondissement de Waremme]=" + await pick("Arrondissement de Waremme"));
+log("pick[Bruxelles]=" + await pick("Bruxelles"));
+// Liège sits in two offers written "LIÈGE" plus the one joined with Bruxelles.
+log("pick[Liège]=" + await pick("Liège"));
+log("cleared=" + await pick(""));
+
+log("MULTI-OK");
+</script>
+</body></html>
+"""
+
 class ProbeHandler(server.Handler):
     """The real handler, plus the page that exercises every module."""
 
@@ -1150,6 +1213,7 @@ class ProbeHandler(server.Handler):
             "/keys-probe.html": KEYS_PROBE,
             "/fields-probe.html": FIELDS_PROBE,
             "/location-probe.html": LOCATION_PROBE,
+            "/multi-locations-probe.html": MULTI_LOCATIONS_PROBE,
         }
         if path in probes:
             body = probes[path].encode("utf-8")
@@ -1614,6 +1678,16 @@ class TestLocalityFilter(BrowserPagesTestCase):
     counts the other tests assert on.
     """
 
+    MULTI_PLACES = [
+        # The real case: three workplaces on one offer.
+        "Arrondissement de Waremme, Arrondissement de Liège, Hannut",
+        "LIÈGE",
+        "Liège",
+        "Herstal",
+        "Namur",
+        "LIÈGE, BRUXELLES",
+    ]
+
     PLACES = [
         "LIÈGE", "Liège", "Herstal", "HERSTAL", "Namur", "GRÂCE-HOLLOGNE",
         # No letter at all: never a shouted name, so left alone.
@@ -1649,6 +1723,30 @@ class TestLocalityFilter(BrowserPagesTestCase):
         })
         cls._write("historique_casse.json", {"scrapes": []})
 
+        # A second scraping where one offer names three places, and another
+        # names two. Only the joined string is stored, which is what offers
+        # scraped before the list existed look like.
+        extra = []
+        for index, place in enumerate(cls.MULTI_PLACES):
+            offer = copy.deepcopy(OFFERS[index % len(OFFERS)])
+            offer["number"] = str(8000 + index)
+            offer["offer_title"] = "Offre numero %d" % index
+            offer["company"] = "Societe %d" % index
+            offer["location"] = place
+            offer["offer_state"] = "unchanged"
+            offer["is_new"] = False
+            offer["removed_on"] = ""
+            extra.append(offer)
+
+        cls._write("data_multi.json", {
+            "label": "Multi",
+            "scrape_timestamp": "2026-09-26T08:15:00",
+            "occupation_guid": "occ-guid",
+            "location_guid": "loc-guid",
+            "offers": extra,
+        })
+        cls._write("historique_multi.json", {"scrapes": []})
+
     @classmethod
     def _write(cls, name, payload):
         with open(os.path.join(cls.tmp.name, name), "w", encoding="utf-8") as handle:
@@ -1680,3 +1778,24 @@ class TestLocalityFilter(BrowserPagesTestCase):
         self.assertIn("pick[Namur]=1", report)
         self.assertIn("pick[Grâce-hollogne]=1", report)
         self.assertIn("cleared=8", report)
+
+    def test_one_offer_several_places_gives_several_entries(self):
+        report = self.report_of("/multi-locations-probe.html")
+
+        self.assertIn("MULTI-OK", report)
+        self.assertIn("total=6", report)
+        self.assertIn("baseline=6", report)
+        # Three workplaces became three entries, and nothing still holds a comma.
+        self.assertIn("joinedEntryLeft=0", report)
+        self.assertIn(
+            "values= | Arrondissement de Liège | Arrondissement de Waremme | "
+            "Bruxelles | Hannut | Herstal | Liège | Namur",
+            report,
+        )
+        # Picking any one of the three keeps the offer that names all three.
+        self.assertIn("pick[Hannut]=1", report)
+        self.assertIn("pick[Arrondissement de Liège]=1", report)
+        self.assertIn("pick[Arrondissement de Waremme]=1", report)
+        self.assertIn("pick[Bruxelles]=1", report)
+        self.assertIn("pick[Liège]=3", report)
+        self.assertIn("cleared=6", report)

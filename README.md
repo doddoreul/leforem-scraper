@@ -283,6 +283,13 @@ le lieu en texte libre, donc « LIÈGE » et « Liège » désignent la même vi
 Le menu n'en montre qu'une entrée, et la garder sélectionne les deux annonces.
 Une offre sans lieu n'apparaît pas dans la liste.
 
+Une annonce peut viser **plusieurs lieux** : `Arrondissement de Waremme,
+Arrondissement de Liège, Hannut`. Le menu en fait trois entrées, et choisir
+n'importe laquelle garde l'annonce. Le champ `locations` du scraper les stocke
+séparés ; les annonces déjà téléchargées n'ont que la chaîne complète, que la
+page découpe à la virgule. Aucun lieu renvoyé par le Forem ne contient lui-même
+de virgule, ce qui a été vérifié sur les données stockées.
+
 Un lieu entièrement en majuscules est réécrit comme on l'écrit : seule la toute
 première lettre garde sa capitale, donc `LIÈGE` devient `Liège` et
 `GRÂCE-HOLLOGNE` devient `Grâce-hollogne`. Un lieu déjà en casse mixte est laissé
