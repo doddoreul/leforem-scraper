@@ -714,6 +714,88 @@ log(failed.length ? "FOLD-FAILED:" + failed.join("|") : "FOLD-OK");
 </body></html>
 """
 
+# The search box must follow the keyboard. Dispatching keydown/keyup with no
+# input event at all is the case that used to do nothing, and the offer
+# description must stay searchable after the filter moved off the rendered row.
+KEYS_PROBE = r"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\n"); }
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+const frame = document.createElement("iframe");
+frame.width = 1200;
+frame.height = 900;
+const loaded = new Promise(resolve => { frame.onload = resolve; });
+frame.src = "/";
+document.body.appendChild(frame);
+await loaded;
+
+let doc = null;
+for (let i = 0; i < 120; i += 1) {
+    await sleep(200);
+    doc = frame.contentDocument;
+    if (doc && doc.querySelectorAll("#currentRows tr[data-number]").length > 1) break;
+}
+await sleep(500);
+
+const rows = Array.from(doc.querySelectorAll("#currentRows tr[data-number]"));
+const input = doc.getElementById("currentSearch");
+const visible = () => rows.filter(r => r.style.display !== "none").length;
+log("total=" + rows.length);
+log("baseline=" + visible());
+
+// keydown, value changes, keyup: no input event is ever sent.
+function press(key) {
+    input.dispatchEvent(new KeyboardEvent("keydown", {
+        key, bubbles: true, cancelable: true,
+    }));
+    input.value += key;
+    input.dispatchEvent(new KeyboardEvent("keyup", {
+        key, bubbles: true, cancelable: true,
+    }));
+}
+
+input.value = "";
+input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+await sleep(300);
+for (const ch of "Electromecanicien") press(ch);
+await sleep(450);
+log("keysOnly=" + visible());
+
+// A word that lives only in the description.
+const payload = await (await fetch("/data_metier_liege.json"))
+    .json().catch(() => null);
+const offers = Array.isArray(payload) ? payload : (payload.offers || []);
+const html = (offers[0] && offers[0].description) || "";
+const word = html.replace(/<[^>]*>/g, " ").split(/\s+/)
+    .map(w => w.toLowerCase().replace(/[^a-z]/g, ""))
+    .find(w => w.length > 3) || "";
+log("descWord=" + word);
+input.value = word;
+input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+await sleep(400);
+log("descMatch=" + visible());
+
+// A markup word must not match: the description is stripped first.
+input.value = "div";
+input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+await sleep(400);
+log("markupWord=" + visible());
+
+input.value = "";
+input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+await sleep(400);
+log("cleared=" + visible());
+
+log("KEYS-OK");
+</script>
+</body></html>
+"""
+
 # The listing search must look at the offer data, not at the rendered row.
 # The row text also carries the status option labels, the state badges and the
 # remarks textarea, so typing "postule" used to match every row and looked like
@@ -919,6 +1001,7 @@ class ProbeHandler(server.Handler):
             "/keyword-probe.html": KEYWORD_PROBE,
             "/fold-probe.html": FOLD_PROBE,
             "/search-probe.html": SEARCH_PROBE,
+            "/keys-probe.html": KEYS_PROBE,
         }
         if path in probes:
             body = probes[path].encode("utf-8")
@@ -1088,6 +1171,18 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         # ...and re-rendering the same scrape keeps them hidden.
         self.assertIn("rerenderHidden=true", report)
         self.assertIn("DISMISS-OK", report)
+
+    def test_the_search_box_follows_the_keyboard(self):
+        report = self.report_of("/keys-probe.html")
+
+        self.assertIn("KEYS-OK", report)
+        # keydown/keyup alone must filter, with no input event sent.
+        self.assertIn("keysOnly=1", report)
+        # The description stays searchable...
+        self.assertIn("descMatch=1", report)
+        # ...but its markup does not match every offer.
+        self.assertIn("markupWord=0", report)
+        self.assertIn("cleared=6", report)
 
     def test_the_listing_search_filters_on_the_offer_data(self):
         report = self.report_of("/search-probe.html")

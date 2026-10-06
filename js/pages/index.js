@@ -30,6 +30,7 @@ import {
     storagePrefixFor,
     writeTrackedMap,
 } from "../shared/storage.js";
+import { htmlToText } from "../shared/html.js";
 import { highlightIn, loadKeywords } from "../shared/highlight.js";
 import {
     SUIVI_EVENT,
@@ -1729,6 +1730,10 @@ function offerMatchesKeys(offer, inputId) {
         offer.schedule,
         offer.pay,
         offer.location,
+        offer.summary,
+        // The description is HTML; strip the tags, otherwise "p" or "div"
+        // matches every offer.
+        htmlToText(offer.description || ""),
         statusText(status),
         priorityLabel(priority),
         remark,
@@ -1753,7 +1758,12 @@ function offerMatchesRow(row, inputId, keywords) {
 
     if (offer) return offerMatchesKeys(offer, inputId);
 
-    const text = normalizeText(row.textContent);
+    // Last resort: read the row without what repeats on every line. The
+    // status menu and the remarks textarea are kept in the DOM, so matching
+    // the raw text made "postule" and "favori" match everything.
+    const copy = row.cloneNode(true);
+    copy.querySelectorAll("select, textarea, button").forEach(el => el.remove());
+    const text = normalizeText(copy.textContent);
     return keywords.every(word => text.includes(word));
 }
 
@@ -2222,9 +2232,16 @@ async function init() {
 
     ["currentSearch"].forEach(id => {
         const input = document.getElementById(id);
-        if (input) {
-            input.addEventListener("input", applyFilters);
-        }
+        if (!input) return;
+
+        // The box follows the keyboard whatever event the browser sends:
+        // "input" for typing and paste, "keyup" for the keys that edit
+        // without emitting a change (arrows, delete, Escape), and "keydown"
+        // so a keypress is never ignored. keyup and input both read the
+        // value already updated, so the passes converge on one result.
+        ["input", "keyup", "keydown"].forEach(type => {
+            input.addEventListener(type, applyFilters);
+        });
     });
 
     await reloadTables();
