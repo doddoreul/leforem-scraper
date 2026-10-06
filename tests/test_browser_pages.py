@@ -1388,6 +1388,14 @@ for (let i = 0; i < 100; i += 1) {
 await sleep(900);
 log("ficheRegime=" + (dd ? dd.querySelectorAll(".wanted-tick--schedule").length : "absente"));
 log("ficheMention=" + (dd ? dd.querySelectorAll(".wanted-tick--mention").length : "absente"));
+// The sheet shows these values twice: as chips in the banner and again in
+// "Informations pratiques". Both places carry the tick.
+const info = dd ? dd.querySelector(".detail-info") : null;
+log("puceRegime=" + (dd
+    ? dd.querySelectorAll(".detail-facts .wanted-tick--schedule").length : "absente"));
+log("infoRegime=" + (info ? info.querySelectorAll(".wanted-tick--schedule").length : "absente"));
+log("infoMention=" + (info ? info.querySelectorAll(".wanted-tick--mention").length : "absente"));
+log("infoContrat=" + (info ? info.querySelectorAll(".wanted-tick--contract").length : "absente"));
 
 log("TICK-OK");
 </script>
@@ -1569,9 +1577,13 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         self.assertIn("surLigneContrat=true", report)
         self.assertIn("surLigneRegime=true", report)
         self.assertIn("surLigneMention=true", report)
-        # And on the offer sheet.
+        # And on the offer sheet, where the values appear twice.
         self.assertNotIn("ficheRegime=0", report)
         self.assertNotIn("ficheMention=0", report)
+        self.assertIn("puceRegime=1", report)
+        self.assertIn("infoRegime=1", report)
+        self.assertIn("infoMention=1", report)
+        self.assertIn("infoContrat=1", report)
 
     def test_the_profile_page_has_the_schedule_and_mention_lists(self):
         with urllib.request.urlopen(

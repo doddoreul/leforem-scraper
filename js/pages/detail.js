@@ -568,13 +568,16 @@ function buildInfoList(payload) {
     const dl = el("dl", "detail-info");
     const rows = [];
 
-    const reported = (v, label) => {
-        if (str(v)) rows.push([label, String(v).trim()]);
+    // The third slot is the wanted kind, so the tick can be built when the
+    // row is drawn. These three values also appear as chips in the banner, and
+    // both places have to carry the tick.
+    const reported = (v, label, kind) => {
+        if (str(v)) rows.push([label, String(v).trim(), kind || ""]);
     };
 
-    reported(payload.typeContrat, "Type de contrat");
-    reported(payload.regimeTravail, "Régime de travail");
-    reported(payload.regimeTravailPrecision, "Précision horaire");
+    reported(payload.typeContrat, "Type de contrat", "contract");
+    reported(payload.regimeTravail, "Régime de travail", "schedule");
+    reported(payload.regimeTravailPrecision, "Précision horaire", "mention");
     reported(payload.nombrePostes, "Nombre de postes");
     reported(payload.secteurActiviteEmployeur, "Secteur d'activité");
     reported(payload.metier, "Métier");
@@ -592,10 +595,16 @@ function buildInfoList(payload) {
     const isDeplacement = isTrue(payload.isDeplacementRequired);
     if (isDeplacement) rows.push(["Déplacements", "Oui"]);
 
-    rows.forEach(([labelText, value]) => {
+    rows.forEach(([labelText, value, kind]) => {
         const dt = el("dt", "detail-info-label", labelText + " :");
         dl.appendChild(dt);
-        const dd = el("dd", "detail-info-value", value);
+        const dd = el("dd", "detail-info-value");
+        dd.appendChild(document.createTextNode(value));
+        const tick = kind ? wantedTick(kind, value, wanted) : null;
+        if (tick) {
+            dd.appendChild(document.createTextNode(" "));
+            dd.appendChild(tick);
+        }
         dl.appendChild(dd);
     });
 

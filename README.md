@@ -349,6 +349,10 @@ donc toutes les deux, et une annonce peut porter les deux coches sur la même
 ligne « Horaire ». Les listes de la page Profil sont fixes : les récolter dans
 les offres donnerait « Temps plein Travail de jour » comme régime.
 
+Sur la fiche d'une offre, ces valeurs apparaissent deux fois — en pastille dans
+le bandeau, puis dans « Informations pratiques ». La coche est dans les deux
+endroits, sinon la même information n'en aurait pas selon l'endroit regardé.
+
 Le profil est enregistré dans la table `profile` de `data/leforem.db`, avec un
 miroir dans le `localStorage` du navigateur. Comme pour les suivis, effacer les
 données du navigateur ne le fait pas disparaître.
