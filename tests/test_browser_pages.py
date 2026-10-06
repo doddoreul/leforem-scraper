@@ -54,7 +54,7 @@ OFFERS = [
         "company": "Ateliers du Sud",
         "location": "Liege",
         "contract_type": "CDI",
-        "schedule": "temps plein",
+        "schedule": "Temps plein Travail de jour",
         "salary": '{"min": 2800, "max": 3400}',
         "pay": '{"min": 2800, "max": 3400}',
         "published_on": "2026-09-25",
@@ -90,7 +90,7 @@ OFFERS = [
         "company": "Fonderie du Nord",
         "location": "Charleroi",
         "contract_type": "CDD",
-        "schedule": "temps plein",
+        "schedule": "Temps plein Travail de jour",
         "salary": "",
         "pay": "",
         "published_on": "2026-08-02",
@@ -131,7 +131,7 @@ OFFERS = [
         "company": "Ateliers du Sud",
         "location": "Liege",
         "contract_type": "CDI",
-        "schedule": "temps plein",
+        "schedule": "Temps plein Travail de jour",
         "salary": "",
         "pay": "",
         "published_on": "2026-06-01",
@@ -242,8 +242,9 @@ DETAIL = {
     "benefitsComments": "",
     "howToApply": "jobs@example.be",
     "officeSkills": [],
-    "regimeTravail": {"libelle": "Jour"},
-    "regimeTravailPrecision": "",
+    # Both are plain strings, as the Forem publishes them.
+    "regimeTravail": "Temps plein",
+    "regimeTravailPrecision": "Travail de jour",
     "secteurActiviteEmployeur": {"libelle": "Industrie"},
     "travel": "",
     "logoMimeType": "",
@@ -1279,10 +1280,11 @@ log("EXCL-OK");
 </body></html>
 """
 
-# A small checkbox beside a contract the candidate asked for, in the offers
-# table and on the offer sheet. The friendly profile labels have to match the
-# wording the Forem really publishes, and the other way round.
-CONTRACT_TICK_PROBE = r"""<!DOCTYPE html>
+# A tick beside each value the candidate asked for: the contract, the working
+# regime and the mention. The friendly labels have to reach the wording the
+# Forem really publishes, and the listing stores regime and mention in one
+# "schedule" string, so both must answer to it.
+WANTED_TICK_PROBE = r"""<!DOCTYPE html>
 <html lang="fr"><head><meta charset="utf-8"></head><body>
 <pre id="out">pending</pre>
 <script type="module">
@@ -1291,15 +1293,13 @@ const lines = [];
 function log(line) { lines.push(line); out.textContent = lines.join("\n"); }
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-// What the profile page lets the candidate pick.
 const profile = {
     version: 1,
-    keywordsText: "",
-    keywords: [],
-    excludedText: "",
-    excluded: [],
+    keywordsText: "", keywords: [], excludedText: "", excluded: [],
     hourlyRate: null,
-    contractTypes: ["CDI", "Intérim"],
+    contractTypes: ["CDI"],
+    scheduleTypes: ["Temps plein"],
+    mentionTypes: ["jour"],
     maxDistanceKm: null,
     updatedAt: "2026-10-06",
 };
@@ -1310,29 +1310,45 @@ await fetch("/api/profil", {
     body: JSON.stringify(profile),
 });
 
-const { contractIsWanted } = await import("/js/shared/profile.js");
-const wanted = ["CDI", "Intérim"];
-[
-    ["Durée indéterminée", true],
-    ["Durée déterminée", false],
-    ["Intérimaire", true],
-    ["Intérimaire avec option sur durée indéterminée", true],
-    ["Remplacement", false],
-    ["", false],
-].forEach(function (entry) {
-    log("match[" + (entry[0] || "vide") + "]=" + contractIsWanted(entry[0], wanted));
-});
-// The raw wording works too, since the profile merges it in.
-log("brut=" + contractIsWanted("Durée indéterminée", ["Durée indéterminée"]));
-log("aucunChoisi=" + contractIsWanted("Durée indéterminée", []));
+const mod = await import("/js/shared/profile.js");
+const wanted = { contracts: ["CDI"], schedules: ["Temps plein"], mentions: ["jour"] };
+
+// The contract wording. Only CDI is ticked in this profile, so Intérimaire
+// must not match.
+log("cdi=" + mod.contractIsWanted("Durée indéterminée", wanted.contracts));
+log("cdd=" + mod.contractIsWanted("Durée déterminée", wanted.contracts));
+log("interim=" + mod.contractIsWanted("Intérimaire", wanted.contracts));
+// An offer that is both still counts, because CDI is ticked.
+log("lesDeux=" + mod.contractIsWanted(
+    "Intérimaire avec option sur durée indéterminée", wanted.contracts));
+log("remplacement=" + mod.contractIsWanted("Remplacement", wanted.contracts));
+
+// regimeTravail.
+log("regimePlein=" + mod.scheduleIsWanted("Temps plein", wanted.schedules));
+log("regimePartiel=" + mod.scheduleIsWanted("Temps partiel", wanted.schedules));
+
+// regimeTravailPrecision.
+log("mentionJour=" + mod.mentionIsWanted("Travail de jour", wanted.mentions));
+log("mentionNuit=" + mod.mentionIsWanted("Travail de nuit", wanted.mentions));
+log("mentionPauses=" + mod.mentionIsWanted("Travail posté 3 pauses", wanted.mentions));
+log("mentionVide=" + mod.mentionIsWanted("", wanted.mentions));
+
+// The listing packs regime and mention into one "schedule" string.
+const merged = "Temps plein Travail de jour";
+log("fusionRegime=" + mod.scheduleIsWanted(merged, wanted.schedules));
+log("fusionMention=" + mod.mentionIsWanted(merged, wanted.mentions));
+
+const loaded = await mod.loadWantedTypes();
+log("chargeRegime=" + loaded.schedules.join("|"));
+log("chargeMention=" + loaded.mentions.join("|"));
 
 const frame = document.createElement("iframe");
 frame.width = 1400;
 frame.height = 900;
-const loaded = new Promise(resolve => { frame.onload = resolve; });
+const loadedFrame = new Promise(resolve => { frame.onload = resolve; });
 frame.src = "/";
 document.body.appendChild(frame);
-await loaded;
+await loadedFrame;
 
 let doc = null;
 for (let i = 0; i < 120; i += 1) {
@@ -1342,12 +1358,19 @@ for (let i = 0; i < 120; i += 1) {
 }
 await sleep(800);
 
-log("ticks=" + doc.querySelectorAll("#currentRows .contract-tick").length);
-// The tick must sit on the contract line, not on another one.
-const onLine = doc.querySelector("#currentRows .detail-line .contract-tick");
-log("surLigneContrat=" + (onLine
-    ? onLine.parentElement.textContent.indexOf("Contrat") === 0 : false));
-log("tickTexte=" + (onLine ? onLine.textContent.trim() : "aucun"));
+const rows = doc.querySelector("#currentRows");
+log("ticksContrat=" + rows.querySelectorAll(".wanted-tick--contract").length);
+log("ticksRegime=" + rows.querySelectorAll(".wanted-tick--schedule").length);
+log("ticksMention=" + rows.querySelectorAll(".wanted-tick--mention").length);
+
+function onLine(selector, expectedLabel) {
+    const tick = rows.querySelector(selector);
+    if (!tick) return "absent";
+    return tick.parentElement.textContent.indexOf(expectedLabel) === 0;
+}
+log("surLigneContrat=" + onLine(".wanted-tick--contract", "Contrat"));
+log("surLigneRegime=" + onLine(".wanted-tick--schedule", "Horaire"));
+log("surLigneMention=" + onLine(".wanted-tick--mention", "Horaire"));
 
 const detail = document.createElement("iframe");
 detail.width = 1200;
@@ -1363,7 +1386,8 @@ for (let i = 0; i < 100; i += 1) {
     if (dd && dd.querySelector(".detail-facts")) break;
 }
 await sleep(900);
-log("ficheTicks=" + (dd ? dd.querySelectorAll(".contract-tick").length : "absente"));
+log("ficheRegime=" + (dd ? dd.querySelectorAll(".wanted-tick--schedule").length : "absente"));
+log("ficheMention=" + (dd ? dd.querySelectorAll(".wanted-tick--mention").length : "absente"));
 
 log("TICK-OK");
 </script>
@@ -1390,7 +1414,7 @@ class ProbeHandler(server.Handler):
             "/location-probe.html": LOCATION_PROBE,
             "/multi-locations-probe.html": MULTI_LOCATIONS_PROBE,
             "/excluded-probe.html": EXCLUDED_PROBE,
-            "/tick-probe.html": CONTRACT_TICK_PROBE,
+            "/tick-probe.html": WANTED_TICK_PROBE,
         }
         if path in probes:
             body = probes[path].encode("utf-8")
@@ -1513,29 +1537,51 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         self.assertIn("Mots-clés exclus", page)
         # The field it sits next to is still there.
         self.assertIn("keywordsText", page)
-    def test_a_wanted_contract_gets_a_tick(self):
+    def test_each_wanted_value_gets_a_tick(self):
         report = self.report_of("/tick-probe.html")
 
         self.assertIn("TICK-OK", report)
-        # The friendly profile labels match the Forem's own wording.
-        self.assertIn("match[Durée indéterminée]=true", report)
-        self.assertIn("match[Durée déterminée]=false", report)
-        self.assertIn("match[Intérimaire]=true", report)
-        # An offer that is both counts once, and Remplacement matches nothing.
-        self.assertIn("match[Intérimaire avec option sur durée indéterminée]=true",
-                      report)
-        self.assertIn("match[Remplacement]=false", report)
-        self.assertIn("match[vide]=false", report)
-        # The raw wording works the other way round.
-        self.assertIn("brut=true", report)
-        # Nothing ticked when the candidate picked nothing.
-        self.assertIn("aucunChoisi=false", report)
-        # In the offers table, on the contract line and nowhere else.
-        self.assertNotIn("ticks=0", report)
+        # The contract wording reaches the friendly label.
+        self.assertIn("cdi=true", report)
+        self.assertIn("cdd=false", report)
+        # Only CDI is ticked, so Intérimaire must not match.
+        self.assertIn("interim=false", report)
+        self.assertIn("lesDeux=true", report)
+        self.assertIn("remplacement=false", report)
+        # regimeTravail.
+        self.assertIn("regimePlein=true", report)
+        self.assertIn("regimePartiel=false", report)
+        # regimeTravailPrecision.
+        self.assertIn("mentionJour=true", report)
+        self.assertIn("mentionNuit=false", report)
+        self.assertIn("mentionPauses=false", report)
+        self.assertIn("mentionVide=false", report)
+        # The merged schedule answers to both lists.
+        self.assertIn("fusionRegime=true", report)
+        self.assertIn("fusionMention=true", report)
+        # The loader hands back the three lists.
+        self.assertIn("chargeRegime=Temps plein", report)
+        self.assertIn("chargeMention=jour", report)
+        # In the offers table, each on the line of its own value.
+        self.assertNotIn("ticksContrat=0", report)
+        self.assertNotIn("ticksRegime=0", report)
+        self.assertNotIn("ticksMention=0", report)
         self.assertIn("surLigneContrat=true", report)
-        self.assertIn("tickTexte=\u2713", report)
+        self.assertIn("surLigneRegime=true", report)
+        self.assertIn("surLigneMention=true", report)
         # And on the offer sheet.
-        self.assertNotIn("ficheTicks=0", report)
+        self.assertNotIn("ficheRegime=0", report)
+        self.assertNotIn("ficheMention=0", report)
+
+    def test_the_profile_page_has_the_schedule_and_mention_lists(self):
+        with urllib.request.urlopen(
+                "http://127.0.0.1:%d/profil.html" % self.port, timeout=10) as resp:
+            page = resp.read().decode("utf-8")
+
+        self.assertIn("scheduleTypes", page)
+        self.assertIn("mentionTypes", page)
+        self.assertIn("Horaires souhaités", page)
+        self.assertIn("Mentions souhaitées", page)
     def test_the_pasted_styles_can_be_switched_off(self):
         report = self.report_of("/diff-probe.html")
 

@@ -5,11 +5,11 @@
    ============================================================ */
 
 import { fetchJsonOrNull } from "../shared/api.js";
-import { contractTick } from "../shared/contract-tick.js";
 import { formatLongDate, parseForemDate } from "../shared/dates.js";
 import { el } from "../shared/dom.js";
 import { highlightIn, loadKeywords } from "../shared/highlight.js";
-import { loadContractTypes } from "../shared/profile.js";
+import { loadWantedTypes } from "../shared/profile.js";
+import { wantedTick } from "../shared/wanted-tick.js";
 import { offerUrl } from "../shared/links.js";
 import { PRIORITY_OPTIONS, STATUS_OPTIONS } from "../shared/statuses.js";
 import { readTrackedMap, storagePrefixFor, writeTrackedMap } from "../shared/storage.js";
@@ -262,8 +262,8 @@ function main() {
         });
 }
 
-/** The contract types the candidate asked for; set while loading an offer. */
-let wantedContracts = [];
+/** What the candidate asked for; set while loading an offer. */
+let wanted = { contracts: [], schedules: [], mentions: [] };
 
 function loadEntry(entry, root) {
     // The listing carries the diff (what changed since the previous scrape),
@@ -272,7 +272,7 @@ function loadEntry(entry, root) {
     // The wanted contracts drive the tick beside the contract type. Joined to
     // the same wait as the payload, so the sheet is drawn once with the tick
     // already in place rather than patched afterwards.
-    const contractsPromise = loadContractTypes();
+    const contractsPromise = loadWantedTypes();
     const detailsPromise = fetchJsonOrNull(entry.details);
     const offersPromise = entry.file
         ? fetchJsonOrNull(entry.file)
@@ -280,7 +280,7 @@ function loadEntry(entry, root) {
 
     Promise.all([keywordsPromise, contractsPromise, detailsPromise, offersPromise])
         .then(results => {
-            wantedContracts = results[1];
+            wanted = results[1];
             const detailsData = results[2];
             const offersData = results[3];
             const store = (detailsData && detailsData.details)
@@ -414,18 +414,22 @@ function renderFiche(root, payload, offer) {
     heroMain.appendChild(employerLine);
 
     const facts = el("div", "detail-facts");
-    if (contract) {
-        const node = chip(contract, "accent");
-        // A tick beside the contract when the candidate asked for that one.
-        const tick = contractTick(contract, wantedContracts);
+    // A tick beside a value the candidate asked for. The sheet has the regime
+    // and the mention apart, so each one gets its own chip and its own tick.
+    const chipped = (text, kind) => {
+        if (!text) return;
+        const node = chip(text, "accent");
+        const tick = wantedTick(kind, text, wanted);
         if (tick) {
             node.appendChild(document.createTextNode(" "));
             node.appendChild(tick);
         }
         facts.appendChild(node);
-    }
-    if (schedule) facts.appendChild(chip(schedule, "accent"));
-    if (scheduleDetail) facts.appendChild(chip(scheduleDetail, "accent"));
+    };
+
+    chipped(contract, "contract");
+    chipped(schedule, "schedule");
+    chipped(scheduleDetail, "mention");
     if (positions) facts.appendChild(chip(positions + " poste(s)", "accent"));
     if (moved || travelNote) {
         facts.appendChild(chip(travelNote || "Déplacements requis", "warn"));

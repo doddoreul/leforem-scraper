@@ -26,6 +26,32 @@ export const FALLBACK_CONTRACT_TYPES = [
 ];
 
 /**
+ * The working regimes the Forem publishes in regimeTravail.
+ *
+ * A fixed list, not harvested from the offers: the listing packs the regime,
+ * the mention and the shift period into one "schedule" string, so harvesting
+ * there would offer "Temps plein Travail de jour" as a regime.
+ * @type {Array<string>}
+ */
+export const FALLBACK_SCHEDULE_TYPES = [
+    "Temps plein",
+    "Temps partiel",
+];
+
+/**
+ * The mentions the Forem publishes in regimeTravailPrecision, for the same
+ * reason: fixed, and matched through the aliases above.
+ * @type {Array<string>}
+ */
+export const FALLBACK_MENTION_TYPES = [
+    "Travail de jour",
+    "Travail de nuit",
+    "Travail posté 2 pauses",
+    "Travail posté 3 pauses",
+    "Week-end",
+];
+
+/**
  * How the friendly labels the profile shows map onto what the Forem writes.
  *
  * The profile offers "CDI" and the Forem writes "Durée indéterminée", so a
@@ -42,12 +68,37 @@ const CONTRACT_ALIASES = {
     stage: ["stage"],
 };
 
+/**
+ * The same idea for the working regime, regimeTravail: "Temps plein",
+ * "Temps partiel".
+ * @type {Object<string, Array<string>>}
+ */
+const SCHEDULE_ALIASES = {
+    "temps plein": ["temps plein"],
+    "temps partiel": ["temps partiel"],
+    mi: ["temps partiel"],
+};
+
+/**
+ * And for the mentions, regimeTravailPrecision: "Travail de jour", "Travail
+ * posté 3 pauses", "Week-end".
+ * @type {Object<string, Array<string>>}
+ */
+const MENTION_ALIASES = {
+    jour: ["travail de jour"],
+    nuit: ["travail de nuit"],
+    weekend: ["week-end", "weekend"],
+    "2 pauses": ["poste 2 pauses"],
+    "3 pauses": ["poste 3 pauses"],
+    pauses: ["poste 2 pauses", "poste 3 pauses"],
+};
+
 /** Hourly gross rate bounds, in euros. */
 const RATE_MIN_EXCLUSIVE = 0;
 const RATE_MAX = 200;
 
-/** Fold the contract type the same way the filters do. */
-function foldContract(value) {
+/** Fold a value the same way the filters do. */
+function foldValue(value) {
     return String(value || "")
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
@@ -59,56 +110,120 @@ function foldContract(value) {
 }
 
 /**
- * Whether an offer's contract is one the candidate wants.
+ * Whether a value is one the candidate wants, given a set of aliases.
  *
  * Both spellings are accepted: the friendly labels the profile page offers and
- * the raw values the Forem publishes, since the profile merges both. Compare on
- * the folded text, so "Intérim" and "INTERIMAIRE" meet.
+ * the raw values the Forem publishes, since the profile merges both. The text
+ * is folded first, so "Intérim" and "INTERIMAIRE" meet.
+ *
+ * The match is on substrings because the Forem packs several things in one
+ * field: the listing stores regimeTravail, the mention and the shift period in
+ * a single "schedule" string, so "Temps plein Travail de jour" has to answer to
+ * both the regime and the mention.
+ * @param {string} value what the offer carries
+ * @param {Array<string>} wanted the values chosen on the profile page
+ * @param {Object<string, Array<string>>} aliases friendly label -> Forem wording
+ * @returns {boolean}
+ */
+function matchesWanted(value, wanted, aliases) {
+    const text = foldValue(value);
+    if (text === "" || !Array.isArray(wanted) || !wanted.length) return false;
+
+    return wanted.some(function (label) {
+        const wantedText = foldValue(label);
+        if (wantedText === "") return false;
+        // The Forem's own wording, chosen on the profile page.
+        if (text.indexOf(wantedText) !== -1) return true;
+        // Or one of the aliases of a friendly label.
+        const tokens = aliases[wantedText];
+        return Boolean(tokens) && tokens.some(function (token) {
+            return text.indexOf(foldValue(token)) !== -1;
+        });
+    });
+}
+
+/**
+ * Whether an offer's contract is one the candidate wants.
  * @param {string} contractType what the offer carries
  * @param {Array<string>} wanted the profile contractTypes
  * @returns {boolean}
  */
 export function contractIsWanted(contractType, wanted) {
-    const text = foldContract(contractType);
-    if (text === "" || !Array.isArray(wanted) || !wanted.length) return false;
-
-    return wanted.some(function (label) {
-        const wantedText = foldContract(label);
-        if (wantedText === "") return false;
-        // The Forem's own wording, chosen on the profile page.
-        if (text === wantedText) return true;
-        // Or one of the aliases of a friendly label.
-        const aliases = CONTRACT_ALIASES[wantedText];
-        return Boolean(aliases) && aliases.some(function (token) {
-            return text.indexOf(token) !== -1;
-        });
-    });
+    return matchesWanted(contractType, wanted, CONTRACT_ALIASES);
 }
 
-/** The contract types of the profile, read once per page. */
-let wantedContracts = null;
+/**
+ * Whether an offer's working regime is one the candidate wants.
+ * @param {string} schedule
+ * @param {Array<string>} wanted the profile scheduleTypes
+ * @returns {boolean}
+ */
+export function scheduleIsWanted(schedule, wanted) {
+    return matchesWanted(schedule, wanted, SCHEDULE_ALIASES);
+}
 
 /**
- * Read the wanted contract types from the stored profile.
- *
- * Never throws: a profile that cannot be read simply means no tick.
- * @returns {Promise<Array<string>>}
+ * Whether an offer's mention, day or night, is one the candidate wants.
+ * @param {string} mention
+ * @param {Array<string>} wanted the profile mentionTypes
+ * @returns {boolean}
  */
-export async function loadContractTypes() {
-    if (wantedContracts) return wantedContracts.slice();
-    let list = [];
-    try {
-        const profile = await readProfile();
-        list = Array.isArray(profile.contractTypes) ? profile.contractTypes : [];
-    } catch (error) {
-        list = [];
-    }
-    wantedContracts = list
+export function mentionIsWanted(mention, wanted) {
+    return matchesWanted(mention, wanted, MENTION_ALIASES);
+}
+
+/** What the profile asks for, read once per page. */
+let wantedTypes = null;
+
+/**
+ * Clean a list of chosen values: drop the empties, trim the rest.
+ * @param {*} list
+ * @returns {Array<string>}
+ */
+function cleanTypeList(list) {
+    const source = Array.isArray(list) ? list : [];
+    return source
         .filter(function (value) {
             return typeof value === "string" && value.trim() !== "";
         })
         .map(function (value) { return value.trim(); });
-    return wantedContracts.slice();
+}
+
+/**
+ * Read what the candidate wants: contracts, schedules and mentions.
+ *
+ * One read for the three lists, since they come from the same profile.
+ * Never throws: a profile that cannot be read simply means no tick.
+ * @returns {Promise<{contracts: Array<string>, schedules: Array<string>,
+ *                    mentions: Array<string>}>}
+ */
+export async function loadWantedTypes() {
+    if (wantedTypes) {
+        return {
+            contracts: wantedTypes.contracts.slice(),
+            schedules: wantedTypes.schedules.slice(),
+            mentions: wantedTypes.mentions.slice(),
+        };
+    }
+
+    let profile = null;
+    try {
+        profile = await readProfile();
+    } catch (error) {
+        profile = null;
+    }
+
+    wantedTypes = {
+        contracts: cleanTypeList(profile && profile.contractTypes),
+        schedules: cleanTypeList(profile && profile.scheduleTypes),
+        mentions: cleanTypeList(profile && profile.mentionTypes),
+    };
+
+    return {
+        contracts: wantedTypes.contracts.slice(),
+        schedules: wantedTypes.schedules.slice(),
+        mentions: wantedTypes.mentions.slice(),
+    };
 }
 
 /** Maximum home-to-work distance, in kilometres. */
@@ -128,6 +243,8 @@ export function emptyProfile() {
         excluded: [],
         hourlyRate: null,
         contractTypes: [],
+        scheduleTypes: [],
+        mentionTypes: [],
         maxDistanceKm: null,
         updatedAt: "",
     };
@@ -176,6 +293,14 @@ export function normaliseProfile(raw) {
         ? raw.excluded.filter(function (k) { return typeof k === "string" && k.trim() !== ""; })
         : [];
 
+    const scheduleTypes = Array.isArray(raw.scheduleTypes)
+        ? raw.scheduleTypes.filter(function (k) { return typeof k === "string" && k.trim() !== ""; })
+        : [];
+
+    const mentionTypes = Array.isArray(raw.mentionTypes)
+        ? raw.mentionTypes.filter(function (k) { return typeof k === "string" && k.trim() !== ""; })
+        : [];
+
     const contracts = Array.isArray(raw.contractTypes)
         ? raw.contractTypes.filter(function (k) { return typeof k === "string" && k.trim() !== ""; })
         : [];
@@ -186,6 +311,8 @@ export function normaliseProfile(raw) {
         keywords: keywords,
         excludedText: typeof raw.excludedText === "string" ? raw.excludedText : "",
         excluded: excluded,
+        scheduleTypes: scheduleTypes,
+        mentionTypes: mentionTypes,
         hourlyRate: typeof raw.hourlyRate === "number" && isFinite(raw.hourlyRate)
             ? raw.hourlyRate
             : null,
@@ -249,7 +376,20 @@ export function validateProfile(raw) {
             .map(function (v) { return v.trim(); })
         : [];
 
-    // 5. Maximum distance: whole kilometres between 0 and 500.
+    // 5. Wanted schedules and mentions: same shape as the contract types.
+    const scheduleTypes = Array.isArray(input.scheduleTypes)
+        ? input.scheduleTypes
+            .filter(function (v) { return typeof v === "string" && v.trim() !== ""; })
+            .map(function (v) { return v.trim(); })
+        : [];
+
+    const mentionTypes = Array.isArray(input.mentionTypes)
+        ? input.mentionTypes
+            .filter(function (v) { return typeof v === "string" && v.trim() !== ""; })
+            .map(function (v) { return v.trim(); })
+        : [];
+
+    // 6. Maximum distance: whole kilometres between 0 and 500.
     const distanceRaw = String(input.maxDistanceKm === null || input.maxDistanceKm === undefined
         ? ""
         : input.maxDistanceKm).trim();
@@ -280,6 +420,8 @@ export function validateProfile(raw) {
             excluded: excluded,
             hourlyRate: hourlyRate,
             contractTypes: contractTypes,
+            scheduleTypes: scheduleTypes,
+            mentionTypes: mentionTypes,
             maxDistanceKm: maxDistanceKm,
             updatedAt: input.updatedAt instanceof Date
                 ? input.updatedAt.toISOString()

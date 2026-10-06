@@ -14,6 +14,8 @@ import { initTheme } from "../shared/theme.js";
 import "../shared/navbar.js";
 import {
     FALLBACK_CONTRACT_TYPES,
+    FALLBACK_MENTION_TYPES,
+    FALLBACK_SCHEDULE_TYPES,
     emptyProfile,
     parseKeywords,
     readProfile,
@@ -29,6 +31,9 @@ let dirty = false;
 
 /** Contract types currently shown, after merging offers and saved choices. */
 let contractOptions = FALLBACK_CONTRACT_TYPES.slice();
+/** Working regimes and mentions, fixed lists: see profile.js. */
+let scheduleOptions = FALLBACK_SCHEDULE_TYPES.slice();
+let mentionOptions = FALLBACK_MENTION_TYPES.slice();
 
 /**
  * Offer a contract type, preserving the order first seen.
@@ -61,6 +66,8 @@ function clearErrors() {
     FORM_FIELDS.forEach(function (field) { setError(field, ""); });
     setError("keywordsText", "");
     setError("contractTypes", "");
+    setError("scheduleTypes", "");
+    setError("mentionTypes", "");
 }
 
 function markDirty() {
@@ -76,17 +83,14 @@ function showMessage(text, kind) {
 }
 
 function currentFormValue() {
-    const types = [];
-    contractOptions.forEach(function (type) {
-        const box = document.getElementById("contract-" + cssSafe(type));
-        if (box && box.checked) types.push(type);
-    });
     return {
         keywordsText: byId("keywordsText").value,
         excludedText: byId("excludedText").value,
         hourlyRate: byId("hourlyRate").value,
         maxDistanceKm: byId("maxDistanceKm").value,
-        contractTypes: types,
+        contractTypes: selectedIn("contractTypes", contractOptions),
+        scheduleTypes: selectedIn("scheduleTypes", scheduleOptions),
+        mentionTypes: selectedIn("mentionTypes", mentionOptions),
         updatedAt: saved.updatedAt,
     };
 }
@@ -97,12 +101,18 @@ function cssSafe(value) {
         .replace(/[^a-z0-9]+/gi, "-").toLowerCase();
 }
 
-function renderContracts(selected) {
-    const box = byId("contractTypes");
+/**
+ * Render one list of checkboxes.
+ * @param {string} listId the container id
+ * @param {Array<string>} options every possible value
+ * @param {Array<string>} selected the saved ones
+ */
+function renderChoiceList(listId, options, selected) {
+    const box = byId(listId);
     if (!box) return;
     box.textContent = "";
-    contractOptions.forEach(function (type) {
-        const id = "contract-" + cssSafe(type);
+    options.forEach(function (type) {
+        const id = listId + "-" + cssSafe(type);
         const row = el("label", "contract-item");
         row.setAttribute("for", id);
 
@@ -117,6 +127,33 @@ function renderContracts(selected) {
         row.appendChild(el("span", "contract-item__label", type));
         box.appendChild(row);
     });
+}
+
+function renderContracts(selected) {
+    renderChoiceList("contractTypes", contractOptions, selected);
+}
+
+function renderSchedules(selected) {
+    renderChoiceList("scheduleTypes", scheduleOptions, selected);
+}
+
+function renderMentions(selected) {
+    renderChoiceList("mentionTypes", mentionOptions, selected);
+}
+
+/**
+ * The values ticked for one list, read from its checkboxes.
+ * @param {string} listId
+ * @param {Array<string>} options
+ * @returns {Array<string>}
+ */
+function selectedIn(listId, options) {
+    const chosen = [];
+    options.forEach(function (type) {
+        const box = document.getElementById(listId + "-" + cssSafe(type));
+        if (box && box.checked) chosen.push(type);
+    });
+    return chosen;
 }
 
 function fillForm(profile) {
@@ -146,6 +183,20 @@ function fillForm(profile) {
         offerContractType(contractOptions, type);
     });
     renderContracts(profile.contractTypes || []);
+
+    // Regimes and mentions come from fixed lists; a saved value that is no
+    // longer offered still shows, so nothing ticked disappears silently.
+    scheduleOptions = FALLBACK_SCHEDULE_TYPES.slice();
+    (profile.scheduleTypes || []).forEach(function (type) {
+        offerContractType(scheduleOptions, type);
+    });
+    renderSchedules(profile.scheduleTypes || []);
+
+    mentionOptions = FALLBACK_MENTION_TYPES.slice();
+    (profile.mentionTypes || []).forEach(function (type) {
+        offerContractType(mentionOptions, type);
+    });
+    renderMentions(profile.mentionTypes || []);
 }
 
 /**
@@ -187,6 +238,8 @@ async function load() {
     await loadContractTypesFromOffers();
     // Re-render so the freshly discovered types appear, keeping the ticks.
     renderContracts(saved.contractTypes || []);
+    renderSchedules(saved.scheduleTypes || []);
+    renderMentions(saved.mentionTypes || []);
 }
 
 async function save(event) {
@@ -207,7 +260,6 @@ async function save(event) {
     saved = result.value;
     dirty = false;
     fillForm(saved);
-    renderContracts(saved.contractTypes || []);
 
     if (ok) {
         showMessage("Profil enregistré.", "ok");
@@ -221,7 +273,6 @@ function reset() {
     dirty = false;
     clearErrors();
     fillForm(saved);
-    renderContracts([]);
     showMessage("Profil réinitialisé. Pense à l'enregistrer.", "warn");
 }
 

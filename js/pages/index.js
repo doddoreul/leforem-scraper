@@ -30,9 +30,8 @@ import {
     storagePrefixFor,
     writeTrackedMap,
 } from "../shared/storage.js";
-import { contractTick } from "../shared/contract-tick.js";
 import { htmlToText } from "../shared/html.js";
-import { loadContractTypes } from "../shared/profile.js";
+import { loadWantedTypes } from "../shared/profile.js";
 import { highlightIn, loadKeywords } from "../shared/highlight.js";
 import {
     SUIVI_EVENT,
@@ -42,6 +41,7 @@ import {
 } from "../shared/suivi.js";
 import { initTheme } from "../shared/theme.js";
 import { normalizeText } from "../shared/text.js";
+import { wantedTick } from "../shared/wanted-tick.js";
 import "../shared/navbar.js";
 
 // Actions shown in the theme gear dropdown.
@@ -79,11 +79,11 @@ initTheme(GEAR_ACTIONS);
 // and the shared module replays the pass if the keywords land after the draw.
 loadKeywords();
 
-// The wanted contract types drive the tick beside each contract. The rows are
+// The wanted contracts, schedules and mentions drive the ticks. The rows are
 // drawn from their own fetch, so the table is redrawn once they land.
-let wantedContracts = [];
-loadContractTypes().then(function (types) {
-    wantedContracts = types;
+let wanted = { contracts: [], schedules: [], mentions: [] };
+loadWantedTypes().then(function (types) {
+    wanted = types;
     if (currentOffers.length) renderCurrent(currentOffers, lastScrapeDate);
 });
 
@@ -499,8 +499,9 @@ function createDetailsCell(values) {
     const number = String(values.number);
     const priority = getPriority(number);
 
-    // The contract line is kept: the tick goes right after it, and only there.
-    let contractLine = null;
+    // The lines a tick may land on are kept: it goes right after its own value,
+    // and nowhere else.
+    const lines = {};
     [
         ["Contrat", values.contract_type],
         ["Horaire", values.schedule],
@@ -508,16 +509,22 @@ function createDetailsCell(values) {
         ["Salaire", values.salary],
         ["Priorité", priorityLabel(priority)],
     ].forEach(([labelText, value]) => {
-        const line = addLine(labelText, value, "");
-        if (labelText === "Contrat") contractLine = line;
+        lines[labelText] = addLine(labelText, value, "");
     });
 
-    // A tick beside the contract when the candidate asked for that one.
-    const tick = contractTick(values.contract_type, wantedContracts);
-    if (contractLine && tick) {
-        contractLine.appendChild(document.createTextNode(" "));
-        contractLine.appendChild(tick);
-    }
+    // The Forem packs the regime and the mention into one "schedule" string, so
+    // the same value answers to both lists. Each tick sits on its own line.
+    [
+        ["Contrat", "contract", values.contract_type],
+        ["Horaire", "schedule", values.schedule],
+        ["Horaire", "mention", values.schedule],
+    ].forEach(([labelText, kind, value]) => {
+        const line = lines[labelText];
+        const tick = wantedTick(kind, value, wanted);
+        if (!line || !tick) return;
+        line.appendChild(document.createTextNode(" "));
+        line.appendChild(tick);
+    });
 
     if (values.email) {
         const emails = String(values.email);

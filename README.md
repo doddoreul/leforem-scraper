@@ -329,14 +329,25 @@ en rouge, avec les couleurs du thème. Un mot présent dans les deux listes
 reste rouge, le signal le plus fort l'emporte. Un profil déjà enregistré sans
 cette liste ne surligne simplement rien en rouge.
 
-Les types de contrat que tu coches dans le profil servent aussi ailleurs : une
-annonce dont le contrat fait partie de ta liste affiche une petite **coche** à
-côté du type, dans le tableau comme sur la fiche. La page Profil propose des
-libellés courts (CDI, CDD, Intérim…) et les mots exacts du Forem
+Les types de contrat, les horaires et les mentions que tu coches dans le profil
+servent aussi ailleurs : une annonce qui correspond affiche une petite **coche**
+à côté de la valeur, dans le tableau comme sur la fiche. La page Profil propose
+des libellés courts (CDI, CDD, Intérim…) et les mots exacts du Forem
 (« Durée indéterminée », « Intérimaire »…), et les deux se reconnaissent : la
 comparaison ignore la casse et les accents. Une annonce qui coche plusieurs
 cases — « Intérimaire avec option sur durée indéterminée » — compte pour les
 deux.
+
+Les horaires suivent `regimeTravail` (« Temps plein », « Temps partiel ») et les
+mentions suivent `regimeTravailPrecision` (« Travail de jour », « Travail posté
+3 pauses », « Week-end »…). Chaque coche a sa couleur : verte pour le contrat,
+bleue pour l'horaire, ambre pour la mention.
+
+Le Forem met le régime, la mention et l'horaire de poste dans une seule chaîne
+`schedule`, et c'est elle que le tableau affiche. Les deux listes la lisent
+donc toutes les deux, et une annonce peut porter les deux coches sur la même
+ligne « Horaire ». Les listes de la page Profil sont fixes : les récolter dans
+les offres donnerait « Temps plein Travail de jour » comme régime.
 
 Le profil est enregistré dans la table `profile` de `data/leforem.db`, avec un
 miroir dans le `localStorage` du navigateur. Comme pour les suivis, effacer les

@@ -1250,10 +1250,11 @@ th.col-forem-id {
 }
 
 /* ============================================================
-   COCHE DE CONTRAT SOUHAITÉ
+   COCHE DE VALEUR SOUHAITÉE
    ============================================================ */
 
-.contract-tick {
+/* One shape, one colour per kind: contract, schedule, mention. */
+.wanted-tick {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1268,6 +1269,18 @@ th.col-forem-id {
     font-weight: 700;
     line-height: 1;
     vertical-align: 1px;
+}
+
+.wanted-tick--schedule {
+    border-color: var(--info-border);
+    background: var(--info-bg);
+    color: var(--info-text);
+}
+
+.wanted-tick--mention {
+    border-color: var(--warning-border);
+    background: var(--warning-bg);
+    color: var(--warning-text);
 }
 
 /* ============================================================
