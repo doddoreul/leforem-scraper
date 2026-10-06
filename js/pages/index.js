@@ -1707,6 +1707,72 @@ function csvField(value) {
     return text;
 }
 
+/**
+ * Folded search text per offer, so a keystroke does not rebuild it.
+ *
+ * Keyed on the offer object, which is rebuilt on every reload, so the cache
+ * expires on its own and nothing has to be invalidated by hand. Offers are
+ * never mutated in place, which is what makes this safe.
+ * @type {WeakMap<Object, string>}
+ */
+const offerTextCache = new WeakMap();
+
+/**
+ * Every searchable value of an offer, as one folded string.
+ *
+ * The fields are not listed by hand on purpose: a column added to the
+ * listing becomes searchable the day it appears, instead of silently staying
+ * out of the box. Nested objects and arrays are walked too, since the pay and
+ * diff data live one level down.
+ * @param {Object} offer
+ * @returns {string}
+ */
+function offerSearchText(offer) {
+    const cached = offerTextCache.get(offer);
+    if (cached !== undefined) return cached;
+
+    const parts = [];
+    collectSearchValues(offer, parts, 0);
+    const text = normalizeText(parts.join(" "));
+
+    offerTextCache.set(offer, text);
+    return text;
+}
+
+/**
+ * Push the scalar values of one node into parts, flattening as it goes.
+ *
+ * Booleans are left out: "true" matches most offers and means nothing to
+ * search for. Strings carrying markup go through htmlToText, otherwise a tag
+ * name matches every offer.
+ * @param {*} value
+ * @param {Array<string>} parts
+ * @param {number} depth
+ */
+function collectSearchValues(value, parts, depth) {
+    if (value === null || value === undefined) return;
+    // The depth cap keeps a self-referencing object from looping forever.
+    if (depth > 4) return;
+
+    if (Array.isArray(value)) {
+        value.forEach(item => collectSearchValues(item, parts, depth + 1));
+        return;
+    }
+    if (typeof value === "object") {
+        Object.keys(value).forEach(key => {
+            const item = value[key];
+            if (typeof item !== "boolean") collectSearchValues(item, parts, depth + 1);
+        });
+        return;
+    }
+    if (typeof value === "string") {
+        if (!value) return;
+        parts.push(value.indexOf("<") >= 0 ? htmlToText(value) : value);
+        return;
+    }
+    if (typeof value === "number") parts.push(String(value));
+}
+
 function offerMatchesKeys(offer, inputId) {
     const input = document.getElementById(inputId);
     if (!input) return true;
@@ -1716,28 +1782,13 @@ function offerMatchesKeys(offer, inputId) {
     const number = String(offer.number);
     // The user's own follow-up is searched too: "postule", "haute" or a word
     // from a remark are exactly what someone looks for in that box.
-    const status = getStatus(number);
-    const remark = getRemark(number);
-    const priority = getPriority(number);
-
     const text = normalizeText([
-        offer.number,
-        offer.published_on,
-        offer.offer_title,
-        offer.company,
-        offer.email,
-        offer.contract_type,
-        offer.schedule,
-        offer.pay,
-        offer.location,
-        offer.summary,
-        // The description is HTML; strip the tags, otherwise "p" or "div"
-        // matches every offer.
-        htmlToText(offer.description || ""),
-        statusText(status),
-        priorityLabel(priority),
-        remark,
+        offerSearchText(offer),
+        statusText(getStatus(number)),
+        priorityLabel(getPriority(number)),
+        getRemark(number),
     ].filter(Boolean).join(" "));
+
     return keywords.every(word => text.includes(word));
 }
 
@@ -2017,7 +2068,12 @@ async function reloadTables() {
     const keepNumbers = new Set(offers.map(o => String(o.number)));
 
     currentByNumber = new Map();
-    offers.forEach(o => currentByNumber.set(String(o.number), o));
+    offers.forEach(o => {
+        currentByNumber.set(String(o.number), o);
+        // Fold the search text here, under the table render, rather than on
+        // the first keystroke where it would show as a stall.
+        offerSearchText(o);
+    });
 
     cleanTrackedMap(statuses, "statuts", keepNumbers);
     cleanTrackedMap(remarks, "remarques", keepNumbers);

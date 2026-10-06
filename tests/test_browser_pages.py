@@ -714,6 +714,74 @@ log(failed.length ? "FOLD-FAILED:" + failed.join("|") : "FOLD-OK");
 </body></html>
 """
 
+# The box must search every field of the listing, not a hand-written list:
+# these words live in fields no list mentioned.
+FIELDS_PROBE = r"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\n"); }
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+const frame = document.createElement("iframe");
+frame.width = 1200;
+frame.height = 900;
+const loaded = new Promise(resolve => { frame.onload = resolve; });
+frame.src = "/";
+document.body.appendChild(frame);
+await loaded;
+
+let doc = null;
+for (let i = 0; i < 120; i += 1) {
+    await sleep(200);
+    doc = frame.contentDocument;
+    if (doc && doc.querySelectorAll("#currentRows tr[data-number]").length > 1) break;
+}
+await sleep(500);
+
+const rows = Array.from(doc.querySelectorAll("#currentRows tr[data-number]"));
+const input = doc.getElementById("currentSearch");
+const visible = () => rows.filter(r => r.style.display !== "none").length;
+log("total=" + rows.length);
+log("baseline=" + visible());
+
+async function type(term) {
+    input.value = term;
+    input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    await sleep(320);
+    return visible();
+}
+
+// Fields no hand-written list mentioned.
+log("endDate=" + await type("2026-11-30"));   // date_fin_diffusion
+log("hourly=" + await type("17"));             // salary_hourly_estimate
+log("voucherPeriod=" + await type("day"));     // meal_voucher_period
+log("offerState=" + await type("new"));        // offer_state
+log("confidence=" + await type("high"));       // salary_confidence
+log("published=" + await type("2026-09-25"));  // published_on
+
+// A nested object: the diff sits one level down.
+const payload = await (await fetch("/data_metier_liege.json"))
+    .json().catch(() => null);
+const offers = (payload && payload.offers) || [];
+const diff = (offers[0] && offers[0].diff) || {};
+const diffKeys = Object.keys(diff);
+log("diffKeys=" + diffKeys.join(","));
+const nested = (diff[diffKeys[0]] || [])[0];
+log("nestedValue=" + nested);
+log("nestedMatch=" + await type(String(nested).trim()));
+
+// A markup tag must still not match every offer.
+log("markupWord=" + await type("div"));
+log("cleared=" + await type(""));
+
+log("FIELDS-OK");
+</script>
+</body></html>
+"""
+
 # The search box must follow the keyboard. Dispatching keydown/keyup with no
 # input event at all is the case that used to do nothing, and the offer
 # description must stay searchable after the filter moved off the rendered row.
@@ -1002,6 +1070,7 @@ class ProbeHandler(server.Handler):
             "/fold-probe.html": FOLD_PROBE,
             "/search-probe.html": SEARCH_PROBE,
             "/keys-probe.html": KEYS_PROBE,
+            "/fields-probe.html": FIELDS_PROBE,
         }
         if path in probes:
             body = probes[path].encode("utf-8")
@@ -1171,6 +1240,25 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         # ...and re-rendering the same scrape keeps them hidden.
         self.assertIn("rerenderHidden=true", report)
         self.assertIn("DISMISS-OK", report)
+
+    def test_the_search_reaches_every_field_of_the_offer(self):
+        report = self.report_of("/fields-probe.html")
+
+        self.assertIn("FIELDS-OK", report)
+        self.assertIn("baseline=6", report)
+        # Fields that no hand-written list mentioned.
+        self.assertIn("endDate=1", report)
+        self.assertIn("hourly=1", report)
+        self.assertIn("voucherPeriod=1", report)
+        self.assertIn("offerState=1", report)
+        self.assertIn("confidence=1", report)
+        self.assertIn("published=1", report)
+        # The diff object sits one level down and is walked too.
+        self.assertIn("nestedValue=CDD", report)
+        self.assertNotEqual(report.count("nestedMatch=0"), 1)
+        # Markup must not turn into a match on every offer.
+        self.assertIn("markupWord=0", report)
+        self.assertIn("cleared=6", report)
 
     def test_the_search_box_follows_the_keyboard(self):
         report = self.report_of("/keys-probe.html")
