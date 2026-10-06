@@ -987,6 +987,26 @@ function offerStateMatches(offer, value) {
  * @param {string} value
  * @returns {boolean}
  */
+/**
+ * Write a shouted place name the way a person would.
+ *
+ * Employers type "LIÈGE" and "HERSTAL"; the menu reads "Liège" and "Herstal".
+ * Only a wholly uppercase name is rewritten: "Arrondissement de Liege" already
+ * has its own shape and is left exactly as the employer wrote it.
+ *
+ * The check looks for a lowercase letter rather than comparing case, so a name
+ * without any letter ("4000", "-") is never touched.
+ * @param {string} value
+ * @returns {string}
+ */
+function tidyLocation(value) {
+    const text = String(value || "").trim();
+    if (text === "") return "";
+    if (!/\p{L}/u.test(text) || /\p{Ll}/u.test(text)) return text;
+    return text.charAt(0).toLocaleUpperCase()
+        + text.slice(1).toLocaleLowerCase();
+}
+
 function locationMatches(offer, value) {
     if (!value) return true;
     return normalizeText(offer.location || "") === normalizeText(value);
@@ -1010,10 +1030,11 @@ function fillLocationFilter(offers) {
     offers.forEach(function (offer) {
         const raw = String((offer && offer.location) || "").trim();
         if (raw === "") return;
-        // One option per place, whichever spelling the employer used.
+        // One option per place, whichever spelling the employer used, shown
+        // with its capitals tamed.
         const key = normalizeText(raw);
         if (key === "" || seen.has(key)) return;
-        seen.set(key, raw);
+        seen.set(key, tidyLocation(raw));
     });
 
     const values = Array.from(seen.values())

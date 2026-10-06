@@ -1099,9 +1099,13 @@ const options = Array.from(select.options).map(o => o.textContent);
 
 log("total=" + rows.length);
 log("baseline=" + visible());
-log("options=" + options.join(" | "));
+// Sorted for the log: the menu order follows the French collation, which is
+// not what this test is about.
+log("options=" + options.slice().sort().join(" | "));
 log("liegeOptions=" + options.filter(o => /li/i.test(o)).length);
 log("herstalOptions=" + options.filter(o => /herstal/i.test(o)).length);
+// Nothing shouted survives.
+log("shoutedLeft=" + options.filter(o => /[A-Z]{2}/.test(o)).length);
 
 async function pick(label) {
     select.value = label;
@@ -1110,6 +1114,10 @@ async function pick(label) {
     return visible();
 }
 
+["Liège", "Herstal", "Namur", "Grâce-hollogne", "4000",
+    "Arrondissement de Namur"].forEach(function (label) {
+    log("has[" + label + "]=" + options.includes(label));
+});
 for (const label of options.slice(1)) {
     log("pick[" + label + "]=" + await pick(label));
 }
@@ -1606,7 +1614,13 @@ class TestLocalityFilter(BrowserPagesTestCase):
     counts the other tests assert on.
     """
 
-    PLACES = ["LIÈGE", "Liège", "Herstal", "HERSTAL", "Namur"]
+    PLACES = [
+        "LIÈGE", "Liège", "Herstal", "HERSTAL", "Namur", "GRÂCE-HOLLOGNE",
+        # No letter at all: never a shouted name, so left alone.
+        "4000",
+        # Already mixed case: the employer shaped it, so left alone.
+        "Arrondissement de Namur",
+    ]
 
     @classmethod
     def setUpClass(cls):
@@ -1644,13 +1658,25 @@ class TestLocalityFilter(BrowserPagesTestCase):
         report = self.report_of("/location-probe.html")
 
         self.assertIn("LOC-OK", report)
-        self.assertIn("total=5", report)
-        self.assertIn("baseline=5", report)
+        self.assertIn("total=8", report)
+        self.assertIn("baseline=8", report)
+        # A shouted place is written the way a person would: only the very
+        # first letter keeps its capital, so "GRÂCE-HOLLOGNE" becomes
+        # "Grâce-hollogne".
+        self.assertIn("has[Liège]=true", report)
+        self.assertIn("has[Grâce-hollogne]=true", report)
+        # A place without a letter, and one the employer already shaped, are
+        # left exactly as they were written.
+        self.assertIn("has[4000]=true", report)
+        self.assertIn("has[Arrondissement de Namur]=true", report)
+        # Nothing shouted is left in the menu.
+        self.assertIn("shoutedLeft=0", report)
         # "LIÈGE" and "Liège" are one place, and so are "Herstal"/"HERSTAL".
         self.assertIn("liegeOptions=1", report)
         self.assertIn("herstalOptions=1", report)
         # Picking a place keeps every offer written that way.
-        self.assertIn("pick[LIÈGE]=2", report)
+        self.assertIn("pick[Liège]=2", report)
         self.assertIn("pick[Herstal]=2", report)
         self.assertIn("pick[Namur]=1", report)
-        self.assertIn("cleared=5", report)
+        self.assertIn("pick[Grâce-hollogne]=1", report)
+        self.assertIn("cleared=8", report)

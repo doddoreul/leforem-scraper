@@ -283,6 +283,12 @@ le lieu en texte libre, donc « LIÈGE » et « Liège » désignent la même vi
 Le menu n'en montre qu'une entrée, et la garder sélectionne les deux annonces.
 Une offre sans lieu n'apparaît pas dans la liste.
 
+Un lieu entièrement en majuscules est réécrit comme on l'écrit : seule la toute
+première lettre garde sa capitale, donc `LIÈGE` devient `Liège` et
+`GRÂCE-HOLLOGNE` devient `Grâce-hollogne`. Un lieu déjà en casse mixte est laissé
+tel quel, l'employeur l'avait écrit ainsi ; un lieu sans lettre, comme `4000`,
+n'est pas touché non plus.
+
 ## La barre de recherche
 
 La boîte en haut du tableau filtre **à chaque frappe**. Elle cherche dans toutes
