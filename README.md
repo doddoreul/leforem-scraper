@@ -317,10 +317,17 @@ un « et », pas un « ou »), et vider la boîte réaffiche tout.
 ## Le profil candidat et le surlignage
 
 La page **Profil** (un seul profil pour toute l'application, pas un par
-recherche) retient tes mots-clés, ton taux horaire brut, les types de contrat
-qui t'intéressent et la distance maximale. Les mots-clés sont ensuite
-**surlignés** dans le tableau et dans la fiche d'une offre, ce qui évite
-d'ouvrir chaque annonce pour voir si elle colle.
+recherche) retient tes mots-clés, tes **mots-clés exclus**, ton taux horaire
+brut, les types de contrat qui t'intéressent et la distance maximale. Les
+mots-clés sont ensuite **surlignés** dans le tableau et dans la fiche d'une
+offre, ce qui évite d'ouvrir chaque annonce pour voir si elle colle.
+
+Les deux listes acceptent les mêmes séparateurs, virgules ou retours à la ligne,
+et se comportent pareil pour la casse et les accents. Elles ne se distinguent
+que par la couleur : un mot-clé cherché est surligné en jaune, un mot-clé exclu
+en rouge, avec les couleurs du thème. Un mot présent dans les deux listes
+reste rouge, le signal le plus fort l'emporte. Un profil déjà enregistré sans
+cette liste ne surligne simplement rien en rouge.
 
 Le profil est enregistré dans la table `profile` de `data/leforem.db`, avec un
 miroir dans le `localStorage` du navigateur. Comme pour les suivis, effacer les

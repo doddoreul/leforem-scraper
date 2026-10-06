@@ -15,7 +15,15 @@ import { foldCharacter } from "./text.js";
 
 /** The profile keywords, lowercased without accents. Empty when unset. */
 let keywords = [];
+/** Keywords the user does not want: found, but flagged in red. */
+let excluded = [];
 let loaded = false;
+
+/** Class of an ordinary match, and of an excluded one. */
+const HIT_CLASS = "keyword-hit";
+// Both classes: the modifier only changes the colours, so the padding and the
+// weight still come from the base class.
+const EXCLUDED_CLASS = "keyword-hit keyword-hit--danger";
 
 /** Folded keywords, memoised by their raw spelling. */
 const needleCache = new Map();
@@ -148,25 +156,53 @@ export function matchRanges(text, words) {
 }
 
 /**
- * Highlight the keywords inside one text node's parent.
- * @param {Text} node
- * @param {Array<string>} words already folded
+ * The ranges of several word groups in one text, each tagged with its class.
+ *
+ * Groups are read in priority order and the first one to claim a stretch keeps
+ * it, so a word that is both wanted and excluded shows as excluded: that is
+ * the more useful signal.
+ * @param {string} text
+ * @param {Array<{words: Array<string>, className: string}>} groups
+ * @returns {Array<[number, number, string]>} start, end, class
  */
-function highlightTextNode(node, words) {
-    const text = node.nodeValue;
-    const ranges = matchRanges(text, words);
-    if (!ranges.length) return;
+function groupRanges(text, groups) {
+    const taken = [];
+    const found = [];
 
+    groups.forEach(function (group) {
+        if (!group.words || !group.words.length) return;
+        matchRanges(text, group.words).forEach(function (range) {
+            const clash = taken.some(function (other) {
+                return range[0] < other[1] && other[0] < range[1];
+            });
+            if (clash) return;
+            taken.push(range);
+            found.push([range[0], range[1], group.className]);
+        });
+    });
+
+    found.sort(function (a, b) { return a[0] - b[0]; });
+    return found;
+}
+
+/**
+ * Wrap the ranges in <mark>, leaving the rest as plain text.
+ * @param {string} text
+ * @param {Array<[number, number, string]>} ranges
+ * @returns {DocumentFragment}
+ */
+function buildFragment(text, ranges) {
     const fragment = document.createDocumentFragment();
     let cursor = 0;
 
     ranges.forEach(function (range) {
-        const [start, end] = range;
+        const start = range[0];
+        const end = range[1];
         if (start > cursor) {
             fragment.appendChild(document.createTextNode(text.slice(cursor, start)));
         }
         const mark = document.createElement("mark");
-        mark.className = "keyword-hit";
+        mark.className = range[2];
         mark.textContent = text.slice(start, end);
         fragment.appendChild(mark);
         cursor = end;
@@ -175,8 +211,41 @@ function highlightTextNode(node, words) {
     if (cursor < text.length) {
         fragment.appendChild(document.createTextNode(text.slice(cursor)));
     }
+    return fragment;
+}
 
-    if (node.parentNode) node.parentNode.replaceChild(fragment, node);
+/**
+ * Highlight the keywords inside one text node's parent.
+ * @param {Text} node
+ * @param {Array<{words: Array<string>, className: string}>} groups
+ */
+function highlightTextNode(node, groups) {
+    const text = node.nodeValue;
+    const ranges = groupRanges(text, groups);
+    if (!ranges.length) return;
+
+    if (node.parentNode) {
+        node.parentNode.replaceChild(buildFragment(text, ranges), node);
+    }
+}
+
+/**
+ * The groups to highlight, in priority order.
+ *
+ * With no explicit list, the excluded keywords come first so they win over the
+ * wanted ones on any overlap.
+ * @param {Array<string>} [words]
+ * @param {string} [className]
+ * @returns {Array<{words: Array<string>, className: string}>}
+ */
+function activeGroups(words, className) {
+    if (words) {
+        return [{ words: words, className: className || HIT_CLASS }];
+    }
+    return [
+        { words: excluded, className: EXCLUDED_CLASS },
+        { words: keywords, className: HIT_CLASS },
+    ];
 }
 
 /**
@@ -186,11 +255,15 @@ function highlightTextNode(node, words) {
  * harmless.
  * @param {HTMLElement|null} root
  * @param {Array<string>} [words] folded keywords, defaults to the profile ones
+ * @param {string} [className] class of the marks, defaults to the ordinary one
  */
-export function highlightIn(root, words) {
-    const active = words || keywords;
+export function highlightIn(root, words, className) {
     if (!root) return;
-    if (!active.length) {
+    const groups = activeGroups(words, className);
+    const active = groups.some(function (group) {
+        return group.words && group.words.length;
+    });
+    if (!active) {
         // The offers are drawn before the profile answers. Remember the root
         // so the pass can be replayed once the keywords are known.
         if (words === undefined && pending.indexOf(root) === -1) {
@@ -221,7 +294,7 @@ export function highlightIn(root, words) {
 
     const nodes = [];
     while (walker.nextNode()) nodes.push(walker.currentNode);
-    nodes.forEach(function (node) { highlightTextNode(node, active); });
+    nodes.forEach(function (node) { highlightTextNode(node, groups); });
 }
 
 /**
@@ -230,22 +303,8 @@ export function highlightIn(root, words) {
  * @returns {DocumentFragment}
  */
 export function highlightFragment(text) {
-    const fragment = document.createDocumentFragment();
-    const ranges = matchRanges(String(text || ""), keywords);
-    let cursor = 0;
-    ranges.forEach(function (range) {
-        if (range[0] > cursor) {
-            fragment.appendChild(document.createTextNode(
-                String(text).slice(cursor, range[0])));
-        }
-        const mark = document.createElement("mark");
-        mark.className = "keyword-hit";
-        mark.textContent = String(text).slice(range[0], range[1]);
-        fragment.appendChild(mark);
-        cursor = range[1];
-    });
-    fragment.appendChild(document.createTextNode(String(text || "").slice(cursor)));
-    return fragment;
+    return buildFragment(
+        String(text || ""), groupRanges(String(text || ""), activeGroups()));
 }
 
 /** The folded keywords currently in use. */
@@ -253,9 +312,14 @@ export function currentKeywords() {
     return keywords.slice();
 }
 
+/** The folded excluded keywords currently in use. */
+export function currentExcluded() {
+    return excluded.slice();
+}
+
 /** Whether any keyword is set. */
 export function hasKeywords() {
-    return keywords.length > 0;
+    return keywords.length > 0 || excluded.length > 0;
 }
 
 /**
@@ -267,16 +331,27 @@ export async function loadKeywords() {
     loaded = true;
     try {
         const profile = await readProfile();
-        const list = Array.isArray(profile.keywords) ? profile.keywords : [];
-        keywords = list
-            .filter(function (word) { return typeof word === "string" && word.trim() !== ""; })
-            .map(function (word) { return foldChar(word.trim()); })
-            .filter(function (word, index, all) { return all.indexOf(word) === index; });
+        keywords = foldList(profile.keywords);
+        excluded = foldList(profile.excluded);
     } catch (error) {
         keywords = [];
+        excluded = [];
     }
     flushPending();
     return currentKeywords();
+}
+
+/**
+ * Fold a list of keywords and drop the empties and the duplicates.
+ * @param {*} list
+ * @returns {Array<string>}
+ */
+function foldList(list) {
+    const source = Array.isArray(list) ? list : [];
+    return source
+        .filter(function (word) { return typeof word === "string" && word.trim() !== ""; })
+        .map(function (word) { return foldChar(word.trim()); })
+        .filter(function (word, index, all) { return all.indexOf(word) === index; });
 }
 
 /**
@@ -284,7 +359,7 @@ export async function loadKeywords() {
  * document in between are skipped.
  */
 function flushPending() {
-    if (!keywords.length) return;
+    if (!keywords.length && !excluded.length) return;
     while (pending.length) {
         const root = pending.shift();
         if (root && root.isConnected) highlightIn(root);

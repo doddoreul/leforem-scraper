@@ -22,7 +22,7 @@ import {
 } from "../shared/profile.js";
 import { SUIVI_EVENT } from "../shared/suivi.js";
 
-const FORM_FIELDS = ["keywordsText", "hourlyRate", "maxDistanceKm"];
+const FORM_FIELDS = ["keywordsText", "excludedText", "hourlyRate", "maxDistanceKm"];
 
 let saved = emptyProfile();
 let dirty = false;
@@ -83,6 +83,7 @@ function currentFormValue() {
     });
     return {
         keywordsText: byId("keywordsText").value,
+        excludedText: byId("excludedText").value,
         hourlyRate: byId("hourlyRate").value,
         maxDistanceKm: byId("maxDistanceKm").value,
         contractTypes: types,
@@ -120,6 +121,7 @@ function renderContracts(selected) {
 
 function fillForm(profile) {
     byId("keywordsText").value = profile.keywordsText || "";
+    byId("excludedText").value = profile.excludedText || "";
     byId("hourlyRate").value = profile.hourlyRate === null || profile.hourlyRate === undefined
         ? ""
         : String(profile.hourlyRate);
@@ -131,6 +133,11 @@ function fillForm(profile) {
     const keywords = parseKeywords(profile.keywordsText);
     byId("keywordsPreview").textContent = keywords.length
         ? "Mots-clés retenus : " + keywords.join(", ")
+        : "";
+
+    const excluded = parseKeywords(profile.excludedText);
+    byId("excludedPreview").textContent = excluded.length
+        ? "Mots-clés exclus : " + excluded.join(", ")
         : "";
 
     // Choices that were saved but are gone from the offers stay selectable.
@@ -242,6 +249,12 @@ function setup() {
                 const keywords = parseKeywords(byId(field).value);
                 byId("keywordsPreview").textContent = keywords.length
                     ? "Mots-clés retenus : " + keywords.join(", ")
+                    : "";
+            }
+            if (field === "excludedText") {
+                const excluded = parseKeywords(byId(field).value);
+                byId("excludedPreview").textContent = excluded.length
+                    ? "Mots-clés exclus : " + excluded.join(", ")
                     : "";
             }
         });

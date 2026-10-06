@@ -42,6 +42,8 @@ export function emptyProfile() {
         version: PROFILE_VERSION,
         keywordsText: "",
         keywords: [],
+        excludedText: "",
+        excluded: [],
         hourlyRate: null,
         contractTypes: [],
         maxDistanceKm: null,
@@ -88,6 +90,10 @@ export function normaliseProfile(raw) {
         ? raw.keywords.filter(function (k) { return typeof k === "string" && k.trim() !== ""; })
         : [];
 
+    const excluded = Array.isArray(raw.excluded)
+        ? raw.excluded.filter(function (k) { return typeof k === "string" && k.trim() !== ""; })
+        : [];
+
     const contracts = Array.isArray(raw.contractTypes)
         ? raw.contractTypes.filter(function (k) { return typeof k === "string" && k.trim() !== ""; })
         : [];
@@ -96,6 +102,8 @@ export function normaliseProfile(raw) {
         version: PROFILE_VERSION,
         keywordsText: typeof raw.keywordsText === "string" ? raw.keywordsText : "",
         keywords: keywords,
+        excludedText: typeof raw.excludedText === "string" ? raw.excludedText : "",
+        excluded: excluded,
         hourlyRate: typeof raw.hourlyRate === "number" && isFinite(raw.hourlyRate)
             ? raw.hourlyRate
             : null,
@@ -125,7 +133,13 @@ export function validateProfile(raw) {
         : input.keywordsText);
     const keywords = parseKeywords(keywordsText);
 
-    // 2. Hourly gross rate: > 0, at most 200, at most two decimals.
+    // 2. Excluded keywords: same free text, same separators.
+    const excludedText = String(input.excludedText === null || input.excludedText === undefined
+        ? ""
+        : input.excludedText);
+    const excluded = parseKeywords(excludedText);
+
+    // 3. Hourly gross rate: > 0, at most 200, at most two decimals.
     const rateRaw = String(input.hourlyRate === null || input.hourlyRate === undefined
         ? ""
         : input.hourlyRate).trim().replace(",", ".");
@@ -146,14 +160,14 @@ export function validateProfile(raw) {
         }
     }
 
-    // 3. Contract types: any list of non-empty strings.
+    // 4. Contract types: any list of non-empty strings.
     const contractTypes = Array.isArray(input.contractTypes)
         ? input.contractTypes
             .filter(function (v) { return typeof v === "string" && v.trim() !== ""; })
             .map(function (v) { return v.trim(); })
         : [];
 
-    // 4. Maximum distance: whole kilometres between 0 and 500.
+    // 5. Maximum distance: whole kilometres between 0 and 500.
     const distanceRaw = String(input.maxDistanceKm === null || input.maxDistanceKm === undefined
         ? ""
         : input.maxDistanceKm).trim();
@@ -180,6 +194,8 @@ export function validateProfile(raw) {
             version: PROFILE_VERSION,
             keywordsText: keywordsText,
             keywords: keywords,
+            excludedText: excludedText,
+            excluded: excluded,
             hourlyRate: hourlyRate,
             contractTypes: contractTypes,
             maxDistanceKm: maxDistanceKm,

@@ -1242,6 +1242,13 @@ th.col-forem-id {
     font-weight: 600;
 }
 
+/* A keyword the candidate does not want: same weight, opposite signal. */
+.keyword-hit--danger {
+    background: var(--danger-bg);
+    color: var(--danger-text);
+    border-bottom-color: var(--danger-border);
+}
+
 /* ============================================================
    PROFIL — le formulaire reprend les contrôles des filtres
    ============================================================ */

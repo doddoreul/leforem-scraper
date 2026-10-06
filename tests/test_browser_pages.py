@@ -1195,6 +1195,88 @@ log("MULTI-OK");
 </body></html>
 """
 
+# The profile carries two keyword lists: the wanted ones, marked in yellow, and
+# the excluded ones, marked in red. Both must be found, and the excluded one
+# must win when a stretch is in both lists.
+EXCLUDED_PROBE = r"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\n"); }
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+const KEYWORDS = "mecanicien";
+// "poste" is really in the seeded offers, so the marking is exercised.
+const EXCLUDED = "poste";
+const profile = {
+    version: 1,
+    keywordsText: KEYWORDS,
+    keywords: KEYWORDS.split(","),
+    excludedText: EXCLUDED,
+    excluded: EXCLUDED.split(","),
+    hourlyRate: null,
+    contractTypes: [],
+    maxDistanceKm: null,
+    updatedAt: "2026-10-06",
+};
+localStorage.setItem("forem_profil", JSON.stringify(profile));
+await fetch("/api/profil", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(profile),
+});
+
+const frame = document.createElement("iframe");
+frame.width = 1200;
+frame.height = 900;
+const loaded = new Promise(resolve => { frame.onload = resolve; });
+frame.src = "/";
+document.body.appendChild(frame);
+await loaded;
+
+let doc = null;
+for (let i = 0; i < 120; i += 1) {
+    await sleep(200);
+    doc = frame.contentDocument;
+    if (doc && doc.querySelectorAll("#currentRows tr[data-number]").length > 1) break;
+}
+await sleep(700);
+
+log("wanted=" + doc.querySelectorAll("#currentRows mark.keyword-hit:not(.keyword-hit--danger)").length);
+log("excluded=" + doc.querySelectorAll("#currentRows mark.keyword-hit--danger").length);
+
+// The red mark really holds the excluded word, and carries no yellow class.
+const red = doc.querySelector("#currentRows mark.keyword-hit--danger");
+log("redText=" + (red ? red.textContent.trim() : "aucun"));
+// The base class must come along, or the mark loses its padding and weight.
+log("redHasPlainClass=" + (
+    red ? red.className.split(" ").indexOf("keyword-hit") !== -1 : false));
+
+// The offer sheet marks them too.
+const detail = document.createElement("iframe");
+detail.width = 1200;
+detail.height = 900;
+const loadedDetail = new Promise(resolve => { detail.onload = resolve; });
+detail.src = "/detail.html?number=1902";
+document.body.appendChild(detail);
+await loadedDetail;
+let dd = null;
+for (let i = 0; i < 100; i += 1) {
+    await sleep(200);
+    dd = detail.contentDocument;
+    if (dd && dd.querySelectorAll("mark").length) break;
+}
+await sleep(600);
+log("detailExcluded=" + (dd
+    ? dd.querySelectorAll("mark.keyword-hit--danger").length : "page absente"));
+
+log("EXCL-OK");
+</script>
+</body></html>
+"""
+
 class ProbeHandler(server.Handler):
     """The real handler, plus the page that exercises every module."""
 
@@ -1214,6 +1296,7 @@ class ProbeHandler(server.Handler):
             "/fields-probe.html": FIELDS_PROBE,
             "/location-probe.html": LOCATION_PROBE,
             "/multi-locations-probe.html": MULTI_LOCATIONS_PROBE,
+            "/excluded-probe.html": EXCLUDED_PROBE,
         }
         if path in probes:
             body = probes[path].encode("utf-8")
@@ -1314,6 +1397,28 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         self.assertIn("imported=12", report)
         self.assertNotIn("PROBE-FAIL", report)
 
+    def test_the_excluded_keywords_are_marked_in_red(self):
+        report = self.report_of("/excluded-probe.html")
+
+        self.assertIn("EXCL-OK", report)
+        # The wanted keyword is marked, and the excluded one too, but apart.
+        self.assertIn("wanted=1", report)
+        self.assertNotIn("excluded=0", report)
+        # The red mark holds the excluded word and no other class leaks in.
+        self.assertIn("redText=poste", report)
+        self.assertIn("redHasPlainClass=true", report)
+        # The offer sheet marks it as well.
+        self.assertNotIn("detailExcluded=0", report)
+
+    def test_the_profile_page_has_the_excluded_field(self):
+        with urllib.request.urlopen(
+                "http://127.0.0.1:%d/profil.html" % self.port, timeout=10) as resp:
+            page = resp.read().decode("utf-8")
+
+        self.assertIn("excludedText", page)
+        self.assertIn("Mots-clés exclus", page)
+        # The field it sits next to is still there.
+        self.assertIn("keywordsText", page)
     def test_the_pasted_styles_can_be_switched_off(self):
         report = self.report_of("/diff-probe.html")
 

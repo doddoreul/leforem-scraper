@@ -6,11 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Profil — Suivi Forem</title>
 
-<link rel="stylesheet" href="/css/theme.css?v=43">
-<link rel="stylesheet" href="/css/base.css?v=43">
-<link rel="stylesheet" href="/css/components.css?v=43">
-<link rel="stylesheet" href="/css/pages.css?v=43">
-<link rel="stylesheet" href="/css/widgets.css?v=43">
+<link rel="stylesheet" href="/css/theme.css?v=44">
+<link rel="stylesheet" href="/css/base.css?v=44">
+<link rel="stylesheet" href="/css/components.css?v=44">
+<link rel="stylesheet" href="/css/pages.css?v=44">
+<link rel="stylesheet" href="/css/widgets.css?v=44">
 
 <script src="/js/boot/theme-boot.js"></script>
 
@@ -49,6 +49,21 @@
             </label>
             <p class="dash-note" id="keywordsPreview"></p>
             <p class="field-error" id="keywordsError" role="alert" hidden></p>
+        </section>
+
+        <section class="profile-field">
+            <h2 class="dash-card-title">Mots-clés exclus</h2>
+            <p class="dash-note">
+                Ce que tu ne veux pas voir. Même séparateurs, mais ces mots
+                seront surlignés en rouge.
+            </p>
+            <label class="filter" for="excludedText">
+                <span>Mots-clés exclus :</span>
+                <textarea id="excludedText" name="excludedText" rows="3"
+                          placeholder="temporaire, Broadcasting,stage"></textarea>
+            </label>
+            <p class="dash-note" id="excludedPreview"></p>
+            <p class="field-error" id="excludedTextError" role="alert" hidden></p>
         </section>
 
         <section class="profile-field">
