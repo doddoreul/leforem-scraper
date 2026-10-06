@@ -57,6 +57,16 @@ OFFERS = [
         "pay": '{"min": 2800, "max": 3400}',
         "published_on": "2026-09-25",
         "removed_on": "",
+        # Fields derived by python/salary.py, shown on the offer sheet.
+        "salary_kind": "monthly",
+        "salary_min": 2800.0,
+        "salary_max": 3400.0,
+        "salary_gross": True,
+        "salary_hourly_estimate": 17.0,
+        "salary_confidence": "high",
+        "meal_voucher_amount": 8.0,
+        "meal_voucher_period": "day",
+        "meal_voucher_mentioned": True,
         "modified_at": "2026-09-26T08:15:00",
         "modified": True,
         "date_fin_diffusion": "2026-11-30",
@@ -501,6 +511,483 @@ log("PERSIST-OK");
 </body></html>
 """
 
+# Reads the rendered offer sheet and reports the remuneration lines, so a
+# --dump-dom run shows what the user actually gets.
+REMUN_PROBE = r"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<iframe id="frame" src="/detail.html?number=1902&base=metier_liege"
+        width="1000" height="900"></iframe>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\n"); }
+
+const frame = document.getElementById("frame");
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+for (let i = 0; i < 80; i += 1) {
+    await sleep(250);
+    const doc = frame.contentDocument;
+    if (!doc) continue;
+    const root = doc.getElementById("detailRoot");
+    if (!root) continue;
+
+    const titles = Array.from(root.querySelectorAll(".card-title"))
+        .map(node => node.textContent);
+    if (titles.indexOf("Remuneration") === -1
+            && titles.indexOf("Rémunération") === -1) {
+        if (i === 79) {
+            log("cards=" + titles.join("|"));
+            log("NO-RUN");
+        }
+        continue;
+    }
+
+    const items = Array.from(root.querySelectorAll(".card .profile-list li"))
+        .map(node => node.textContent);
+    log("titles=" + titles.join("|"));
+    items.forEach((item, index) => log("item" + index + "=" + item));
+
+    // The diff card must still work after findOffer changed shape.
+    const diff = root.querySelector(".diff-card .diff-meta");
+    log("diffMeta=" + (diff ? diff.textContent : "absent"));
+
+    log("RUN-OK");
+    break;
+}
+</script>
+</body></html>
+"""
+
+# The profile keywords must be highlighted in the listing and on the offer
+# sheet. The iframe skeleton is the one the other probes here use.
+KEYWORD_PROBE = r"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\n"); }
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// The profile must exist before the page reads it, so it is stored here and
+// the frame is only built afterwards.
+const KEYWORDS = "Mecanicien, equipe";
+const profile = {
+    version: 1,
+    postalCode: "",
+    keywordsText: KEYWORDS,
+    keywords: KEYWORDS.split(",").map(s => s.trim()),
+    hourlyRate: null,
+    contractTypes: [],
+    maxDistanceKm: null,
+    updatedAt: "2026-10-06",
+};
+localStorage.setItem("forem_profil", JSON.stringify(profile));
+await fetch("/api/profil", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(profile),
+});
+
+async function openPage(url, ready) {
+    const frame = document.createElement("iframe");
+    frame.width = 1200;
+    frame.height = 900;
+    const loaded = new Promise(resolve => { frame.onload = resolve; });
+    frame.src = url;
+    document.body.appendChild(frame);
+    await loaded;
+    for (let i = 0; i < 100; i += 1) {
+        await sleep(200);
+        const doc = frame.contentDocument;
+        if (doc && ready(doc)) return doc;
+    }
+    return frame.contentDocument;
+}
+
+const listDoc = await openPage(
+    "/",
+    doc => doc.querySelectorAll("#currentRows tr").length > 1
+);
+await sleep(400);
+
+const listMarks = listDoc.querySelectorAll("#currentRows mark.keyword-hit");
+log("listRows=" + listDoc.querySelectorAll("#currentRows tr").length);
+log("listMarks=" + listMarks.length);
+log("listMarkTexts=" + Array.from(listMarks).map(m => m.textContent).join("|"));
+log("marksInLink=" + listDoc.querySelectorAll("#currentRows a[data-number] mark").length);
+log("listTextIntact=" + (listDoc.querySelector("#currentRows a[data-number]")
+    ? listDoc.querySelector("#currentRows a[data-number]").textContent : "NONE"));
+
+const detailDoc = await openPage(
+    "/detail.html?number=1902&base=metier_liege",
+    doc => doc.getElementById("detailRoot")
+        && doc.querySelectorAll("#detailRoot .card").length > 1
+);
+await sleep(400);
+
+const root = detailDoc.getElementById("detailRoot");
+const detailMarks = root ? root.querySelectorAll("mark.keyword-hit") : [];
+log("detailCards=" + (root ? root.querySelectorAll(".card").length : 0));
+log("detailMarks=" + detailMarks.length);
+log("detailMarkTexts=" + Array.from(detailMarks).map(m => m.textContent).join("|"));
+log("marksInTextarea=" + (root ? root.querySelectorAll("textarea mark").length : -1));
+log("nestedTagsInMark=" + (root ? root.querySelectorAll("mark *").length : -1));
+
+log("KEYWORD-OK");
+</script>
+</body></html>
+"""
+
+# Accent and case folding, for the filters and for the highlighting. The
+# letters NFD cannot decompose (oe, ae, o-slash, sharp s) are handled
+# explicitly, and a ligature must not shift the indexes of what follows.
+FOLD_PROBE = r"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+import { matchRanges, highlightIn } from "/js/shared/highlight.js";
+import { normalizeText } from "/js/shared/text.js";
+
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\\n"); }
+
+const failed = [];
+function check(label, got, expected) {
+    const same = JSON.stringify(got) === JSON.stringify(expected);
+    if (same) {
+        log("ok " + label);
+    } else {
+        log("FAIL " + label + " got=" + JSON.stringify(got)
+            + " expected=" + JSON.stringify(expected));
+        failed.push(label);
+    }
+}
+
+// normalizeText: what the filters rely on.
+check("filter folds accents and case",
+    normalizeText("Électromécanicien"), "electromecanicien");
+check("filter folds the oe ligature",
+    normalizeText("Manœuvre"), "manoeuvre");
+check("filter folds oe in coeur",
+    normalizeText("Cœur"), "coeur");
+check("filter folds oe uppercase",
+    normalizeText("ŒUVRE"), "oeuvre");
+check("filter folds the ae ligature",
+    normalizeText("Cæsar"), "caesar");
+check("filter folds the o-slash",
+    normalizeText("Møller"), "moller");
+check("filter folds the sharp s",
+    normalizeText("Straße"), "strasse");
+
+// matchRanges: the highlighting. "Manœuvre" is 8 characters even though the
+// oe counts for 2 once folded.
+check("highlight finds a plain keyword in accented text",
+    matchRanges("Électromécanicien", ["electromecanicien"]), [[0, 17]]);
+check("highlight finds an accented keyword",
+    matchRanges("électromécanicien", ["ÉLECTROMÉCANICIEN"]), [[0, 17]]);
+check("highlight finds the oe ligature",
+    matchRanges("Manœuvre", ["manoeuvre"]), [[0, 8]]);
+check("highlight finds an oe keyword in accented text",
+    matchRanges("Manœuvre en électromécanicien", ["manoeuvre"]), [[0, 8]]);
+check("highlight ignores case",
+    matchRanges("maintenance", ["MAINTENANCE"]), [[0, 11]]);
+
+// The text after a ligature must still be cut at the right place.
+const host = document.createElement("div");
+host.textContent = "";
+host.appendChild(document.createTextNode("Manœuvre en électromécanicien"));
+highlightIn(host, ["manoeuvre", "electromecanicien"]);
+const marks = Array.from(host.querySelectorAll("mark"));
+check("two marks", marks.length, 2);
+check("mark texts", marks.map(m => m.textContent),
+    ["Manœuvre", "électromécanicien"]);
+check("the whole text is unchanged",
+    host.textContent, "Manœuvre en électromécanicien");
+
+log(failed.length ? "FOLD-FAILED:" + failed.join("|") : "FOLD-OK");
+</script>
+</body></html>
+"""
+
+# The box must search every field of the listing, not a hand-written list:
+# these words live in fields no list mentioned.
+FIELDS_PROBE = r"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\n"); }
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+const frame = document.createElement("iframe");
+frame.width = 1200;
+frame.height = 900;
+const loaded = new Promise(resolve => { frame.onload = resolve; });
+frame.src = "/";
+document.body.appendChild(frame);
+await loaded;
+
+let doc = null;
+for (let i = 0; i < 120; i += 1) {
+    await sleep(200);
+    doc = frame.contentDocument;
+    if (doc && doc.querySelectorAll("#currentRows tr[data-number]").length > 1) break;
+}
+await sleep(500);
+
+const rows = Array.from(doc.querySelectorAll("#currentRows tr[data-number]"));
+const input = doc.getElementById("currentSearch");
+const visible = () => rows.filter(r => r.style.display !== "none").length;
+log("total=" + rows.length);
+log("baseline=" + visible());
+
+async function type(term) {
+    input.value = term;
+    input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    await sleep(320);
+    return visible();
+}
+
+// Fields no hand-written list mentioned.
+log("endDate=" + await type("2026-11-30"));   // date_fin_diffusion
+log("hourly=" + await type("17"));             // salary_hourly_estimate
+log("voucherPeriod=" + await type("day"));     // meal_voucher_period
+log("offerState=" + await type("new"));        // offer_state
+log("confidence=" + await type("high"));       // salary_confidence
+log("published=" + await type("2026-09-25"));  // published_on
+
+// A nested object: the diff sits one level down.
+const payload = await (await fetch("/data_metier_liege.json"))
+    .json().catch(() => null);
+const offers = (payload && payload.offers) || [];
+const diff = (offers[0] && offers[0].diff) || {};
+const diffKeys = Object.keys(diff);
+log("diffKeys=" + diffKeys.join(","));
+const nested = (diff[diffKeys[0]] || [])[0];
+log("nestedValue=" + nested);
+log("nestedMatch=" + await type(String(nested).trim()));
+
+// A markup tag must still not match every offer.
+log("markupWord=" + await type("div"));
+log("cleared=" + await type(""));
+
+log("FIELDS-OK");
+</script>
+</body></html>
+"""
+
+# The search box must follow the keyboard. Dispatching keydown/keyup with no
+# input event at all is the case that used to do nothing, and the offer
+# description must stay searchable after the filter moved off the rendered row.
+KEYS_PROBE = r"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\n"); }
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+const frame = document.createElement("iframe");
+frame.width = 1200;
+frame.height = 900;
+const loaded = new Promise(resolve => { frame.onload = resolve; });
+frame.src = "/";
+document.body.appendChild(frame);
+await loaded;
+
+let doc = null;
+for (let i = 0; i < 120; i += 1) {
+    await sleep(200);
+    doc = frame.contentDocument;
+    if (doc && doc.querySelectorAll("#currentRows tr[data-number]").length > 1) break;
+}
+await sleep(500);
+
+const rows = Array.from(doc.querySelectorAll("#currentRows tr[data-number]"));
+const input = doc.getElementById("currentSearch");
+const visible = () => rows.filter(r => r.style.display !== "none").length;
+log("total=" + rows.length);
+log("baseline=" + visible());
+
+// keydown, value changes, keyup: no input event is ever sent.
+function press(key) {
+    input.dispatchEvent(new KeyboardEvent("keydown", {
+        key, bubbles: true, cancelable: true,
+    }));
+    input.value += key;
+    input.dispatchEvent(new KeyboardEvent("keyup", {
+        key, bubbles: true, cancelable: true,
+    }));
+}
+
+input.value = "";
+input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+await sleep(300);
+for (const ch of "Electromecanicien") press(ch);
+await sleep(450);
+log("keysOnly=" + visible());
+
+// A word that lives only in the description.
+const payload = await (await fetch("/data_metier_liege.json"))
+    .json().catch(() => null);
+const offers = Array.isArray(payload) ? payload : (payload.offers || []);
+const html = (offers[0] && offers[0].description) || "";
+const word = html.replace(/<[^>]*>/g, " ").split(/\s+/)
+    .map(w => w.toLowerCase().replace(/[^a-z]/g, ""))
+    .find(w => w.length > 3) || "";
+log("descWord=" + word);
+input.value = word;
+input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+await sleep(400);
+log("descMatch=" + visible());
+
+// A markup word must not match: the description is stripped first.
+input.value = "div";
+input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+await sleep(400);
+log("markupWord=" + visible());
+
+input.value = "";
+input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+await sleep(400);
+log("cleared=" + visible());
+
+log("KEYS-OK");
+</script>
+</body></html>
+"""
+
+# The listing search must look at the offer data, not at the rendered row.
+# The row text also carries the status option labels, the state badges and the
+# remarks textarea, so typing "postule" used to match every row and looked like
+# the search did nothing.
+SEARCH_PROBE = r"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\n"); }
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+const frame = document.createElement("iframe");
+frame.width = 1200;
+frame.height = 900;
+const loaded = new Promise(resolve => { frame.onload = resolve; });
+frame.src = "/";
+document.body.appendChild(frame);
+await loaded;
+
+let doc = null;
+for (let i = 0; i < 120; i += 1) {
+    await sleep(200);
+    doc = frame.contentDocument;
+    if (doc && doc.querySelectorAll("#currentRows tr[data-number]").length > 1) break;
+}
+await sleep(500);
+
+const rows = Array.from(doc.querySelectorAll("#currentRows tr[data-number]"));
+const input = doc.getElementById("currentSearch");
+const visible = () => rows.filter(r => r.style.display !== "none").length;
+const total = rows.length;
+
+log("total=" + total);
+
+// The rendered row carries the whole status menu.
+log("rowHasOptionLabels=" + rows[0].querySelectorAll("option").length);
+
+async function type(term) {
+    input.value = term;
+    input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    await sleep(350);
+    return visible();
+}
+
+log("title=" + await type("Electromecanicien"));
+log("location=" + await type("liege"));
+// Chrome words: they must not match every row.
+log("statusLabel=" + await type("postule"));
+log("stateBadge=" + await type("nouvelle"));
+log("starButton=" + await type("favori"));
+log("cleared=" + await type(""));
+
+// One offer is marked "Postulé", so the word must now find exactly it.
+const select = rows[0].querySelector("select.status-select");
+if (select) {
+    select.value = "postule";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await sleep(450);
+    log("markedThenSearched=" + await type("postule"));
+}
+
+log("SEARCH-OK");
+</script>
+</body></html>
+"""
+
+# validateProfile is pure, so the browser is only needed to load the module
+# and check the real rejections on the real page.
+PROFILE_PROBE = r"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+import {
+    validateProfile,
+    parseKeywords,
+    emptyProfile,
+} from "/js/shared/profile.js";
+
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\n"); }
+
+try {
+// An empty profile is valid: every field is optional.
+log("emptyOk=" + validateProfile(emptyProfile()).ok);
+
+// A postal code of three digits is refused.
+log("postal3Rejected=" + Boolean(validateProfile({ postalCode: "400" }).errors.postalCode));
+
+// A negative hourly rate is refused.
+log("rateNegRejected=" + Boolean(validateProfile({ hourlyRate: "-5" }).errors.hourlyRate));
+
+// A distance over 500 km is refused.
+log("distanceBigRejected=" + Boolean(validateProfile({ maxDistanceKm: "900" }).errors.maxDistanceKm));
+
+// Valid values pass and the keyword list is built: "Nuit" is a duplicate of
+// "nuit" once case and accents are ignored.
+const good = validateProfile({
+    postalCode: "4000",
+    keywordsText: "nuit, maintenance\nNuit , electricite",
+    hourlyRate: "15,50",
+    maxDistanceKm: "25",
+    contractTypes: ["CDI"],
+});
+log("goodOk=" + good.ok);
+log("rate=" + good.value.hourlyRate);
+log("distance=" + good.value.maxDistanceKm);
+log("keywords=" + good.value.keywords.join("|"));
+
+// Commas and newlines are both separators, and only the empties are dropped.
+log("parseEmpty=" + JSON.stringify(parseKeywords("  ,  ,  ")));
+log("parseMixed=" + JSON.stringify(
+    parseKeywords("nuit\n  ," + String.fromCharCode(10) + " electricite")));
+
+log("PROFILE-OK");
+} catch (error) {
+    log("PROBE-ERROR=" + (error && error.message ? error.message : String(error)));
+}
+</script>
+</body></html>
+"""
+
 # Imports every module and calls the shared helpers: the import errors a
 # --dump-dom run cannot show are reported here.
 PROBE = """<!DOCTYPE html>
@@ -577,6 +1064,13 @@ class ProbeHandler(server.Handler):
             "/tracked-probe.html": TRACKED_PROBE,
             "/dismiss-probe.html": DISMISS_PROBE,
             "/persist-probe.html": PERSIST_PROBE,
+            "/profile-probe.html": PROFILE_PROBE,
+            "/remun-probe.html": REMUN_PROBE,
+            "/keyword-probe.html": KEYWORD_PROBE,
+            "/fold-probe.html": FOLD_PROBE,
+            "/search-probe.html": SEARCH_PROBE,
+            "/keys-probe.html": KEYS_PROBE,
+            "/fields-probe.html": FIELDS_PROBE,
         }
         if path in probes:
             body = probes[path].encode("utf-8")
@@ -746,6 +1240,127 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         # ...and re-rendering the same scrape keeps them hidden.
         self.assertIn("rerenderHidden=true", report)
         self.assertIn("DISMISS-OK", report)
+
+    def test_the_search_reaches_every_field_of_the_offer(self):
+        report = self.report_of("/fields-probe.html")
+
+        self.assertIn("FIELDS-OK", report)
+        self.assertIn("baseline=6", report)
+        # Fields that no hand-written list mentioned.
+        self.assertIn("endDate=1", report)
+        self.assertIn("hourly=1", report)
+        self.assertIn("voucherPeriod=1", report)
+        self.assertIn("offerState=1", report)
+        self.assertIn("confidence=1", report)
+        self.assertIn("published=1", report)
+        # The diff object sits one level down and is walked too.
+        self.assertIn("nestedValue=CDD", report)
+        self.assertNotEqual(report.count("nestedMatch=0"), 1)
+        # Markup must not turn into a match on every offer.
+        self.assertIn("markupWord=0", report)
+        self.assertIn("cleared=6", report)
+
+    def test_the_search_box_follows_the_keyboard(self):
+        report = self.report_of("/keys-probe.html")
+
+        self.assertIn("KEYS-OK", report)
+        # keydown/keyup alone must filter, with no input event sent.
+        self.assertIn("keysOnly=1", report)
+        # The description stays searchable...
+        self.assertIn("descMatch=1", report)
+        # ...but its markup does not match every offer.
+        self.assertIn("markupWord=0", report)
+        self.assertIn("cleared=6", report)
+
+    def test_the_listing_search_filters_on_the_offer_data(self):
+        report = self.report_of("/search-probe.html")
+
+        self.assertIn("SEARCH-OK", report)
+        # The rendered row really does carry the whole status menu...
+        self.assertNotIn("rowHasOptionLabels=0", report)
+        # ...and the search filters on the offer instead.
+        self.assertIn("title=1", report)
+        self.assertIn("location=5", report)
+        # A word from the status menu must not match every row.
+        self.assertIn("statusLabel=0", report)
+        self.assertIn("stateBadge=0", report)
+        self.assertIn("starButton=0", report)
+        # With a status actually set, the word finds exactly that offer.
+        self.assertIn("markedThenSearched=1", report)
+        self.assertIn("cleared=6", report)
+
+    def test_the_letters_without_accents_are_folded_too(self):
+        # "manœuvre" has to answer to "manoeuvre": NFD leaves a ligature alone,
+        # so it needs an explicit table. Both the filters and the highlighting
+        # share that rule.
+        report = self.report_of("/fold-probe.html")
+
+        self.assertIn("FOLD-OK", report)
+        self.assertIn("ok filter folds the oe ligature", report)
+        self.assertIn("ok highlight finds the oe ligature", report)
+        self.assertIn("ok highlight finds an oe keyword in accented text", report)
+        self.assertIn("ok two marks", report)
+        self.assertIn("ok the whole text is unchanged", report)
+
+    def test_the_profile_keywords_are_highlighted(self):
+        report = self.report_of("/keyword-probe.html")
+
+        self.assertIn("KEYWORD-OK", report)
+        # The listing really drew offers...
+        self.assertIn("listRows=", report)
+        self.assertNotIn("listRows=0", report)
+        self.assertNotIn("listRows=1 ", report)
+        # ...and both keywords are highlighted in it. The seeded title is
+        # "Electromecanicien industriel", so the hit is the lowercase stem.
+        self.assertIn("listMarks=", report)
+        self.assertNotIn("listMarks=0", report)
+        self.assertIn("listMarkTexts=mecanicien|equipe", report)
+        self.assertIn("marksInLink=", report)
+        self.assertNotIn("marksInLink=0", report)
+        # The surrounding text is untouched.
+        self.assertIn("listTextIntact=Electromecanicien industriel", report)
+        # The sheet highlights too, and never inside an editable field.
+        self.assertIn("detailMarks=", report)
+        self.assertNotIn("detailMarks=0", report)
+        self.assertIn("detailMarkTexts=mecanicien", report)
+        self.assertIn("marksInTextarea=0", report)
+        # No markup was injected: a <mark> holds text only.
+        self.assertIn("nestedTagsInMark=0", report)
+
+    def test_the_offer_sheet_shows_the_remuneration(self):
+        report = self.report_of("/remun-probe.html")
+        # fr-BE separates thousands with U+202F, not a plain space.
+        report = report.replace("\u202f", " ").replace("\u00a0", " ")
+
+        self.assertIn("RUN-OK", report)
+        # A monthly range, gross, with the hourly equivalent.
+        self.assertIn("de 2 800 € à 3 400 € brut / mois", report)
+        self.assertIn("estimation : 17 € brut/h", report)
+        # Meal vouchers, per day.
+        self.assertIn("chèques-repas : 8", report)
+        self.assertIn("par jour", report)
+        # The diff card still renders after findOffer started passing the
+        # whole stored offer.
+        self.assertIn("Dernière modification", report)
+
+        # Nothing is injected as HTML: the euro sign is text, not markup.
+        self.assertNotIn("<li>de 2", report)
+
+    def test_validate_profile_rejects_the_impossible_values(self):
+        report = self.report_of("/profile-probe.html")
+
+        self.assertIn("PROFILE-OK", report)
+        self.assertIn("emptyOk=true", report)
+        self.assertIn("postal3Rejected=true", report)
+        self.assertIn("rateNegRejected=true", report)
+        self.assertIn("distanceBigRejected=true", report)
+        self.assertIn("goodOk=true", report)
+        self.assertIn("rate=15.5", report)
+        self.assertIn("distance=25", report)
+        # "Nuit" appears twice with different case: only the first survives.
+        self.assertIn("keywords=nuit|maintenance|electricite", report)
+        self.assertIn("parseEmpty=[]", report)
+        self.assertIn('parseMixed=["nuit","electricite"]', report)
 
     def test_the_follow_up_survives_a_cleared_browser(self):
         report = self.report_of("/persist-probe.html")

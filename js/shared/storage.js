@@ -41,7 +41,10 @@ export const SUFFIX_FIELD = {
     priorites: "priorite",
 };
 
-const TRACKED_PLAIN_KEYS = ["forem_scraping_select"];
+// forem_profil is the candidate profile: it is one whole document rather than
+// a map of offers, so it travels with the tracking export but is NOT pushed
+// to /api/tracking (the import/migration paths only match the per-offer keys).
+const TRACKED_PLAIN_KEYS = ["forem_scraping_select", "forem_profil"];
 const TRACKED_KEY_PATTERN = /^forem_.+_(statuts|remarques|favoris|statut_dates|priorites)$/;
 const MIGRATION_FLAG = "forem_migration_v2_done";
 const SYNCED_FLAG = "forem_tracking_synced";

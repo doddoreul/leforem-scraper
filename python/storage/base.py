@@ -110,6 +110,14 @@ class Storage(abc.ABC):
         ...
 
     @abc.abstractmethod
+    def read_profile(self) -> Dict[str, Any]:
+        ...
+
+    @abc.abstractmethod
+    def write_profile(self, payload: Dict[str, Any]) -> None:
+        ...
+
+    @abc.abstractmethod
     def read_tracking(self, base_name: str) -> Dict[str, Dict[str, Any]]:
         ...
 

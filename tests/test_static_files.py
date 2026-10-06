@@ -31,7 +31,11 @@ os.environ.setdefault("LEFOREM_STORAGE", "json")
 from python import config
 from python import server
 
-PAGES = ("index", "insights", "companies", "detail")
+PAGES = ("index", "insights", "companies", "detail", "profil")
+
+# The offer sheet is reached from the offers table, not from the navbar, so it
+# has no entry there.
+NAVBAR_PAGES = ("index", "insights", "companies", "profil")
 
 
 class StaticFilesTestCase(unittest.TestCase):
@@ -109,6 +113,20 @@ class TestPages(StaticFilesTestCase):
                 with self.subTest(url=url):
                     self.assertEqual(self.get(url).status_code, 200, url)
 
+    def test_the_navbar_links_every_page(self):
+        # Each page of the app is reachable from the navbar partial, which is
+        # what loadNavbar() injects everywhere.
+        navbar = self.get("/navbar_include.html").text
+        for page in NAVBAR_PAGES:
+            with self.subTest(page=page):
+                self.assertIn(f'"/{page}.html"', navbar)
+
+    def test_the_navbar_marks_the_current_page(self):
+        # navbar.js compares the href with the current file name, so every
+        # link needs the data-page marker the active class keys off.
+        navbar = self.get("/navbar_include.html").text
+        self.assertIn('data-page="profil"', navbar)
+
     def test_no_page_points_at_a_moved_file(self):
         # The pages were reorganised into html/ and the stylesheet into css/;
         # the URL stays flat, so a "/html/x.html" would 404.
@@ -122,7 +140,7 @@ class TestPages(StaticFilesTestCase):
     def test_the_removed_root_scripts_are_not_served(self):
         for name in ("script.js", "insights.js", "companies.js", "detail.js",
                      "theme.js", "suivi-io.js", "scraping-selector.js",
-                     "scraper-ui.js", "navbar-loader.js"):
+                     "scraper-ui.js", "navbar-loader.js", "install.ps1"):
             with self.subTest(name=name):
                 self.assertEqual(self.get(f"/{name}").status_code, 404)
 

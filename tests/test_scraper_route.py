@@ -123,6 +123,68 @@ class ScraperRouteTestCase(unittest.TestCase):
             if line.strip()
         ]
 
+    def url(self, path):
+        return f"http://127.0.0.1:{self.port}{path}"
+
+
+class TestProfileRoute(ScraperRouteTestCase):
+    """The Profil page saves with POST; the route must answer that method.
+
+    It used to sit in do_PUT while the page sent a POST, so every save was a
+    404 and the profile silently stayed in the browser only.
+    """
+
+    def test_get_on_an_unset_profile(self):
+        response = requests.get(self.url("/api/profil"), timeout=10)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {})
+
+    def test_post_saves_the_profile(self):
+        profile = {
+            "version": 1,
+            "postalCode": "4000",
+            "keywordsText": "nuit, maintenance",
+            "keywords": ["nuit", "maintenance"],
+            "hourlyRate": 15.5,
+            "contractTypes": ["CDI"],
+            "maxDistanceKm": 25,
+            "updatedAt": "2026-10-05T12:00:00",
+        }
+        response = requests.post(self.url("/api/profil"), json=profile,
+                                 timeout=10)
+        self.assertEqual(response.status_code, 200, response.text)
+
+        stored = requests.get(self.url("/api/profil"), timeout=10).json()
+        self.assertEqual(stored["postalCode"], "4000")
+        self.assertEqual(stored["hourlyRate"], 15.5)
+        self.assertEqual(stored["keywords"], ["nuit", "maintenance"])
+        self.assertEqual(stored["contractTypes"], ["CDI"])
+        self.assertEqual(stored["maxDistanceKm"], 25)
+
+    def test_a_second_post_replaces_the_profile(self):
+        requests.post(self.url("/api/profil"),
+                      json={"version": 1, "postalCode": "4000"}, timeout=10)
+        requests.post(self.url("/api/profil"),
+                      json={"version": 1, "postalCode": "5000"}, timeout=10)
+
+        stored = requests.get(self.url("/api/profil"), timeout=10).json()
+        self.assertEqual(stored["postalCode"], "5000")
+        self.assertNotIn("hourlyRate", stored)
+
+    def test_put_is_not_the_save_method(self):
+        # Guards the regression itself: the route moved out of do_PUT.
+        response = requests.put(self.url("/api/profil"),
+                                json={"version": 1, "postalCode": "4000"},
+                                timeout=10)
+        self.assertEqual(response.status_code, 404)
+
+    def test_the_tracking_routes_still_answer(self):
+        put = requests.put(self.url("/api/tracking/liege/1"),
+                           json={"statut": "postule"}, timeout=10)
+        self.assertEqual(put.status_code, 200)
+        delete = requests.delete(self.url("/api/tracking/liege/1"), timeout=10)
+        self.assertEqual(delete.status_code, 200)
+
 
 class TestBlockingScrape(ScraperRouteTestCase):
     def test_the_known_offers_are_not_downloaded_again(self):

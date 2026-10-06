@@ -6,87 +6,95 @@
 
 ---
 
-# Partie 1 — Démarrage rapide (pour les débutants)
+# Partie 1 — Démarrage rapide
 
-## Étape 1 — Vérifier que Python est installé
+Ce guide suppose **Windows**. Toutes les commandes se tapent dans PowerShell.
 
-Appuie sur la touche `Windows`, tape `powershell`, puis Entrée. Dans le terminal
-qui s'ouvre, tape :
+## 1 — Ouvre PowerShell
+
+Touche `Windows`, tape `powershell`, puis Entrée.
+
+## 2 — Installe Python et la dépendance
+
+Dans le dossier du projet :
+
+```
+.\install.ps1
+```
+
+Le script télécharge et installe Python (version 3.13, celle que vise le
+projet), puis installe `requirements.txt`. Il ne réinstalle rien si Python est
+déjà là. S'il doit réellement installer Python, il demande les droits
+administrateur : clique droit sur PowerShell, **Exécuter en tant
+qu'administrateur**, puis relance la commande.
+
+Quand il a fini, il affiche la commande qui lance le logiciel **pour ta
+machine**. Note-la : c'est celle de l'étape 3.
+
+> Si PowerShell refuse le script, autorise son exécution pour ton compte :
+> `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+
+**Sans le script**, fais les deux étapes à la main :
 
 ```
 python --version
-```
-
-- **Si tu vois un numéro** du genre `Python 3.12.x` : tout est bon, passe à
-  l'étape 2.
-- **Si tu vois une erreur** : essaie `py --version`. Si `py` fonctionne, remplace
-  `python` par `py` dans toutes les commandes de ce guide.
-- **Si Python n'est pas installé** : télécharge-le sur
-  <https://www.python.org/downloads/>, et **coche la case « Add python.exe to
-  PATH »** avant de cliquer sur *Install Now*. Ferme puis rouvre le terminal.
-
-## Étape 2 — Installer la seule dépendance (une fois pour toutes)
-
-```
 python -m pip install -r requirements.txt
 ```
 
-(équivalent à `python -m pip install requests`)
+- Si `python --version` affiche un numéro, c'est bon.
+- S'il affiche une erreur, essaie `py --version`. Si `py` marche, remplace
+  `python` par `py` dans toutes les commandes de ce guide. C'est aussi ce que
+  fait le script tout seul quand `python` pointe vers l'alias Microsoft Store.
+- Si Python n'est pas installé : <https://www.python.org/downloads/>, en
+  **cochant « Add python.exe to PATH »** avant *Install Now*. Ferme puis rouvre
+  PowerShell ensuite.
 
-## Étape 3 — Se placer dans le dossier du projet
-
-Toutes les commandes se lancent **dans le dossier du projet** :
+## 3 — Lance le programme
 
 ```
 cd leforem-scraper
-```
-
-## Étape 4 — Lancer le serveur local
-
-```
 python serveur.py
 ```
 
-Tu dois voir un encadré *Le scraper Le Forem est démarré*, et **ton navigateur
-par défaut s'ouvre tout seul** sur `http://localhost:8123` (Edge, Chrome ou
-Firefox, selon celui que tu utilises). **Laisse cette fenêtre ouverte** : c'est
-elle qui sert la page. Pour l'arrêter : `Ctrl + C` dans cette fenêtre.
-
-## Étape 5 — Ouvrir la page
-
-Si aucun navigateur ne s'est ouvert, ouvre le tien à la main sur :
+Si `python` n'est pas reconnu sur ton poste, passe par le lanceur :
 
 ```
-http://localhost:8123
+py -3 serveur.py
 ```
 
-## Étape 6 — Créer ta première recherche
+**Reprends exactement la commande affichée par `install.ps1`** : c'est celle qui
+marche sur ta machine. Si le lancement échoue avec *n'est pas reconnu*, tente
+l'autre forme.
 
-1. Clique sur **Nouvelle recherche**.
-2. Tape un métier (par exemple « électromécanicien ») et choisis-le dans la
-   liste proposée.
-3. Tape un lieu (par exemple « Liège ») et choisis-le.
-4. Clique sur **Lancer le scraping**.
+**Laisse cette fenêtre ouverte** : c'est elle qui sert la page. Le terminal
+affiche *Le scraper Le Forem est démarré* et ton navigateur s'ouvre seul sur
+<http://localhost:8123>. Pour tout arrêter : `Ctrl + C` dans cette fenêtre.
 
-Le téléchargement démarre et les offres défilent dans le faux terminal de la
-page. Compte quelques minutes pour une première recherche. Une fois la
-recherche terminée, elle devient la recherche affichée et le tableau se remplit.
+## 4 — Crée ta première recherche
 
-Tout se passe dans le navigateur : il n'y a plus de commande à copier.
+Dans la page ouverte :
 
-## Étape 7 — Revenir voir tes offres
+1. **Nouvelle recherche** ;
+2. choisis un métier (par exemple « électromécanicien ») puis un lieu
+   (par exemple « Liège ») ;
+3. **Lancer le scraping**.
 
-Recharge la page (`F5`). Le menu **Scraping** en haut permet de choisir la
-recherche à afficher. Pour la mettre à jour plus tard, clique sur **Actualiser**
-en haut de la page, ou sur la date de dernier scraping.
+Le téléchargement se fait devant toi, dans le faux terminal de la page. Une
+fois fini, la recherche devient celle affichée et le tableau se remplit.
+
+Ensuite, tout se passe dans le navigateur : `F5` recharge la page, le bouton
+**Actualiser** — ou la date de dernier scraping, en haut — met les offres à
+jour, et le menu **Scraping** choisit la recherche affichée. Aucune commande à
+recopier.
 
 ### Petit aide-mémoire
 
 | Je veux… | Ce que je fais |
 |---|---|
-| Démarrer le programme | `python serveur.py` (terminal laissé ouvert) |
+| Installer Python et les dépendances | `.\install.ps1` |
+| Démarrer le programme | `python serveur.py`, ou `py -3 serveur.py` (terminal laissé ouvert) |
 | Ouvrir la page | <http://localhost:8123> |
-| Mettre à jour les offres | bouton **Actualiser** sur la page |
+| Mettre à jour les offres | bouton **Actualiser**, ou la date de dernier scraping |
 | Tout re-télécharger | `python -m python.scraper --refresh …` dans le terminal |
 | Nouvelle recherche | **Nouvelle recherche**, puis **Lancer le scraping** |
 | Mettre à jour la page Employeurs | rien à faire, c'est fait à la fin de chaque scraping |
@@ -97,18 +105,20 @@ en haut de la page, ou sur la date de dernier scraping.
 
 | Problème | Solution |
 |---|---|
-| `python n'est pas reconnu…` | Python absent ou hors du PATH : relis l'étape 1, ou utilise `py`. |
+| `python n'est pas reconnu…` | Python absent ou hors du PATH : lance `.\install.ps1`, ou utilise `py`. |
+| `python` ouvre le Microsoft Store au lieu de démarrer Python | C'est l'alias Windows, pas un interpréteur : utilise `py -3`. |
+| `install.ps1 ne peut pas être chargé car ses scripts sont désactivés` | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, puis relance. |
 | `No module named requests` | `python -m pip install -r requirements.txt` |
 | `error: the following arguments are required: --occupation-guid, --location-guid` | Utilise **Nouvelle recherche** puis **Lancer le scraping** : la page fournit les deux identifiants. |
 | La page affiche une erreur | Le serveur est-il lancé et sa fenêtre toujours ouverte ? |
-| La page reste sur « Chargement des annonces… » | Le terminal du serveur a été fermé : relance `python serveur.py`. |
+| La page reste sur « Chargement des annonces… » | Le terminal du serveur a été fermé : relance la commande de l'étape 3. |
 | Page blanche en ouvrant `index.html` directement | Le site du Forem bloque le mode `file://` : passe par `http://localhost:8123`. |
 
 ---
 
 # Partie 2 — Comment fonctionne le logiciel
 
-## Les trois morceaux
+## Les quatre morceaux
 
 ```
 terminal                     navigateur
@@ -215,7 +225,7 @@ base SQLite unique :
 
 | Fichier | Contenu |
 |---|---|
-| `leforem.db` | offres, détails, historiques, blacklist et index des employeurs |
+| `leforem.db` | offres, détails, historiques, blacklist, index des employeurs, suivi (`offer_tracking`) et profil candidat (`profile`) |
 | `trash/` | les recherches supprimées depuis la page (corbeille) |
 
 Le format JSON reste disponible en le demandant explicitement
@@ -254,23 +264,81 @@ Conséquences pratiques :
 - les compteurs de statut, filtres et relances sont recalculés à chaque
   changement.
 
+## La barre de recherche
+
+La boîte en haut du tableau filtre **à chaque frappe**. Elle cherche dans toutes
+les données de l'annonce, pas seulement dans le titre : numéro, date de
+publication, date de fin, titre, société, e-mail, contrat, horaire, lieu,
+rémunération, chèques-repas, état de l'offre, description entière, et l'objet
+`diff` qui contient l'ancienne valeur des champs modifiés. Y sont ajoutés tes
+propres suivis : statut, priorité et remarque. Une colonne ajoutée au listing
+devient donc cherchable sans toucher au code.
+
+Les accents, les ligatures et la casse ne comptent pas : `Electromecanicien`,
+`électromécanicien` et `ELECTROMECANICIEN` trouvent la même annonce. Les
+balises HTML de la description sont retirées avant la comparaison, sinon taper
+`div` afficherait tout.
+
+Deux règles à garder en tête : tous les mots tapés doivent être présents (c'est
+un « et », pas un « ou »), et vider la boîte réaffiche tout.
+
+## Le profil candidat et le surlignage
+
+La page **Profil** (un seul profil pour toute l'application, pas un par
+recherche) retient tes mots-clés, ton code postal, ton taux horaire brut, les
+types de contrat qui t'intéressent et la distance maximale. Les mots-clés sont
+ensuite **surlignés** dans le tableau et dans la fiche d'une offre, ce qui évite
+d'ouvrir chaque annonce pour voir si elle colle.
+
+Le profil est enregistré dans la table `profile` de `data/leforem.db`, avec un
+miroir dans le `localStorage` du navigateur. Comme pour les suivis, effacer les
+données du navigateur ne le fait pas disparaître.
+
+## Les rémunérations
+
+En plus du champ `pay` repris tel quel du Forem, le scraper dérive quelques
+valeurs calculées : nature (`hourly` ou `monthly`), minimum et maximum,
+estimation horaire à partir du temps de travail, et la mention des chèques-repas
+avec son montant et sa période. Ces champs sont calculés **après** le
+`content_hash` : améliorer le parseur ne fait donc pas passer des offres
+immobiles pour des offres modifiées.
+
+Sur des offres déjà téléchargées, la réanalyse se lance à la main :
+
+| Je veux… | Ce que je fais |
+|---|---|
+| Recalculer la rémunération des offres en cache | `python -m python.salary --backfill` |
+| Voir la répartition | `python -m python.salary --stats` |
+
+Une grande partie des offres reste en rémunération inconnue : le Forem ne la
+publie pas toujours, et une annonce qui la cache dans son texte libre n'est pas
+toujours convertible.
+
 ## Les pages et les fichiers du projet
 
-La barre de navigation en haut de page relie trois écrans :
+La barre de navigation en haut de page relie quatre écrans :
 
 - **Offres** (`index.html`) : le tableau, les filtres, le bouton *Actualiser* ;
 - **Dashboard** (`html/insights.html`) : les statistiques de tes recherches ;
-- **Employeurs** (`html/companies.html`) : les entreprises et leurs logos.
+- **Employeurs** (`html/companies.html`) : les entreprises et leurs logos ;
+- **Profil** (`html/profil.html`) : ton profil candidat, un seul pour toute
+  l'application (pas un profil par recherche), qui sert à surligner tes
+  mots-clés dans le tableau et dans la fiche d'une offre.
+
+La fiche d'une offre (`html/detail.html`) ne figure pas dans la barre : on y
+arrive en cliquant une ligne du tableau.
 
 | Fichier | Rôle |
 |---|---|
 | `serveur.py` | le point de démarrage : `python serveur.py` |
-| `python/` | le code : `config.py` (chemins), `jsonio.py` (lecture/écriture JSON), `core.py` (logique pure), `storage/` (stockage SQLite/JSON interchangeable), `scraper.py`, `employers.py`, `server.py` — lancés par `python -m python.scraper`, `python -m python.employers`, `python -m python.server` |
+| `install.ps1` | installe Python et les dépendances du projet, pour un poste neuf |
+| `python/` | le code : `config.py` (chemins), `jsonio.py` (lecture/écriture JSON), `core.py` (logique pure), `storage/` (stockage SQLite/JSON interchangeable), `salary.py` (rémunérations et chèques-repas), `scraper.py`, `employers.py`, `server.py`, `migrate_to_sqlite.py` — lancés par `python -m python.scraper`, `python -m python.employers`, `python -m python.salary`, `python -m python.server` |
 | `index.html`, `css/style.css`, `js/pages/index.js` | le tableau des offres, ses filtres et son style |
 | `html/detail.html`, `js/pages/detail.js` | la fiche d'une offre (statut, remarque, priorité) |
+| `html/profil.html`, `js/pages/profil.js` | le profil candidat (code postal, mots-clés, taux horaire brut, contrats, distance) |
 | `html/insights.html`, `js/pages/insights.js` | le dashboard |
 | `html/companies.html`, `js/pages/companies.js` | la page Employeurs |
-| `js/shared/` | les modules communs : `api.js`, `dates.js`, `dom.js`, `links.js`, `navbar.js`, `scraper-ui.js`, `scraping-selector.js`, `statuses.js`, `storage.js`, `suivi.js`, `text.js`, `theme.js` |
+| `js/shared/` | les modules communs : `api.js`, `dates.js`, `dom.js`, `highlight.js`, `html.js`, `links.js`, `navbar.js`, `profile.js`, `scraper-ui.js`, `scraping-selector.js`, `statuses.js`, `storage.js`, `suivi.js`, `text.js`, `theme.js` |
 | `js/boot/theme-boot.js` | le thème appliqué avant le premier affichage (script classique) |
 | `css/` | la feuille de style unique, `style.css` |
 | `html/navbar_include.html` | la barre de navigation commune, injectée par `js/shared/navbar.js` |
@@ -313,7 +381,8 @@ servis par le serveur (pages, modules ES, feuille de style, refus de sortir de
 JSON forcent `LEFOREM_STORAGE=json` ; les autres s'exécutent sur le backend par
 défaut (SQLite). Ni le réseau ni le site du Forem ne sont utilisés.
 
-Une partie de la suite ouvre réellement les quatre pages dans un navigateur sans
+Une partie de la suite ouvre réellement les cinq pages dans un navigateur sans
 fenêtre (Edge, ou `EDGE_PATH` pour pointer un autre Chromium) et vérifie ce qui
-s'affiche vraiment. C'est la seule partie qui peut être sautée : elle est
-ignorée si aucun navigateur n'est trouvé.
+s'affiche vraiment : le tableau se remplit, la barre de recherche filtre à la
+frappe, le surlignage pose ses marques, le profil s'enregistre. C'est la seule
+partie qui peut être sautée : elle est ignorée si aucun navigateur n'est trouvé.
