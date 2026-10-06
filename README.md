@@ -272,6 +272,17 @@ Conséquences pratiques :
 - les compteurs de statut, filtres et relances sont recalculés à chaque
   changement.
 
+## Les filtres du tableau
+
+Au-dessus du tableau, **Localisation** liste les lieux que les offres affichées
+mentionnent réellement. La liste est reconstruite à chaque changement de
+recherche, et suit donc la recherche affichée.
+
+Le menu vient des annonces, pas d'une nomenclature : les employeurs saisissent
+le lieu en texte libre, donc « LIÈGE » et « Liège » désignent la même ville.
+Le menu n'en montre qu'une entrée, et la garder sélectionne les deux annonces.
+Une offre sans lieu n'apparaît pas dans la liste.
+
 ## La barre de recherche
 
 La boîte en haut du tableau filtre **à chaque frappe**. Elle cherche dans toutes

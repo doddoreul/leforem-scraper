@@ -14,6 +14,7 @@ Run from the repository root:
     python -m unittest discover -s tests -v
 """
 
+import copy
 import json
 import os
 import subprocess
@@ -1060,6 +1061,69 @@ def find_browser():
 BROWSER = find_browser()
 
 
+# The locality menu is built from the loaded offers, not from the Forem
+# nomenclature: lieuxTravail is free text typed by the employer, so the same
+# city arrives spelled "LIÈGE" from one offer and "Liège" from the next.
+LOCATION_PROBE = r"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\n"); }
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// Show the fixture written by this test class, not the default scraping.
+localStorage.setItem("forem_scraping_select", "data_casse.json");
+
+const frame = document.createElement("iframe");
+frame.width = 1400;
+frame.height = 900;
+const loaded = new Promise(resolve => { frame.onload = resolve; });
+frame.src = "/";
+document.body.appendChild(frame);
+await loaded;
+
+let doc = null;
+for (let i = 0; i < 120; i += 1) {
+    await sleep(200);
+    doc = frame.contentDocument;
+    if (doc && doc.querySelectorAll("#currentRows tr[data-number]").length > 4) break;
+}
+await sleep(500);
+
+const rows = Array.from(doc.querySelectorAll("#currentRows tr[data-number]"));
+const select = doc.getElementById("locationFilter");
+const visible = () => rows.filter(r => r.style.display !== "none").length;
+const options = Array.from(select.options).map(o => o.textContent);
+
+log("total=" + rows.length);
+log("baseline=" + visible());
+log("options=" + options.join(" | "));
+log("liegeOptions=" + options.filter(o => /li/i.test(o)).length);
+log("herstalOptions=" + options.filter(o => /herstal/i.test(o)).length);
+
+async function pick(label) {
+    select.value = label;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await sleep(320);
+    return visible();
+}
+
+for (const label of options.slice(1)) {
+    log("pick[" + label + "]=" + await pick(label));
+}
+
+select.value = "";
+select.dispatchEvent(new Event("change", { bubbles: true }));
+await sleep(300);
+log("cleared=" + visible());
+
+log("LOC-OK");
+</script>
+</body></html>
+"""
+
 class ProbeHandler(server.Handler):
     """The real handler, plus the page that exercises every module."""
 
@@ -1077,6 +1141,7 @@ class ProbeHandler(server.Handler):
             "/search-probe.html": SEARCH_PROBE,
             "/keys-probe.html": KEYS_PROBE,
             "/fields-probe.html": FIELDS_PROBE,
+            "/location-probe.html": LOCATION_PROBE,
         }
         if path in probes:
             body = probes[path].encode("utf-8")
@@ -1137,6 +1202,14 @@ class BrowserPagesTestCase(unittest.TestCase):
         )
         return result.stdout or ""
 
+    def report_of(self, path):
+        dom = self.dump(path)
+        start = dom.find('<pre id="out">')
+        end = dom.find("</pre>", start)
+        self.assertGreater(start, 0, "la sonde n'a pas rendu")
+        return dom[start:end]
+
+
 
 def seed(folder):
     def write(name, payload):
@@ -1168,13 +1241,6 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         self.assertIn("PROBE-OK", report, report)
         self.assertIn("imported=12", report)
         self.assertNotIn("PROBE-FAIL", report)
-
-    def report_of(self, path):
-        dom = self.dump(path)
-        start = dom.find('<pre id="out">')
-        end = dom.find("</pre>", start)
-        self.assertGreater(start, 0, "la sonde n'a pas rendu")
-        return dom[start:end]
 
     def test_the_pasted_styles_can_be_switched_off(self):
         report = self.report_of("/diff-probe.html")
@@ -1442,6 +1508,7 @@ class TestPagesInBrowser(BrowserPagesTestCase):
             "RDV prévu",
             "Postulé ou contacté depuis plus de 7 jours.",
             'id="stateFilter"',
+            'id="locationFilter"',
             'id="contractFilter"',
             'id="salaryFilter"',
             'id="currentSearch"',
@@ -1529,3 +1596,61 @@ class TestPagesInBrowser(BrowserPagesTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLocalityFilter(BrowserPagesTestCase):
+    """The locality filter, on offers whose place is spelled several ways.
+
+    Its own scraping and its own data directory: adding a second search to the
+    shared seed would make the default listing merge both and inflate the row
+    counts the other tests assert on.
+    """
+
+    PLACES = ["LIÈGE", "Liège", "Herstal", "HERSTAL", "Namur"]
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # Written after the server is up: it serves from disk on every request.
+        offers = []
+        for index, place in enumerate(cls.PLACES):
+            offer = copy.deepcopy(OFFERS[index % len(OFFERS)])
+            offer["number"] = str(7000 + index)
+            offer["offer_title"] = "Offre numero %d" % index
+            offer["company"] = "Societe %d" % index
+            offer["location"] = place
+            # The shared seed carries a deleted offer, which the state filter
+            # hides by default. Nothing here is about deletion.
+            offer["offer_state"] = "unchanged"
+            offer["is_new"] = False
+            offer["removed_on"] = ""
+            offers.append(offer)
+
+        cls._write("data_casse.json", {
+            "label": "Casse",
+            "scrape_timestamp": "2026-09-26T08:15:00",
+            "occupation_guid": "occ-guid",
+            "location_guid": "loc-guid",
+            "offers": offers,
+        })
+        cls._write("historique_casse.json", {"scrapes": []})
+
+    @classmethod
+    def _write(cls, name, payload):
+        with open(os.path.join(cls.tmp.name, name), "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False)
+
+    def test_one_entry_per_place_and_the_right_rows_kept(self):
+        report = self.report_of("/location-probe.html")
+
+        self.assertIn("LOC-OK", report)
+        self.assertIn("total=5", report)
+        self.assertIn("baseline=5", report)
+        # "LIÈGE" and "Liège" are one place, and so are "Herstal"/"HERSTAL".
+        self.assertIn("liegeOptions=1", report)
+        self.assertIn("herstalOptions=1", report)
+        # Picking a place keeps every offer written that way.
+        self.assertIn("pick[LIÈGE]=2", report)
+        self.assertIn("pick[Herstal]=2", report)
+        self.assertIn("pick[Namur]=1", report)
+        self.assertIn("cleared=5", report)

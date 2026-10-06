@@ -976,6 +976,71 @@ function offerStateMatches(offer, value) {
     return state === value;
 }
 
+/**
+ * Whether an offer sits in the picked locality.
+ *
+ * lieuxTravail holds free text typed by the employer, so "LIÈGE" and "Liège"
+ * mean the same place. Both sides are folded before comparing, otherwise the
+ * same city would appear twice in the menu and only one of the two would
+ * filter.
+ * @param {Object} offer
+ * @param {string} value
+ * @returns {boolean}
+ */
+function locationMatches(offer, value) {
+    if (!value) return true;
+    return normalizeText(offer.location || "") === normalizeText(value);
+}
+
+/**
+ * Fill the locality menu with the places the loaded offers actually mention.
+ *
+ * Built from the offers rather than from the Forem nomenclature: the employers
+ * type the place as free text, so a nomenclature list would offer thousands of
+ * spellings that match nothing.
+ * @param {Array<Object>} offers
+ */
+function fillLocationFilter(offers) {
+    const select = document.getElementById("locationFilter");
+    if (!select) return;
+
+    const chosen = select.value;
+    const seen = new Map();
+
+    offers.forEach(function (offer) {
+        const raw = String((offer && offer.location) || "").trim();
+        if (raw === "") return;
+        // One option per place, whichever spelling the employer used.
+        const key = normalizeText(raw);
+        if (key === "" || seen.has(key)) return;
+        seen.set(key, raw);
+    });
+
+    const values = Array.from(seen.values())
+        .sort(function (a, b) {
+            return normalizeText(a).localeCompare(normalizeText(b), "fr");
+        });
+
+    select.textContent = "";
+    const all = document.createElement("option");
+    all.value = "";
+    all.textContent = "Toutes";
+    select.appendChild(all);
+
+    values.forEach(function (label) {
+        const option = document.createElement("option");
+        option.value = label;
+        option.textContent = label;
+        select.appendChild(option);
+    });
+
+    // Keep the choice when it is still on offer, drop it otherwise.
+    const stillThere = values.some(function (label) {
+        return normalizeText(label) === normalizeText(chosen);
+    });
+    select.value = stillThere ? chosen : "";
+}
+
 function contractMatches(offer, value) {
     if (!value) return true;
     const text = normalizeText(offer.contract_type || "");
@@ -1040,6 +1105,7 @@ function dateMatches(offer, value) {
 function applyFilters() {
     const statusValue = readFilterValue("statusFilter");
     const stateFilter = readFilterValue("stateFilter");
+    const locationFilter = readFilterValue("locationFilter");
     const contractFilter = readFilterValue("contractFilter");
     const scheduleFilter = readFilterValue("scheduleFilter");
     const salaryFilter = readFilterValue("salaryFilter");
@@ -1066,6 +1132,7 @@ function applyFilters() {
 
             if (offer) {
                 if (!offerStateMatches(offer, stateFilter)) return false;
+                if (!locationMatches(offer, locationFilter)) return false;
                 if (!contractMatches(offer, contractFilter)) return false;
                 if (!scheduleMatches(offer, scheduleFilter)) return false;
                 if (salaryFilter === "oui" && !hasSalaryInfo(offer)) return false;
@@ -1821,6 +1888,10 @@ function offerMatchesRow(row, inputId, keywords) {
 function getOffersForExport() {
     const filter = document.getElementById("statusFilter");
     const statusValue = filter ? filter.value : "";
+    // Only the locality is mirrored here, alongside the search box. Mirroring
+    // the state filter too would silently drop the deleted offers, which the
+    // export kept until now.
+    const locationValue = readFilterValue("locationFilter");
 
     return currentOffers.filter(offer => {
         const number = String(offer.number);
@@ -1834,6 +1905,8 @@ function getOffersForExport() {
                 return false;
             }
         }
+        if (!locationMatches(offer, locationValue)) return false;
+
         return offerMatchesKeys(offer, "currentSearch");
     });
 }
@@ -2056,6 +2129,8 @@ async function reloadTables() {
 
     currentOffers = offers;
     lastScrapeDate = scrapeDate;
+    // The menu lists the places of this scrape, so it follows the selection.
+    fillLocationFilter(offers);
     // Store metadata needed for stale alert command generation
     lastData = {
         offers: offers,
@@ -2277,7 +2352,7 @@ async function init() {
     }
 
     [
-        "stateFilter", "contractFilter", "scheduleFilter",
+        "stateFilter", "locationFilter", "contractFilter", "scheduleFilter",
         "salaryFilter", "dateFilter",
     ].forEach(id => {
         const select = document.getElementById(id);
