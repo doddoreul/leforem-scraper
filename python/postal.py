@@ -48,10 +48,8 @@ LIGATURES = {
     "ł": "l",
 }
 
-# An index, keyed by folded locality, rebuilt whenever the cached file changes
-# so a server already running picks up a dataset downloaded after it started.
+# An index, built once per process, keyed by folded locality.
 _INDEX: Optional[Dict[str, List[str]]] = None
-_INDEX_SIGNATURE: Optional[Any] = None
 
 
 def dataset_path() -> str:
@@ -153,34 +151,12 @@ def read_dataset() -> Optional[List[Dict[str, Any]]]:
     return rows if isinstance(rows, list) else None
 
 
-def dataset_signature() -> Optional[Any]:
-    """What tells one version of the cached file from another."""
-    try:
-        info = os.stat(dataset_path())
-    except OSError:
-        return None
-    return (info.st_mtime_ns, info.st_size)
-
-
 def load_index() -> Dict[str, List[str]]:
-    """The folded locality index, rebuilt when the cached file changes.
-
-    Holding it for the whole life of the process looked cheaper, but a server
-    started before "python -m python.postal --refresh" would then never find a
-    postal code, and nothing would say why. One stat per request buys that back.
-
-    The signature is size and modification time. A rewrite of the same size
-    inside one filesystem timestamp tick would go unnoticed, which does not
-    arise in practice: a refresh writes a different file.
-    """
-    global _INDEX, _INDEX_SIGNATURE
-
-    signature = dataset_signature()
-    if _INDEX is None or signature != _INDEX_SIGNATURE:
+    """The folded locality index, built once and kept for the process."""
+    global _INDEX
+    if _INDEX is None:
         rows = read_dataset()
         _INDEX = build_index(rows) if rows else {}
-        _INDEX_SIGNATURE = signature
-
     return _INDEX
 
 
