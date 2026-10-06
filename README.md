@@ -332,13 +332,8 @@ les données de l'annonce, pas seulement dans le titre : numéro, date de
 publication, date de fin, titre, société, e-mail, contrat, horaire, lieu,
 rémunération, chèques-repas, état de l'offre, description entière, et l'objet
 `diff` qui contient l'ancienne valeur des champs modifiés. Y sont ajoutés tes
-propres suivis : statut, priorité et remarque, et les codes postaux lorsque le
-jeu de données est en cache. Une colonne ajoutée au listing devient donc
-cherchable sans toucher au code.
-
-Un **code postal s'y tape directement** : `4040` affiche les offres de Herstal,
-`4000` celles de Liège. Le menu **Localisation** montre d'ailleurs le code à
-côté du lieu, ce qui donne le moyen de le retrouver.
+propres suivis : statut, priorité et remarque. Une colonne ajoutée au listing
+devient donc cherchable sans toucher au code.
 
 Les accents, les ligatures et la casse ne comptent pas : `Electromecanicien`,
 `électromécanicien` et `ELECTROMECANICIEN` trouvent la même annonce. Les

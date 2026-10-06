@@ -1033,27 +1033,13 @@ function fillLocationFilter(offers) {
         // One option per place, whichever spelling the employer used, shown
         // with its capitals tamed.
         const key = normalizeText(raw);
-        if (key === "") return;
-
-        const entry = seen.get(key);
-        if (entry) {
-            // Same place written another way: same codes, but keep collecting
-            // in case one offer arrived without them.
-            (offer.postalCodes || []).forEach(function (code) {
-                if (entry.codes.indexOf(code) === -1) entry.codes.push(code);
-            });
-            return;
-        }
-
-        seen.set(key, {
-            place: tidyLocation(raw),
-            codes: (offer.postalCodes || []).slice(),
-        });
+        if (key === "" || seen.has(key)) return;
+        seen.set(key, tidyLocation(raw));
     });
 
     const values = Array.from(seen.values())
         .sort(function (a, b) {
-            return normalizeText(a.place).localeCompare(normalizeText(b.place), "fr");
+            return normalizeText(a).localeCompare(normalizeText(b), "fr");
         });
 
     select.textContent = "";
@@ -1062,21 +1048,16 @@ function fillLocationFilter(offers) {
     all.textContent = "Toutes";
     select.appendChild(all);
 
-    values.forEach(function (entry) {
+    values.forEach(function (label) {
         const option = document.createElement("option");
-        // The value stays the bare place: locationMatches compares it with the
-        // offer's own location, which never carries the code.
-        option.value = entry.place;
-        // The label shows the codes the server resolved, when it could.
-        option.textContent = entry.codes.length
-            ? entry.place + " (" + entry.codes.join(", ") + ")"
-            : entry.place;
+        option.value = label;
+        option.textContent = label;
         select.appendChild(option);
     });
 
     // Keep the choice when it is still on offer, drop it otherwise.
-    const stillThere = values.some(function (entry) {
-        return normalizeText(entry.place) === normalizeText(chosen);
+    const stillThere = values.some(function (label) {
+        return normalizeText(label) === normalizeText(chosen);
     });
     select.value = stillThere ? chosen : "";
 }
