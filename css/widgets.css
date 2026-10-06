@@ -1250,6 +1250,27 @@ th.col-forem-id {
 }
 
 /* ============================================================
+   COCHE DE CONTRAT SOUHAITÉ
+   ============================================================ */
+
+.contract-tick {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.05em;
+    height: 1.05em;
+    margin-left: 2px;
+    border: 1px solid var(--success-border);
+    border-radius: 3px;
+    background: var(--success-bg);
+    color: var(--success-text);
+    font-size: 0.78em;
+    font-weight: 700;
+    line-height: 1;
+    vertical-align: 1px;
+}
+
+/* ============================================================
    PROFIL — le formulaire reprend les contrôles des filtres
    ============================================================ */
 

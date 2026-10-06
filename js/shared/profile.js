@@ -1,5 +1,5 @@
 // ============================================================
-// PROFILE — the single candidate profile
+// PROFILE — the single candidate profile and what it wants
 //
 // One profile for the whole app (not one per search). It is stored
 // in the database like the follow-up, under the key forem_profil,
@@ -25,9 +25,91 @@ export const FALLBACK_CONTRACT_TYPES = [
     "Stage",
 ];
 
+/**
+ * How the friendly labels the profile shows map onto what the Forem writes.
+ *
+ * The profile offers "CDI" and the Forem writes "Durée indéterminée", so a
+ * label alone would never match. An offer may carry several at once — "Intérimaire
+ * avec option sur durée indéterminée" is both — and each one counts.
+ * @type {Object<string, Array<string>>}
+ */
+const CONTRACT_ALIASES = {
+    cdi: ["duree indeterminee"],
+    cdd: ["duree determinee"],
+    interim: ["interim"],
+    independant: ["independant"],
+    etudiant: ["etudiant"],
+    stage: ["stage"],
+};
+
 /** Hourly gross rate bounds, in euros. */
 const RATE_MIN_EXCLUSIVE = 0;
 const RATE_MAX = 200;
+
+/** Fold the contract type the same way the filters do. */
+function foldContract(value) {
+    return String(value || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[œ]/g, "oe")
+        .replace(/[æ]/g, "ae")
+        .replace(/[ø]/g, "o")
+        .trim();
+}
+
+/**
+ * Whether an offer's contract is one the candidate wants.
+ *
+ * Both spellings are accepted: the friendly labels the profile page offers and
+ * the raw values the Forem publishes, since the profile merges both. Compare on
+ * the folded text, so "Intérim" and "INTERIMAIRE" meet.
+ * @param {string} contractType what the offer carries
+ * @param {Array<string>} wanted the profile contractTypes
+ * @returns {boolean}
+ */
+export function contractIsWanted(contractType, wanted) {
+    const text = foldContract(contractType);
+    if (text === "" || !Array.isArray(wanted) || !wanted.length) return false;
+
+    return wanted.some(function (label) {
+        const wantedText = foldContract(label);
+        if (wantedText === "") return false;
+        // The Forem's own wording, chosen on the profile page.
+        if (text === wantedText) return true;
+        // Or one of the aliases of a friendly label.
+        const aliases = CONTRACT_ALIASES[wantedText];
+        return Boolean(aliases) && aliases.some(function (token) {
+            return text.indexOf(token) !== -1;
+        });
+    });
+}
+
+/** The contract types of the profile, read once per page. */
+let wantedContracts = null;
+
+/**
+ * Read the wanted contract types from the stored profile.
+ *
+ * Never throws: a profile that cannot be read simply means no tick.
+ * @returns {Promise<Array<string>>}
+ */
+export async function loadContractTypes() {
+    if (wantedContracts) return wantedContracts.slice();
+    let list = [];
+    try {
+        const profile = await readProfile();
+        list = Array.isArray(profile.contractTypes) ? profile.contractTypes : [];
+    } catch (error) {
+        list = [];
+    }
+    wantedContracts = list
+        .filter(function (value) {
+            return typeof value === "string" && value.trim() !== "";
+        })
+        .map(function (value) { return value.trim(); });
+    return wantedContracts.slice();
+}
 
 /** Maximum home-to-work distance, in kilometres. */
 const DISTANCE_MIN = 0;

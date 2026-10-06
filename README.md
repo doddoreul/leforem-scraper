@@ -329,6 +329,15 @@ en rouge, avec les couleurs du thème. Un mot présent dans les deux listes
 reste rouge, le signal le plus fort l'emporte. Un profil déjà enregistré sans
 cette liste ne surligne simplement rien en rouge.
 
+Les types de contrat que tu coches dans le profil servent aussi ailleurs : une
+annonce dont le contrat fait partie de ta liste affiche une petite **coche** à
+côté du type, dans le tableau comme sur la fiche. La page Profil propose des
+libellés courts (CDI, CDD, Intérim…) et les mots exacts du Forem
+(« Durée indéterminée », « Intérimaire »…), et les deux se reconnaissent : la
+comparaison ignore la casse et les accents. Une annonce qui coche plusieurs
+cases — « Intérimaire avec option sur durée indéterminée » — compte pour les
+deux.
+
 Le profil est enregistré dans la table `profile` de `data/leforem.db`, avec un
 miroir dans le `localStorage` du navigateur. Comme pour les suivis, effacer les
 données du navigateur ne le fait pas disparaître.

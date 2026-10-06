@@ -5,9 +5,11 @@
    ============================================================ */
 
 import { fetchJsonOrNull } from "../shared/api.js";
+import { contractTick } from "../shared/contract-tick.js";
 import { formatLongDate, parseForemDate } from "../shared/dates.js";
 import { el } from "../shared/dom.js";
 import { highlightIn, loadKeywords } from "../shared/highlight.js";
+import { loadContractTypes } from "../shared/profile.js";
 import { offerUrl } from "../shared/links.js";
 import { PRIORITY_OPTIONS, STATUS_OPTIONS } from "../shared/statuses.js";
 import { readTrackedMap, storagePrefixFor, writeTrackedMap } from "../shared/storage.js";
@@ -260,19 +262,27 @@ function main() {
         });
 }
 
+/** The contract types the candidate asked for; set while loading an offer. */
+let wantedContracts = [];
+
 function loadEntry(entry, root) {
     // The listing carries the diff (what changed since the previous scrape),
     // the detail file carries the full Forem payload. Both are needed.
     const keywordsPromise = loadKeywords();
+    // The wanted contracts drive the tick beside the contract type. Joined to
+    // the same wait as the payload, so the sheet is drawn once with the tick
+    // already in place rather than patched afterwards.
+    const contractsPromise = loadContractTypes();
     const detailsPromise = fetchJsonOrNull(entry.details);
     const offersPromise = entry.file
         ? fetchJsonOrNull(entry.file)
         : Promise.resolve(null);
 
-    Promise.all([keywordsPromise, detailsPromise, offersPromise])
+    Promise.all([keywordsPromise, contractsPromise, detailsPromise, offersPromise])
         .then(results => {
-            const detailsData = results[1];
-            const offersData = results[2];
+            wantedContracts = results[1];
+            const detailsData = results[2];
+            const offersData = results[3];
             const store = (detailsData && detailsData.details)
                 ? detailsData.details : null;
             const payload = store ? store[numberStr] : null;
@@ -404,7 +414,16 @@ function renderFiche(root, payload, offer) {
     heroMain.appendChild(employerLine);
 
     const facts = el("div", "detail-facts");
-    if (contract) facts.appendChild(chip(contract, "accent"));
+    if (contract) {
+        const node = chip(contract, "accent");
+        // A tick beside the contract when the candidate asked for that one.
+        const tick = contractTick(contract, wantedContracts);
+        if (tick) {
+            node.appendChild(document.createTextNode(" "));
+            node.appendChild(tick);
+        }
+        facts.appendChild(node);
+    }
     if (schedule) facts.appendChild(chip(schedule, "accent"));
     if (scheduleDetail) facts.appendChild(chip(scheduleDetail, "accent"));
     if (positions) facts.appendChild(chip(positions + " poste(s)", "accent"));
@@ -787,7 +806,7 @@ function buildDiffCard(offer) {
         : "Dernière modification : " + str(offer.modified_at)));
 
     const toggle = el("button", "btn btn-outline diff-toggle",
-        "Afficher le diff");
+        "Comparer la modification");
     const body = el("div", "diff-body hidden");
     body.setAttribute("aria-live", "polite");
 
@@ -798,7 +817,7 @@ function buildDiffCard(offer) {
             rows.forEach(row => body.appendChild(buildDiffRow(row)));
         }
         body.classList.toggle("hidden", !opening);
-        toggle.textContent = opening ? "Masquer le diff" : "Afficher le diff";
+        toggle.textContent = opening ? "Masquer la comparaison" : "Comparer la modification";
         toggle.setAttribute("aria-expanded", opening ? "true" : "false");
     });
 

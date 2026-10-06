@@ -30,7 +30,9 @@ import {
     storagePrefixFor,
     writeTrackedMap,
 } from "../shared/storage.js";
+import { contractTick } from "../shared/contract-tick.js";
 import { htmlToText } from "../shared/html.js";
+import { loadContractTypes } from "../shared/profile.js";
 import { highlightIn, loadKeywords } from "../shared/highlight.js";
 import {
     SUIVI_EVENT,
@@ -76,6 +78,14 @@ initTheme(GEAR_ACTIONS);
 // The profile keywords drive the highlighting. Each rendered row asks for it,
 // and the shared module replays the pass if the keywords land after the draw.
 loadKeywords();
+
+// The wanted contract types drive the tick beside each contract. The rows are
+// drawn from their own fetch, so the table is redrawn once they land.
+let wantedContracts = [];
+loadContractTypes().then(function (types) {
+    wantedContracts = types;
+    if (currentOffers.length) renderCurrent(currentOffers, lastScrapeDate);
+});
 
 
 
@@ -483,18 +493,31 @@ function createDetailsCell(values) {
             line.appendChild(document.createTextNode(value));
         }
         td.appendChild(line);
+        return line;
     };
 
     const number = String(values.number);
     const priority = getPriority(number);
 
+    // The contract line is kept: the tick goes right after it, and only there.
+    let contractLine = null;
     [
         ["Contrat", values.contract_type],
         ["Horaire", values.schedule],
         ["Rémunération", values.pay],
         ["Salaire", values.salary],
         ["Priorité", priorityLabel(priority)],
-    ].forEach(([labelText, value]) => addLine(labelText, value, ""));
+    ].forEach(([labelText, value]) => {
+        const line = addLine(labelText, value, "");
+        if (labelText === "Contrat") contractLine = line;
+    });
+
+    // A tick beside the contract when the candidate asked for that one.
+    const tick = contractTick(values.contract_type, wantedContracts);
+    if (contractLine && tick) {
+        contractLine.appendChild(document.createTextNode(" "));
+        contractLine.appendChild(tick);
+    }
 
     if (values.email) {
         const emails = String(values.email);

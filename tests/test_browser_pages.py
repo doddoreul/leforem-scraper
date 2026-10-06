@@ -211,7 +211,9 @@ DETAIL = {
     "numero": "1902",
     "titreOffre": "Electromecanicien industriel",
     "nomEmployeur": "Ateliers du Sud",
-    "typeContrat": {"libelle": "CDI"},
+    # A string, as the Forem really publishes it: all 176 stored offers carry
+    # a plain string here, not an object.
+    "typeContrat": "Durée indéterminée",
     "lieuxTravail": [{"libelle": "Liege"}],
     "datePublication": "25-09-26",
     "dateDebutDiffusion": "25-09-26",
@@ -1277,6 +1279,97 @@ log("EXCL-OK");
 </body></html>
 """
 
+# A small checkbox beside a contract the candidate asked for, in the offers
+# table and on the offer sheet. The friendly profile labels have to match the
+# wording the Forem really publishes, and the other way round.
+CONTRACT_TICK_PROBE = r"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\n"); }
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// What the profile page lets the candidate pick.
+const profile = {
+    version: 1,
+    keywordsText: "",
+    keywords: [],
+    excludedText: "",
+    excluded: [],
+    hourlyRate: null,
+    contractTypes: ["CDI", "Intérim"],
+    maxDistanceKm: null,
+    updatedAt: "2026-10-06",
+};
+localStorage.setItem("forem_profil", JSON.stringify(profile));
+await fetch("/api/profil", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(profile),
+});
+
+const { contractIsWanted } = await import("/js/shared/profile.js");
+const wanted = ["CDI", "Intérim"];
+[
+    ["Durée indéterminée", true],
+    ["Durée déterminée", false],
+    ["Intérimaire", true],
+    ["Intérimaire avec option sur durée indéterminée", true],
+    ["Remplacement", false],
+    ["", false],
+].forEach(function (entry) {
+    log("match[" + (entry[0] || "vide") + "]=" + contractIsWanted(entry[0], wanted));
+});
+// The raw wording works too, since the profile merges it in.
+log("brut=" + contractIsWanted("Durée indéterminée", ["Durée indéterminée"]));
+log("aucunChoisi=" + contractIsWanted("Durée indéterminée", []));
+
+const frame = document.createElement("iframe");
+frame.width = 1400;
+frame.height = 900;
+const loaded = new Promise(resolve => { frame.onload = resolve; });
+frame.src = "/";
+document.body.appendChild(frame);
+await loaded;
+
+let doc = null;
+for (let i = 0; i < 120; i += 1) {
+    await sleep(200);
+    doc = frame.contentDocument;
+    if (doc && doc.querySelectorAll("#currentRows tr[data-number]").length > 1) break;
+}
+await sleep(800);
+
+log("ticks=" + doc.querySelectorAll("#currentRows .contract-tick").length);
+// The tick must sit on the contract line, not on another one.
+const onLine = doc.querySelector("#currentRows .detail-line .contract-tick");
+log("surLigneContrat=" + (onLine
+    ? onLine.parentElement.textContent.indexOf("Contrat") === 0 : false));
+log("tickTexte=" + (onLine ? onLine.textContent.trim() : "aucun"));
+
+const detail = document.createElement("iframe");
+detail.width = 1200;
+detail.height = 900;
+const loadedDetail = new Promise(resolve => { detail.onload = resolve; });
+detail.src = "/detail.html?number=1902&base=metier_liege";
+document.body.appendChild(detail);
+await loadedDetail;
+let dd = null;
+for (let i = 0; i < 100; i += 1) {
+    await sleep(200);
+    dd = detail.contentDocument;
+    if (dd && dd.querySelector(".detail-facts")) break;
+}
+await sleep(900);
+log("ficheTicks=" + (dd ? dd.querySelectorAll(".contract-tick").length : "absente"));
+
+log("TICK-OK");
+</script>
+</body></html>
+"""
+
 class ProbeHandler(server.Handler):
     """The real handler, plus the page that exercises every module."""
 
@@ -1297,6 +1390,7 @@ class ProbeHandler(server.Handler):
             "/location-probe.html": LOCATION_PROBE,
             "/multi-locations-probe.html": MULTI_LOCATIONS_PROBE,
             "/excluded-probe.html": EXCLUDED_PROBE,
+            "/tick-probe.html": CONTRACT_TICK_PROBE,
         }
         if path in probes:
             body = probes[path].encode("utf-8")
@@ -1419,6 +1513,29 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         self.assertIn("Mots-clés exclus", page)
         # The field it sits next to is still there.
         self.assertIn("keywordsText", page)
+    def test_a_wanted_contract_gets_a_tick(self):
+        report = self.report_of("/tick-probe.html")
+
+        self.assertIn("TICK-OK", report)
+        # The friendly profile labels match the Forem's own wording.
+        self.assertIn("match[Durée indéterminée]=true", report)
+        self.assertIn("match[Durée déterminée]=false", report)
+        self.assertIn("match[Intérimaire]=true", report)
+        # An offer that is both counts once, and Remplacement matches nothing.
+        self.assertIn("match[Intérimaire avec option sur durée indéterminée]=true",
+                      report)
+        self.assertIn("match[Remplacement]=false", report)
+        self.assertIn("match[vide]=false", report)
+        # The raw wording works the other way round.
+        self.assertIn("brut=true", report)
+        # Nothing ticked when the candidate picked nothing.
+        self.assertIn("aucunChoisi=false", report)
+        # In the offers table, on the contract line and nowhere else.
+        self.assertNotIn("ticks=0", report)
+        self.assertIn("surLigneContrat=true", report)
+        self.assertIn("tickTexte=\u2713", report)
+        # And on the offer sheet.
+        self.assertNotIn("ficheTicks=0", report)
     def test_the_pasted_styles_can_be_switched_off(self):
         report = self.report_of("/diff-probe.html")
 
