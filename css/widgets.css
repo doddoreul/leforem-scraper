@@ -1231,6 +1231,18 @@ th.col-forem-id {
 }
 
 /* ============================================================
+   SURLIGNAGE DES MOTS-CLÉS DU PROFIL
+   ============================================================ */
+
+.keyword-hit {
+    background: var(--warning-bg);
+    color: var(--warning-text);
+    border-bottom: 1px solid var(--warning-border);
+    padding: 0 1px;
+    font-weight: 600;
+}
+
+/* ============================================================
    PROFIL — le formulaire reprend les contrôles des filtres
    ============================================================ */
 

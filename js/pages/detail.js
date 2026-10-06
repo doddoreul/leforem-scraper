@@ -7,6 +7,7 @@
 import { fetchJsonOrNull } from "../shared/api.js";
 import { formatLongDate, parseForemDate } from "../shared/dates.js";
 import { el } from "../shared/dom.js";
+import { highlightIn, loadKeywords } from "../shared/highlight.js";
 import { offerUrl } from "../shared/links.js";
 import { PRIORITY_OPTIONS, STATUS_OPTIONS } from "../shared/statuses.js";
 import { readTrackedMap, storagePrefixFor, writeTrackedMap } from "../shared/storage.js";
@@ -262,15 +263,16 @@ function main() {
 function loadEntry(entry, root) {
     // The listing carries the diff (what changed since the previous scrape),
     // the detail file carries the full Forem payload. Both are needed.
+    const keywordsPromise = loadKeywords();
     const detailsPromise = fetchJsonOrNull(entry.details);
     const offersPromise = entry.file
         ? fetchJsonOrNull(entry.file)
         : Promise.resolve(null);
 
-    Promise.all([detailsPromise, offersPromise])
+    Promise.all([keywordsPromise, detailsPromise, offersPromise])
         .then(results => {
-            const detailsData = results[0];
-            const offersData = results[1];
+            const detailsData = results[1];
+            const offersData = results[2];
             const store = (detailsData && detailsData.details)
                 ? detailsData.details : null;
             const payload = store ? store[numberStr] : null;
@@ -508,6 +510,11 @@ function renderFiche(root, payload, offer) {
 
     // Votre suivi
     sideCol.appendChild(buildTracking(number));
+
+    // Les mots-clés du profil sont surlignés en dernier, une fois toute la
+    // fiche en place : le parcours ne touche ni les champs de saisie ni les
+    // balises déjà surlignées.
+    highlightIn(root);
 }
 
 // ============================================================

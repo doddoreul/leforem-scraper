@@ -560,6 +560,88 @@ for (let i = 0; i < 80; i += 1) {
 </body></html>
 """
 
+# The profile keywords must be highlighted in the listing and on the offer
+# sheet. The iframe skeleton is the one the other probes here use.
+KEYWORD_PROBE = r"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\n"); }
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// The profile must exist before the page reads it, so it is stored here and
+// the frame is only built afterwards.
+const KEYWORDS = "Mecanicien, equipe";
+const profile = {
+    version: 1,
+    postalCode: "",
+    keywordsText: KEYWORDS,
+    keywords: KEYWORDS.split(",").map(s => s.trim()),
+    hourlyRate: null,
+    contractTypes: [],
+    maxDistanceKm: null,
+    updatedAt: "2026-10-06",
+};
+localStorage.setItem("forem_profil", JSON.stringify(profile));
+await fetch("/api/profil", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(profile),
+});
+
+async function openPage(url, ready) {
+    const frame = document.createElement("iframe");
+    frame.width = 1200;
+    frame.height = 900;
+    const loaded = new Promise(resolve => { frame.onload = resolve; });
+    frame.src = url;
+    document.body.appendChild(frame);
+    await loaded;
+    for (let i = 0; i < 100; i += 1) {
+        await sleep(200);
+        const doc = frame.contentDocument;
+        if (doc && ready(doc)) return doc;
+    }
+    return frame.contentDocument;
+}
+
+const listDoc = await openPage(
+    "/",
+    doc => doc.querySelectorAll("#currentRows tr").length > 1
+);
+await sleep(400);
+
+const listMarks = listDoc.querySelectorAll("#currentRows mark.keyword-hit");
+log("listRows=" + listDoc.querySelectorAll("#currentRows tr").length);
+log("listMarks=" + listMarks.length);
+log("listMarkTexts=" + Array.from(listMarks).map(m => m.textContent).join("|"));
+log("marksInLink=" + listDoc.querySelectorAll("#currentRows a[data-number] mark").length);
+log("listTextIntact=" + (listDoc.querySelector("#currentRows a[data-number]")
+    ? listDoc.querySelector("#currentRows a[data-number]").textContent : "NONE"));
+
+const detailDoc = await openPage(
+    "/detail.html?number=1902&base=metier_liege",
+    doc => doc.getElementById("detailRoot")
+        && doc.querySelectorAll("#detailRoot .card").length > 1
+);
+await sleep(400);
+
+const root = detailDoc.getElementById("detailRoot");
+const detailMarks = root ? root.querySelectorAll("mark.keyword-hit") : [];
+log("detailCards=" + (root ? root.querySelectorAll(".card").length : 0));
+log("detailMarks=" + detailMarks.length);
+log("detailMarkTexts=" + Array.from(detailMarks).map(m => m.textContent).join("|"));
+log("marksInTextarea=" + (root ? root.querySelectorAll("textarea mark").length : -1));
+log("nestedTagsInMark=" + (root ? root.querySelectorAll("mark *").length : -1));
+
+log("KEYWORD-OK");
+</script>
+</body></html>
+"""
+
 # validateProfile is pure, so the browser is only needed to load the module
 # and check the real rejections on the real page.
 PROFILE_PROBE = r"""<!DOCTYPE html>
@@ -694,6 +776,7 @@ class ProbeHandler(server.Handler):
             "/persist-probe.html": PERSIST_PROBE,
             "/profile-probe.html": PROFILE_PROBE,
             "/remun-probe.html": REMUN_PROBE,
+            "/keyword-probe.html": KEYWORD_PROBE,
         }
         if path in probes:
             body = probes[path].encode("utf-8")
@@ -863,6 +946,31 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         # ...and re-rendering the same scrape keeps them hidden.
         self.assertIn("rerenderHidden=true", report)
         self.assertIn("DISMISS-OK", report)
+
+    def test_the_profile_keywords_are_highlighted(self):
+        report = self.report_of("/keyword-probe.html")
+
+        self.assertIn("KEYWORD-OK", report)
+        # The listing really drew offers...
+        self.assertIn("listRows=", report)
+        self.assertNotIn("listRows=0", report)
+        self.assertNotIn("listRows=1 ", report)
+        # ...and both keywords are highlighted in it. The seeded title is
+        # "Electromecanicien industriel", so the hit is the lowercase stem.
+        self.assertIn("listMarks=", report)
+        self.assertNotIn("listMarks=0", report)
+        self.assertIn("listMarkTexts=mecanicien|equipe", report)
+        self.assertIn("marksInLink=", report)
+        self.assertNotIn("marksInLink=0", report)
+        # The surrounding text is untouched.
+        self.assertIn("listTextIntact=Electromecanicien industriel", report)
+        # The sheet highlights too, and never inside an editable field.
+        self.assertIn("detailMarks=", report)
+        self.assertNotIn("detailMarks=0", report)
+        self.assertIn("detailMarkTexts=mecanicien", report)
+        self.assertIn("marksInTextarea=0", report)
+        # No markup was injected: a <mark> holds text only.
+        self.assertIn("nestedTagsInMark=0", report)
 
     def test_the_offer_sheet_shows_the_remuneration(self):
         report = self.report_of("/remun-probe.html")

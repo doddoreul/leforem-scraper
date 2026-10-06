@@ -28,6 +28,7 @@ import {
     storagePrefixFor,
     writeTrackedMap,
 } from "../shared/storage.js";
+import { highlightIn, loadKeywords } from "../shared/highlight.js";
 import {
     SUIVI_EVENT,
     TRACKING_GEAR_ACTIONS,
@@ -68,6 +69,10 @@ const STATUS_OPTIONS = CANONICAL_STATUS_OPTIONS.map(option =>
 migrateLegacyStorage();
 
 initTheme(GEAR_ACTIONS);
+
+// The profile keywords drive the highlighting. Each rendered row asks for it,
+// and the shared module replays the pass if the keywords land after the draw.
+loadKeywords();
 
 
 
@@ -567,6 +572,7 @@ function createCurrentRow(offer) {
     tr.appendChild(textCell([document.createTextNode(offer.location || "")], "col-location"));
     tr.appendChild(createNotesCell(number));
 
+    highlightIn(tr);
     return tr;
 }
 
