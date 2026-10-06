@@ -28,6 +28,9 @@ déjà là. S'il doit réellement installer Python, il demande les droits
 administrateur : clique droit sur PowerShell, **Exécuter en tant
 qu'administrateur**, puis relance la commande.
 
+Quand il a fini, il affiche la commande qui lance le logiciel **pour ta
+machine**. Note-la : c'est celle de l'étape 3.
+
 > Si PowerShell refuse le script, autorise son exécution pour ton compte :
 > `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
 
@@ -52,6 +55,16 @@ python -m pip install -r requirements.txt
 cd leforem-scraper
 python serveur.py
 ```
+
+Si `python` n'est pas reconnu sur ton poste, passe par le lanceur :
+
+```
+py -3 serveur.py
+```
+
+**Reprends exactement la commande affichée par `install.ps1`** : c'est celle qui
+marche sur ta machine. Si le lancement échoue avec *n'est pas reconnu*, tente
+l'autre forme.
 
 **Laisse cette fenêtre ouverte** : c'est elle qui sert la page. Le terminal
 affiche *Le scraper Le Forem est démarré* et ton navigateur s'ouvre seul sur
@@ -79,7 +92,7 @@ recopier.
 | Je veux… | Ce que je fais |
 |---|---|
 | Installer Python et les dépendances | `.\install.ps1` |
-| Démarrer le programme | `python serveur.py` (terminal laissé ouvert) |
+| Démarrer le programme | `python serveur.py`, ou `py -3 serveur.py` (terminal laissé ouvert) |
 | Ouvrir la page | <http://localhost:8123> |
 | Mettre à jour les offres | bouton **Actualiser**, ou la date de dernier scraping |
 | Tout re-télécharger | `python -m python.scraper --refresh …` dans le terminal |
@@ -93,11 +106,12 @@ recopier.
 | Problème | Solution |
 |---|---|
 | `python n'est pas reconnu…` | Python absent ou hors du PATH : lance `.\install.ps1`, ou utilise `py`. |
+| `python` ouvre le Microsoft Store au lieu de démarrer Python | C'est l'alias Windows, pas un interpréteur : utilise `py -3`. |
 | `install.ps1 ne peut pas être chargé car ses scripts sont désactivés` | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, puis relance. |
 | `No module named requests` | `python -m pip install -r requirements.txt` |
 | `error: the following arguments are required: --occupation-guid, --location-guid` | Utilise **Nouvelle recherche** puis **Lancer le scraping** : la page fournit les deux identifiants. |
 | La page affiche une erreur | Le serveur est-il lancé et sa fenêtre toujours ouverte ? |
-| La page reste sur « Chargement des annonces… » | Le terminal du serveur a été fermé : relance `python serveur.py`. |
+| La page reste sur « Chargement des annonces… » | Le terminal du serveur a été fermé : relance la commande de l'étape 3. |
 | Page blanche en ouvrant `index.html` directement | Le site du Forem bloque le mode `file://` : passe par `http://localhost:8123`. |
 
 ---
