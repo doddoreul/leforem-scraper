@@ -1,22 +1,24 @@
 ﻿#requires -Version 5.1
 
 <#
-    Installation de Python et de la dependance du projet.
+    Installation de Python et de la dependance du projet, via WinGet.
 
         .\install.ps1
 
-    Le script est idempotent : si Python est deja present et assez recent, il
-    saute le telechargement et se contente d'installer requirements.txt.
+    WinGet est le chemin suivi par Windows pour installer un logiciel, donc
+    rien a telecharger ni a autoriser dans un pare-feu : WinGet demande
+    lui-meme l'elevation quand il en a besoin. Le script n'exige donc pas
+    d'etre lance en administrateur.
+
+    3.13 est la version visee par le projet (.github/workflows/ci.yml,
+    mypy.ini). Le script ne touche pas a une installation existante : il
+    signale seulement si elle n'est pas de la bonne version.
 
         .\install.ps1 -SkipDependencies    # uniquement Python
-
-    Le repertoire courant n'a aucune importance : requirements.txt est cherche
-    par rapport a ce script. En revanche le script doit rester dans le dossier
-    du projet, a cote de requirements.txt.
 #>
 
 param(
-    # N'installe pas requests, pour reinstaller Python sans toucher a l'env.
+    # N'installe pas requests, pour remettre Python sans toucher a l'env.
     [switch]$SkipDependencies
 )
 
@@ -24,15 +26,16 @@ $ErrorActionPreference = "Stop"
 
 # La console Windows n'emet pas de l'UTF-8 par defaut : le "e" accentue du
 # message de fin s'afficherait de travers. On force la sortie en UTF-8, ce que
-# Windows 10 et 11 gèrent correctement.
+# Windows 10 et 11 gerent correctement.
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 
-# 3.13 est la version cible du projet (.github/workflows/ci.yml, mypy.ini).
-# Corriger le numero de patch ici, pas la ligne mineure.
-$PythonVersion = "3.13.16"
-
+$PackageId = "Python.Python.3.13"
 $ProjectRoot = $PSScriptRoot
 $Requirements  = Join-Path $ProjectRoot "requirements.txt"
+
+# 0x8A15002B : le paquet est deja installe et aucune mise a jour n'existe.
+# Winget le rend sur un "install" qui n'a rien a faire, ce qui n'est pas un echec.
+$AlreadyThere = -1978335189
 
 function Info($msg)    { Write-Host $msg -ForegroundColor Cyan }
 function Step($msg)    { Write-Host "-> $msg" -ForegroundColor Yellow }
@@ -40,176 +43,138 @@ function Ok($msg)      { Write-Host "OK  $msg" -ForegroundColor Green }
 function Warn($msg)    { Write-Host "!!  $msg" -ForegroundColor Yellow }
 function Die($msg)     { Write-Host "XX  $msg" -ForegroundColor Red; exit 1 }
 
-function Read-CommandOutput($exePath, $exeArgs) {
-    # Un interpreteur peut ecrire sur stderr. Avec $ErrorActionPreference = "Stop"
-    # heritee du script, PowerShell transforme cela en erreur terminante avant que
-    # 2>&1 ne fusionne, et l'appelant prendrait une detection reussie pour un
-    # echec. On rabat la preference localement : la portee est cette fonction.
+# Execute une commande native en capturant stdout et stderr, sans que la
+# preference d'erreur du script transforme une sortie normale en exception.
+function Read-Native($exe, $exeArgs) {
     $ErrorActionPreference = "Continue"
-    $out = & $exePath @exeArgs 2>&1
+    $out = & $exe @exeArgs 2>&1
     return (($out | ForEach-Object { "$_" }) -join "`n")
 }
 
-function Get-InstalledPython {
-    # "python" puis le lanceur "py" : sur Windows, le lanceur est souvent la
-    # seule chose presente quand le PATH n'a pas ete renseigne.
-    foreach ($cmd in @("python", "py")) {
-        $exe = Get-Command $cmd -ErrorAction SilentlyContinue
-        if (-not $exe) { continue }
+# ------------------------------------------------------------------ WinGet
 
-        # "python" peut designer l'alias Microsoft Store (WindowsApps), qui ouvre
-        # le magasin au lieu de repondre. Ce n'est pas un interpreteur : l'ignorer.
-        if ($exe.Source -like "*\Microsoft\WindowsApps\*") { continue }
+$winget = Get-Command winget -ErrorAction SilentlyContinue
+if (-not $winget) {
+    Write-Host ""
+    Die ("WinGet n'est pas disponible." +
+         "`nInstalle ou mets a jour 'App Installer' depuis le Microsoft Store," +
+         " puis relance ce script.")
+}
+Ok "WinDetecte ($($winget.Source))"
 
-        # On demande a l'interpreteur de s'executer plutot que de lire
-        # "--version" : la sonde prouve du coup que la commande marche vraiment,
-        # et stdout ne contient que les deux entiers attendus.
-        $code = "import sys; print(sys.version_info[0]); print(sys.version_info[1])"
-        $probeArgs = if ($cmd -eq "py") { @("-3", "-c", $code) } else { @("-c", $code) }
+# ------------------------------------------------------------------ Python deja la
 
-        $numbers = @(
-            (Read-CommandOutput $exe.Source $probeArgs) -split "`n" |
-                ForEach-Object { $_.Trim() } |
-                Where-Object { $_ -match "^\d+$" }
-        )
-        if ($numbers.Count -lt 2) { continue }
+# Winget sait ce qui est installe : c'est plus sur que de sonder
+# "python --version", car "python" designe souvent l'alias Microsoft Store,
+# qui ouvre le magasin au lieu de repondre.
+$installed = Read-Native $winget.Source @(
+    "list", "--id", $PackageId, "--exact", "--source", "winget",
+    "--accept-source-agreements"
+)
+$alreadyInstalled = $installed -match [regex]::Escape($PackageId)
 
-        return [pscustomobject]@{
-            Path    = $exe.Source
-            Major   = [int]$numbers[0]
-            Minor   = [int]$numbers[1]
-            Command = $cmd
-            # La commande a recopier telle quelle, lanceur compris.
-            Invoke = if ($cmd -eq "py") { "py -3" } else { "python" }
-        }
+# L'alias Store n'est pas un interpreteur : on l'ecarte.
+function Find-RealPython {
+    $launcher = Get-Command py -ErrorAction SilentlyContinue
+    if ($launcher) {
+        $version = Read-Native $launcher.Source @("-3", "--version")
+        if ($version -match "Python (\d+)\.(\d+)") { return $launcher.Source }
+    }
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if ($python -and $python.Source -notlike "*\Microsoft\WindowsApps\*") {
+        $version = Read-Native $python.Source @("--version")
+        if ($version -match "Python (\d+)\.(\d+)") { return $python.Source }
     }
     return $null
 }
 
+$pythonExe = Find-RealPython
+
 Write-Host ""
-Info "=== Installation de Python $PythonVersion et des dependances ==="
-Write-Host ""
-
-# ---------------------------------------------------------------- Python present
-
-$python = Get-InstalledPython
-$minorWanted = [int]($PythonVersion.Split(".")[1])
-
-if ($python) {
-    Ok "Python $($python.Major).$($python.Minor) deja installe ($($python.Path))"
-    $pythonExe    = $python.Path
-    $pythonInvoke = $python.Invoke
+if ($alreadyInstalled -and $pythonExe) {
+    $version = Read-Native $pythonExe @("--version")
+    Ok "Python deja installe via WinGet ($version)"
+} elseif ($pythonExe) {
+    $version = Read-Native $pythonExe @("--version")
+    Ok "Python deja installe ($version)"
+    if ($version -notmatch "Python 3\.13") {
+        Warn "Le projet vise 3.13 (CI et mypy). La suite peut ne pas passer."
+    }
 } else {
-    Write-Host "Aucun Python trouve dans le PATH." -ForegroundColor Yellow
-    Write-Host ""
+    Step "Installation de Python 3.13 via WinGet"
 
-    # Admin seulement quand il y a vraiment a installer.
-    $identity  = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
-    $isAdmin   = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    # Pas d'elevation forcee ici : WinGet la demande lui-meme quand il en a
+    # besoin, ce qui evite d'imposer PowerShell en administrateur.
+    Read-Native $winget.Source @(
+        "install",
+        "--id", $PackageId,
+        "--exact",
+        "--source", "winget",
+        "--accept-source-agreements",
+        "--accept-package-agreements"
+    ) | Out-Null
 
-    if (-not $isAdmin) {
-        Die "Relance ce script depuis PowerShell en administrateur : clic droit sur PowerShell, puis Executer en tant qu'administrateur."
+    $code = $LASTEXITCODE
+    if ($code -ne 0 -and $code -ne $AlreadyThere) {
+        Die ("L'installation a echoue (code $code). Relance a la main pour voir" +
+             " le message : winget install --id $PackageId --exact --source winget")
     }
-
-    # PowerShell 5.1 demande TLS 1.2 pour parler a python.org. Sans cela le
-    # telechargement echoue avec une erreur de securite peu explicite.
-    [Net.ServicePointManager]::SecurityProtocol = `
-        [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls11
-
-    if ([Environment]::Is64BitOperatingSystem) {
-        $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "amd64" }
+    if ($code -eq $AlreadyThere) {
+        Ok "Python 3.13 est deja present, rien a installer"
     } else {
-        $arch = "win32"
+        Ok "Python installe"
     }
 
-    $url  = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-$arch.exe"
-    $dest = Join-Path $env:TEMP "python-$PythonVersion-$arch.exe"
-
-    Step "Telechargement ($arch) : $url"
-    try {
-        Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
-    } catch {
-        Die "Telechargement impossible : $($_.Exception.Message)"
-    }
-
-    # Un fichier de quelques octets est une page d'erreur, pas l'installeur.
-    $size = (Get-Item $dest).Length
-    if ($size -lt 5MB) {
-        Remove-Item $dest -Force -ErrorAction SilentlyContinue
-        Die "Fichier telecharge trop petit ($size octets) : ce n'est pas l'installeur. Verifie l'adresse."
-    }
-    Ok ("Installeur telecharge ({0:N1} Mo)" -f ($size / 1MB))
-
-    # "3.13.16" -> "Python313", pour que le repertoire d'installation suive
-    # la version au lieu de rester fige sur 3.13.
-    $parts   = $PythonVersion.Split(".")
-    $targetDir = Join-Path $env:ProgramFiles "Python$($parts[0])$($parts[1])"
-
-    Step "Installation silencieuse dans $targetDir, quelques instants"
-    try {
-        $process = Start-Process -FilePath $dest -ArgumentList @(
-            "/quiet"
-            "InstallAllUsers=1"
-            "PrependPath=1"
-            "Include_pip=1"
-            "Include_launcher=1"
-            "Include_test=0"
-            "AssociateFiles=0"
-            "Shortcuts=0"
-            "TargetDir=$targetDir"
-        ) -Wait -PassThru -NoNewWindow
-    } finally {
-        Remove-Item $dest -Force -ErrorAction SilentlyContinue
-    }
-
-    # 0 = succes, 3010 = succes mais redemarrage conseille.
-    if ($process.ExitCode -notin 0, 3010) {
-        Die "L'installeur a echoue (code $($process.ExitCode)). Relance a la main pour voir le message : $url"
-    }
-    if ($process.ExitCode -eq 3010) {
-        Warn "Installation reussie, mais Windows demande un redemarrage."
-    }
-
-    # Le PATH de la session courante ne voit pas l'installation : on va chercher
+    # Le PATH de la session ne voit pas l'installation : on va chercher
     # l'executable a son emplacement connu plutot que d'y croire.
-    $pythonExe = Join-Path $targetDir "python.exe"
-    if (-not (Test-Path $pythonExe)) {
-        Die "Python installe mais introuvable a $pythonExe. Redemarre Windows puis relance."
+    $pythonExe = Find-RealPython
+    if (-not $pythonExe) {
+        Write-Host ""
+        Warn "Python est installe mais introuvable dans cette session."
+        Warn "Ferme et rouvre PowerShell, puis relance : .\install.ps1"
+        Write-Host ""
+        Write-Host "Une fois ouvert, lance le programme avec :" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "    python serveur.py" -ForegroundColor White
+        Write-Host ""
+        exit 0
     }
-    Ok "Python installe ($pythonExe)"
-
-    # La session courante n'a pas le nouveau PATH : c'est l'attendu, pas une erreur.
-    Warn "Ouvre une nouvelle fenetre PowerShell pour que python soit reconnu."
-    $pythonInvoke = "python"
 }
 
-if ($python -and $python.Minor -ne $minorWanted) {
-    Warn "Version $($python.Major).$($python.Minor) installee alors que le projet vise 3.$minorWanted. La suite peut ne pas passer."
-}
-
-# ------------------------------------------------------------- dependance du projet
+# -------------------------------------------------------------- dependance
 
 Write-Host ""
 if ($SkipDependencies) {
     Info "Dependances ignorees (-SkipDependencies)."
 } elseif (-not (Test-Path $Requirements)) {
-    Warn "requirements.txt introuvable a $Requirements : dependance non installee."
+    Warn ("requirements.txt introuvable a $Requirements :" +
+          " dependance non installee.")
 } else {
     Step "Installation des dependances du projet (requirements.txt)"
-    & $pythonExe -m pip install -r $Requirements
+    Read-Native $pythonExe @("-m", "pip", "install", "-r", $Requirements) |
+        Out-Null
     if ($LASTEXITCODE -ne 0) {
         Die "Echec de l'installation des dependances (code $LASTEXITCODE)."
     }
     Ok "Dependances installees."
 }
 
+# ------------------------------------------------------------------ finale
+
+$command = "python"
+if ($pythonExe -and $pythonExe -like "*\Microsoft\WindowsApps\*") {
+    $command = "py -3"
+}
+if ($pythonExe -and $pythonExe -match "Launcher\\py\.exe$") {
+    $command = "py -3"
+}
+
 Write-Host ""
-Write-Host "Python correctement installé, tapez 'serveur.py' pour lancer le logiciel" -ForegroundColor Green
+Write-Host "Python correctement installe, tapez 'serveur.py' pour lancer le logiciel" -ForegroundColor Green
 Write-Host ""
 Write-Host "La commande complete, dans ce dossier :" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "    $pythonInvoke serveur.py" -ForegroundColor White
+Write-Host "    $command serveur.py" -ForegroundColor White
 Write-Host ""
 Write-Host "Le navigateur s'ouvre tout seul sur http://localhost:8123." -ForegroundColor Cyan
 Write-Host ""

@@ -28,17 +28,24 @@ Tape dans le terminal:
 
 ## 2 — Si le script échoue
 
-Le script télécharge et installe Python (version 3.13, celle que vise le
-projet), puis installe `requirements.txt`. Il ne réinstalle rien si Python est
-déjà là. S'il doit réellement installer Python, il demande les droits
-administrateur : clique droit sur PowerShell, **Exécuter en tant
-qu'administrateur**, puis relance la commande.
+Le script installe Python avec **WinGet**, le chemin que Windows utilise
+lui-même pour installer un logiciel. Rien à télécharger à la main, rien à
+autoriser dans un pare-feu : WinGet réclame l'élévation quand il en a besoin,
+donc le script n'a pas à être lancé en administrateur.
+
+Il installe Python **3.13**, la version que vise le projet, puis
+`requirements.txt`. Il ne touche pas à une installation existante : si Python
+est déjà là, il ne fait rien du tout. S'il trouve une autre version, il le
+signale sans y toucher.
 
 Quand il a fini, il affiche la commande qui lance le logiciel **pour ta
 machine**. Note-la : c'est celle de l'étape 3.
 
 > Si PowerShell refuse le script, autorise son exécution pour ton compte :
 > `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+
+> Si le script dit que WinGet manque, installe ou mets à jour **App Installer**
+> depuis le Microsoft Store.
 
 **Sans le script**, fais les deux étapes à la main :
 
@@ -394,7 +401,7 @@ arrive en cliquant une ligne du tableau.
 | Fichier | Rôle |
 |---|---|
 | `serveur.py` | le point de démarrage : `python serveur.py` |
-| `install.ps1` | installe Python et les dépendances du projet, pour un poste neuf |
+| `install.ps1` | installe Python via WinGet, et les dépendances du projet, pour un poste neuf |
 | `python/` | le code : `config.py` (chemins), `jsonio.py` (lecture/écriture JSON), `core.py` (logique pure), `storage/` (stockage SQLite/JSON interchangeable), `salary.py` (rémunérations et chèques-repas), `scraper.py`, `employers.py`, `server.py`, `migrate_to_sqlite.py` — lancés par `python -m python.scraper`, `python -m python.employers`, `python -m python.salary`, `python -m python.server` |
 | `index.html`, `css/style.css`, `js/pages/index.js` | le tableau des offres, ses filtres et son style |
 | `html/detail.html`, `js/pages/detail.js` | la fiche d'une offre (statut, remarque, priorité) |
