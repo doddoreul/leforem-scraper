@@ -10,3 +10,9 @@ parametres.json
 # Python
 __pycache__/
 *.pyc
+
+# Electron / empaquetage (tout est régénérable via scripts/*.ps1)
+node_modules/
+electron/dist/
+electron/build/
+build/

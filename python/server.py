@@ -42,7 +42,9 @@ from python.storage import get_storage
 
 BASE_DIR = config.BASE_DIR
 
-PORT = 8123
+# The port is a knob the desktop shell uses: it picks a free one and hands
+# it over so two instances never fight for 8123.
+PORT = int(os.environ.get("LEFOREM_PORT", "8123"))
 
 OCCUPATIONS_ENDPOINT = (
     "https://www.leforem.be/recherche-offres/"
@@ -720,9 +722,22 @@ def open_browser(url: str) -> bool:
 
 
 def main() -> None:
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    url = f"http://localhost:{PORT}"
-    opened = open_browser(url)
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    except OSError:
+        # The port is taken: bind an ephemeral one instead of crashing.
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    url = f"http://localhost:{server.server_address[1]}"
+
+    opened = not os.environ.get("LEFOREM_NO_BROWSER") and open_browser(url)
+
+    # Machine-readable line for the desktop shell (it waits on the port
+    # before opening its window); harmless for console users.
+    if os.environ.get("LEFOREM_REPORT_URL"):
+        print(f"LEFOREM_URL={url}", flush=True)
+
     logger.info("=" * 58)
     logger.info("  Le scraper Le Forem est démarré.")
     logger.info("")

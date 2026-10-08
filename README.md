@@ -6,6 +6,23 @@
 
 ---
 
+# La version bureau (Windows) — `go-electron`
+
+Depuis la branche `go-electron`, le scraper est aussi distribué en **application
+Windows native** : un installeur `.exe` qui embarque tout (Python 3 + serveur +
+`Electron` pour la fenêtre). **Aucun prérequis** — pas de PowerShell, pas
+d'installation de Python, pas de navigateur à ouvrir.
+
+- Télécharge `LeForem-Scraper-1.0.0-Setup.exe`, double-clic, c'est installé.
+- Une icône **LeForem Scraper** est créée (bureau et menu Démarrer) : elle ouvre
+  l'application dans sa propre fenêtre.
+- Tes données vont dans `%LOCALAPPDATA%\leforem-scraper\data` (le journal du
+  serveur est dans `...\logs\backend.log`).
+- Pour reconstruire l'installeur : `scripts\build-installer.ps1` (détails dans
+  `electron/README.md`).
+
+---
+
 # Partie 1 — Démarrage rapide
 
 Ce guide suppose **Windows**. Toutes les commandes se tapent dans PowerShell.

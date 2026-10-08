@@ -12,12 +12,36 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 
 # Repository root, i.e. the folder holding the entry-point scripts.
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Folder holding every generated file.
-DATA_DIR = os.path.join(BASE_DIR, "data")
+
+def _default_data_dir() -> str:
+    """Where the generated files live when nothing overrides it.
+
+    Priority:
+
+    1. ``LEFOREM_DATA_DIR`` — set by the desktop shell (Electron), which
+       points at the per-user folder of the installed application;
+    2. ``%LOCALAPPDATA%\\leforem-scraper\\data`` — when the code runs as a
+       frozen executable, because the bundled folder is replaced on every
+       update and must not hold user data;
+    3. ``data/`` next to the sources, the development layout.
+    """
+    override = os.environ.get("LEFOREM_DATA_DIR")
+    if override:
+        return override
+    if getattr(sys, "frozen", False):  # packaged by PyInstaller
+        root = os.environ.get("LOCALAPPDATA") or os.environ.get("HOME") or BASE_DIR
+        return os.path.join(root, "leforem-scraper", "data")
+    return os.path.join(BASE_DIR, "data")
+
+
+# Folder holding every generated file. Reassigned by the tests, which point
+# it at a temporary directory; always read it through data_dir().
+DATA_DIR = _default_data_dir()
 
 # Files shared by all searches.
 SCRAPES_FILE_NAME = "historique_scrapes.json"
