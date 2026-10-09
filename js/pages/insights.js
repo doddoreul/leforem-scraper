@@ -61,11 +61,11 @@ function readScope() {
 }
 
 function populateScopeSelect() {
-    const select = document.getElementById("dashScope");
+    const select = document.getElementById("scrapingSelect");
     if (!select) return Promise.resolve();
 
     return createScrapingSelector({
-        selectId: "dashScope",
+        selectId: "scrapingSelect",
         allowAll: true,       // "Toutes les recherches"
         allowCreate: true,    // "Créer un nouveau scrap"
         onChange: function (key) {

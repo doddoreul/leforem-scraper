@@ -2377,6 +2377,20 @@ class TestPagesInBrowser(BrowserPagesTestCase):
             "Metier / Liege",
         ])
 
+    def test_the_dashboard_uses_the_same_scraping_selector(self):
+        """Le Monitor et la page des offres partagent le même sélecteur.
+
+        Both pages filter the scraped data, so the element is the same one:
+        same id, same label, same rendering. A page keeping its own copy
+        would drift the day one of them changes.
+        """
+        dom = self.dump("/insights.html")
+        self.assertIn('id="scrapingSelect"', dom)
+        # La liste des recherches vient du composant partagé, donc il tourne.
+        self.assertIn("Toutes les recherches", dom)
+        self.assertIn("Scraping", dom)
+        self.assertNotIn('id="dashScope"', dom)
+
     def test_the_employer_page_draws_the_index(self):
         self.assertDrawn("/companies.html", ["Ateliers du Sud"])
 
