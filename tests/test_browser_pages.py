@@ -516,6 +516,89 @@ log("PERSIST-OK");
 </body></html>
 """
 
+# Restauration par les deux boutons d'import : chacun ne traite que son
+# propre type de fichier, et l'import modifie réellement le stockage.
+IMPORT_PROBE = """<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\\n"); }
+// La sonde garde ses minuteries ; celles de l'application sont interceptées :
+// un rechargement réel tuerait la sonde, on se contente de le remarquer.
+const realSetTimeout = window.setTimeout.bind(window);
+const sleep = ms => new Promise(resolve => realSetTimeout(resolve, ms));
+const scheduledDelays = [];
+window.setTimeout = function (fn, ms) {
+    scheduledDelays.push(ms);
+    return 0;
+};
+
+import { importUserdataFile, importScrapingFile } from "/js/shared/suivi.js";
+
+try {
+// La confirmation est testée à part : ici elle est accordée d'office.
+window.confirm = function () { return true; };
+
+function fileFrom(name, text) {
+    return new File([text], name, { type: "application/json" });
+}
+const base = "/api/tracking/metier_liege";
+const putStatut = statut => fetch(base + "/1902", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ statut: statut })
+});
+const statutOf = async () => {
+    const data = await fetch(base).then(r => r.json());
+    return (data["1902"] || {}).statut || "";
+};
+const scrapingCount = async () =>
+    (await fetch("/api/scrapings").then(r => r.json())).length;
+const toast = () => {
+    const box = document.getElementById("suiviToast");
+    return box ? box.textContent : "";
+};
+
+// 1. Un suivi local, puis les deux exports du serveur.
+await putStatut("postule");
+const userDoc = await fetch("/api/export/userdata").then(r => r.text());
+const scrapingDoc = await fetch("/api/export/scraping").then(r => r.text());
+log("exportsOk=" + (userDoc.length > 20 && scrapingDoc.length > 20));
+log("exportedTracking=" + JSON.stringify(JSON.parse(userDoc).tracking));
+
+// 2. Le bouton utilisateur restaure son fichier (le suivi avait changé).
+await putStatut("refuse");
+await importUserdataFile(fileFrom("user.json", userDoc));
+log("userdataRestored=" + (await statutOf()));
+
+// 3. Le bouton utilisateur refuse un fichier de scraping.
+await putStatut("refuse");
+await importUserdataFile(fileFrom("scraping.json", scrapingDoc));
+log("userdataRefusesScraping=" + (await statutOf()));
+log("wrongKindMessage=" + /autre bouton/.test(toast()));
+
+// 4. Le bouton scraping refuse un fichier de données utilisateur : le suivi
+//    qu'il porte n'est pas restauré.
+await importScrapingFile(fileFrom("user.json", userDoc));
+log("scrapingRefusesUserdata=" + (await statutOf()));
+log("scrapingKept=" + (await scrapingCount()));
+
+// 5. Le bouton scraping restaure son fichier et recharge la page.
+await importScrapingFile(fileFrom("scraping.json", scrapingDoc));
+log("scrapingRestored=" + (await scrapingCount()));
+log("reloadAsked=" + scheduledDelays.filter(ms => ms === 3000).length);
+
+await fetch(base + "/1902", { method: "DELETE" });
+log("IMPORT-OK");
+} catch (error) {
+    log("ERROR=" + (error && error.stack ? error.stack : String(error)));
+}
+</script>
+</body></html>
+"""
+
 # Reads the rendered offer sheet and reports the remuneration lines, so a
 # --dump-dom run shows what the user actually gets.
 REMUN_PROBE = r"""<!DOCTYPE html>
@@ -1412,6 +1495,7 @@ class ProbeHandler(server.Handler):
             "/tracked-probe.html": TRACKED_PROBE,
             "/dismiss-probe.html": DISMISS_PROBE,
             "/persist-probe.html": PERSIST_PROBE,
+            "/import-probe.html": IMPORT_PROBE,
             "/profile-probe.html": PROFILE_PROBE,
             "/remun-probe.html": REMUN_PROBE,
             "/keyword-probe.html": KEYWORD_PROBE,
@@ -1463,7 +1547,7 @@ class BrowserPagesTestCase(unittest.TestCase):
         cls.profile.cleanup()
         cls.tmp.cleanup()
 
-    def dump(self, path):
+    def dump(self, path, budget=VIRTUAL_TIME_BUDGET):
         result = subprocess.run(
             [
                 BROWSER,
@@ -1472,7 +1556,7 @@ class BrowserPagesTestCase(unittest.TestCase):
                 "--no-first-run",
                 "--no-default-browser-check",
                 "--user-data-dir=" + self.profile.name,
-                "--virtual-time-budget=" + VIRTUAL_TIME_BUDGET,
+                "--virtual-time-budget=" + str(budget),
                 "--dump-dom",
                 f"http://127.0.0.1:{self.port}{path}",
             ],
@@ -1483,8 +1567,8 @@ class BrowserPagesTestCase(unittest.TestCase):
         )
         return result.stdout or ""
 
-    def report_of(self, path):
-        dom = self.dump(path)
+    def report_of(self, path, budget=VIRTUAL_TIME_BUDGET):
+        dom = self.dump(path, budget)
         start = dom.find('<pre id="out">')
         end = dom.find("</pre>", start)
         self.assertGreater(start, 0, "la sonde n'a pas rendu")
@@ -1839,7 +1923,8 @@ class TestPagesInBrowser(BrowserPagesTestCase):
                 self.assertIn('id="themeGear"', dom)
                 self.assertIn("Exporter les données utilisateur", dom)
                 self.assertIn("Exporter le scraping", dom)
-                self.assertIn("Importer des données", dom)
+                self.assertIn("Importer les données utilisateur", dom)
+                self.assertIn("Importer un scraping", dom)
 
     def test_the_csv_export_is_temporarily_disabled(self):
         dom = self.dump("")
@@ -1848,6 +1933,25 @@ class TestPagesInBrowser(BrowserPagesTestCase):
             r'id="exportCsvBtn"[^>]*\bdisabled\b',
             "le bouton Exporter CSV doit être désactivé (temporairement)",
         )
+
+    def test_each_import_button_does_its_own_job(self):
+        report = self.report_of("/import-probe.html")
+
+        self.assertIn("IMPORT-OK", report, report)
+        self.assertIn("exportsOk=true", report)
+        # Le fichier exporté porte bien le suivi, et le bouton utilisateur le
+        # restaure dans le stockage.
+        self.assertIn('exportedTracking={"metier_liege"', report)
+        self.assertIn("userdataRestored=postule", report)
+        # Un fichier d'un autre type est refusé, avec un message qui le dit,
+        # et ne touche à rien.
+        self.assertIn("userdataRefusesScraping=refuse", report)
+        self.assertIn("scrapingRefusesUserdata=refuse", report)
+        self.assertIn("wrongKindMessage=true", report)
+        # Le bouton scraping restaure son fichier et recharge la page.
+        self.assertIn("scrapingKept=1", report)
+        self.assertIn("scrapingRestored=1", report)
+        self.assertIn("reloadAsked=1", report)
 
     def test_the_offers_table_fills_on_open(self):
         self.assertDrawn("", [

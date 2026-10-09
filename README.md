@@ -51,10 +51,11 @@ section **Données** :
 
 - **Exporter les données utilisateur** → `leforem-scraper-donnees-utilisateur-AAAA-MM-JJ.json` ;
 - **Exporter le scraping** → `leforem-scraper-scraping-AAAA-MM-JJ.json` ;
-- **Importer des données** → choisir l'un des fichiers ci-dessus (ou une
-  sauvegarde complète) : les données correspondantes sont **remplacées** sur
-  cet ordinateur, sans toucher au reste. L'ordre d'import des deux fichiers
-  n'a pas d'importance.
+- **Importer les données utilisateur** → restaure profil, entreprises, liste noire et suivi ; le scraping déjà en place n'est pas touché ;
+- **Importer un scraping** → restaure recherches, offres, détails et historiques (la page se recharge après l'import pour afficher les nouvelles offres) ; le suivi existant n'est pas touché.
+
+Chaque bouton d'import n'accepte que son propre type de fichier : il refuse
+un export de l'autre famille avec un message qui indique le bon bouton.
 
 > Un export complet (les deux fichiers) permet de migrer sur une autre
 > machine ou une autre plateforme **sans re-scraper** : les annonces

@@ -31,13 +31,24 @@ export const TRACKING_GEAR_ACTIONS = [
         title: "Offres scrapées, détails, historiques et état du scraping, en un fichier JSON"
     },
     {
-        id: "importDataInput",
-        label: "Importer des données",
-        title: "Restaurer des données utilisateur, un scraping ou une sauvegarde complète",
+        id: "importUserdataInput",
+        label: "Importer les données utilisateur",
+        title: "Restaurer un export de données utilisateur (profil, entreprises, liste noire, suivi)",
+        type: "file",
+        accept: ".json,application/json"
+    },
+    {
+        id: "importScrapingInput",
+        label: "Importer un scraping",
+        title: "Restaurer un export de scraping (recherches, offres, détails, historiques)",
         type: "file",
         accept: ".json,application/json"
     }
 ];
+
+// Le scraping importé change les offres affichées : la page est rechargée
+// peu après le message, pour que l'utilisateur ait le temps de le lire.
+const RELOAD_DELAY_MS = 3000;
 
 function localDateString(date) {
     const d = date || new Date();
@@ -125,86 +136,145 @@ export function exportScraping() {
 }
 
 /**
- * Restore a file produced by one of the exports (userdata, scraping or
- * complete). Only the data actually present in the file is replaced; the
- * backend is authoritative, so the local mirror is reloaded afterwards.
+ * Read a file as text, so the callers can await the whole import.
  * @param {File} file
+ * @returns {Promise<string>}
  */
-export function importDataFile(file) {
-    if (!file) return;
-    if (!window.confirm(
-        "L'import restaure les données du fichier : sur cet ordinateur, " +
-        "toutes les données correspondantes déjà présentes seront " +
-        "remplacées (données utilisateur, et le scraping si le fichier en " +
-        "contient). Continuer ?"
-    )) return;
+function readFileText(file) {
+    return new Promise(function (resolve, reject) {
+        const reader = new FileReader();
+        reader.onload = function () { resolve(reader.result); };
+        reader.onerror = function () { reject(new Error("lecture impossible")); };
+        reader.readAsText(file, "utf-8");
+    });
+}
 
-    const reader = new FileReader();
-    reader.onload = function () {
-        let parsed;
-        try {
-            parsed = JSON.parse(reader.result);
-        } catch (error) {
-            showTrackingMessage("Fichier invalide : JSON illisible.");
-            return;
-        }
-        if (!parsed || parsed.format !== "leforem-scraper") {
-            showTrackingMessage("Ce fichier n'est pas un export leforem-scraper.");
-            return;
-        }
-        fetch("/api/import", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: reader.result
+/**
+ * Restore one kind of data from an exported file.
+ *
+ * Each button handles its own file: the import only replaces what the file
+ * carries, so the two imports are independent (and composable in any order).
+ * @param {File} file
+ * @param {string} kind "userdata" (profil, entreprises, liste noire, suivi)
+ *                      or "scraping" (recherches, offres, historiques)
+ * @returns {Promise<void>} resolved once the import has been applied
+ */
+function importKind(file, kind) {
+    if (!file) return Promise.resolve();
+
+    return readFileText(file)
+        .catch(function () {
+            showTrackingMessage("Impossible de lire le fichier.");
         })
-            .then(function (response) {
-                return response.json().then(function (data) {
-                    return { ok: response.ok, data: data };
-                });
+        .then(function (text) {
+            if (typeof text !== "string") return null;
+
+            let parsed;
+            try {
+                parsed = JSON.parse(text);
+            } catch (error) {
+                showTrackingMessage("Fichier invalide : JSON illisible.");
+                return null;
+            }
+            if (!parsed || parsed.format !== "leforem-scraper") {
+                showTrackingMessage("Ce fichier n'est pas un export leforem-scraper.");
+                return null;
+            }
+
+            // Un fichier d'un autre type a son propre bouton : on refuse plutôt
+            // que de remplacer des données qui n'étaient pas visées.
+            const fileKind = typeof parsed.kind === "string" && parsed.kind
+                ? parsed.kind
+                : "complet";
+            if (fileKind !== "complet" && fileKind !== kind) {
+                showTrackingMessage(
+                    "Ce fichier est un export « " + fileKind + " » : " +
+                    "utilise l'autre bouton d'import."
+                );
+                return null;
+            }
+
+            const scope = kind === "scraping"
+                ? "le scraping : les recherches, offres et historiques de " +
+                  "cet ordinateur seront remplacés"
+                : "les données utilisateur : profil, entreprises, liste " +
+                  "noire et suivi de cet ordinateur seront remplacés";
+            if (!window.confirm("Importer " + scope + " ? Continuer ?")) {
+                return null;
+            }
+            return text;
+        })
+        .then(function (body) {
+            if (typeof body !== "string") return null;
+
+            return fetch("/api/import", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: body
             })
-            .then(function (result) {
-                const data = result.data || {};
-                if (result.ok && data.ok) {
+                .then(function (response) {
+                    return response.json().then(function (data) {
+                        return { ok: response.ok, data: data };
+                    });
+                })
+                .then(function (result) {
+                    const data = result.data || {};
+                    if (!result.ok || !data.ok) {
+                        throw {
+                            handled: true,
+                            message: data.error || "réponse inattendue."
+                        };
+                    }
+                    // Le serveur fait référence : on relit le suivi depuis lui.
                     return loadAllTracking().then(function () {
                         return data;
                     });
-                }
-                throw {
-                    handled: true,
-                    message: data.error || "réponse inattendue."
-                };
-            })
-            .then(function (data) {
-                document.dispatchEvent(new CustomEvent(SUIVI_EVENT));
-                const parts = [];
-                if (data.recherches) {
-                    parts.push(data.recherches + " recherche(s)");
-                }
-                if (data.offres) {
-                    parts.push(data.offres + " offre(s)");
-                }
-                if (data.details) {
-                    parts.push(data.details + " détail(s)");
-                }
-                if (data.suivi) {
-                    parts.push(data.suivi + " offre(s) suivie(s)");
-                }
-                showTrackingMessage(
-                    "Import terminé : " + (parts.join(", ") || "données restaurées.")
-                );
-            })
-            .catch(function (error) {
-                if (error && error.handled) {
-                    showTrackingMessage("Import refusé : " + error.message);
-                } else {
-                    showTrackingMessage("Import impossible : le serveur ne répond pas.");
-                }
-            });
-    };
-    reader.onerror = function () {
-        showTrackingMessage("Impossible de lire le fichier.");
-    };
-    reader.readAsText(file, "utf-8");
+                });
+        })
+        .then(function (data) {
+            if (!data) return;
+
+            document.dispatchEvent(new CustomEvent(SUIVI_EVENT));
+            const parts = [];
+            if (data.recherches) {
+                parts.push(data.recherches + " recherche(s)");
+            }
+            if (data.offres) {
+                parts.push(data.offres + " offre(s)");
+            }
+            if (data.details) {
+                parts.push(data.details + " détail(s)");
+            }
+            if (data.suivi) {
+                parts.push(data.suivi + " offre(s) suivie(s)");
+            }
+            showTrackingMessage(
+                "Import terminé : " + (parts.join(", ") || "données restaurées.")
+            );
+            if (kind === "scraping") {
+                // Les offres affichées changent : la page est rechargée.
+                window.setTimeout(function () {
+                    window.location.reload();
+                }, RELOAD_DELAY_MS);
+            }
+        })
+        .catch(function (error) {
+            if (error && error.handled) {
+                showTrackingMessage("Import refusé : " + error.message);
+            } else {
+                showTrackingMessage("Import impossible : le serveur ne répond pas.");
+            }
+        });
+}
+
+/** Restaurer un export de données utilisateur (profil, suivi…). */
+export function importUserdataFile(file) {
+    return importKind(file, "userdata");
+}
+
+/** Restaurer un export de scraping (recherches, offres…). */
+export function importScrapingFile(file) {
+    return importKind(file, "scraping");
 }
 
 export function setupSuiviActions() {
@@ -216,10 +286,17 @@ export function setupSuiviActions() {
     if (scrapingBtn) {
         scrapingBtn.addEventListener("click", exportScraping);
     }
-    const importInput = document.getElementById("importDataInput");
-    if (importInput) {
-        importInput.addEventListener("change", function () {
-            importDataFile(this.files && this.files[0]);
+    const userdataInput = document.getElementById("importUserdataInput");
+    if (userdataInput) {
+        userdataInput.addEventListener("change", function () {
+            importUserdataFile(this.files && this.files[0]);
+            this.value = "";
+        });
+    }
+    const scrapingInput = document.getElementById("importScrapingInput");
+    if (scrapingInput) {
+        scrapingInput.addEventListener("change", function () {
+            importScrapingFile(this.files && this.files[0]);
             this.value = "";
         });
     }
