@@ -159,6 +159,35 @@ function buildThemeSettings() {
 }
 
 /**
+ * La version de l'application, en pied du menu.
+ * Elle vient du serveur (python/version.py, régénéré à chaque build depuis
+ * electron/package.json) : une seule source de vérité.
+ */
+async function showAppVersion() {
+    const menu = document.getElementById("themeMenu");
+    if (!menu) return;
+
+    let label = menu.querySelector(".theme-menu-version");
+    if (!label) {
+        label = document.createElement("p");
+        label.className = "theme-menu-version";
+        menu.appendChild(label);
+    }
+    label.textContent = "Version …";
+
+    try {
+        const response = await fetch("/api/version");
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data && data.version) {
+            label.textContent = "Version " + data.version;
+        }
+    } catch (error) {
+        /* pas de version connue : on garde le libellé neutre */
+    }
+}
+
+/**
  * Build the cogwheel and follow the system theme until the user picks one.
  * @param {Array} [gearActions] entries of the "Données" section, page specific
  */
@@ -166,6 +195,7 @@ export function initTheme(gearActions) {
     document.documentElement.setAttribute("data-theme", currentTheme());
     buildThemeSettings();
     renderGearActions(gearActions);
+    showAppVersion();
 
     if (!storedTheme() && window.matchMedia) {
         const query = window.matchMedia("(prefers-color-scheme: dark)");

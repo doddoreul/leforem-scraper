@@ -1745,6 +1745,14 @@ th.col-forem-id {
     box-shadow: 0 0 0 3px var(--danger);
 }
 
+.theme-menu-version {
+    margin: var(--space-3) 0 0;
+    padding: var(--space-2) var(--space-3) 0;
+    border-top: 1px solid var(--border);
+    font-size: var(--font-sm);
+    color: var(--text-muted);
+}
+
 /* ============================================================
    BANDEAU DE MISE À JOUR (application de bureau uniquement)
    ============================================================ */

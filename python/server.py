@@ -36,6 +36,7 @@ import requests
 from python import config
 from python import migration
 from python import scraper
+from python import version as app_version
 from python.employers import refresh_index, summarize
 
 logger = logging.getLogger(__name__)
@@ -92,6 +93,9 @@ SCRAPER_RUN_PATH = "/api/scraper/run"
 DELETE_SCRAPING_PATH = "/delete-scraping"
 COMPANIES_PATH = "/companies.json"
 PROFILE_PATH = "/api/profil"
+
+# The application version, shown in the cogwheel menu.
+VERSION_PATH = "/api/version"
 
 # The bases that carry a follow-up (tracking), for the browser to reload
 # from the server rather than from its own, possibly empty, localStorage.
@@ -294,6 +298,10 @@ class Handler(BaseHTTPRequestHandler):
                 return
         if path == PROFILE_PATH:
             self._send_json(200, get_storage().read_profile())
+            return
+
+        if path == VERSION_PATH:
+            self._send_json(200, {"version": app_version.VERSION})
             return
 
         if path == EXPORT_PATH:

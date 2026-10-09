@@ -2556,6 +2556,10 @@ class TestPagesInBrowser(BrowserPagesTestCase):
                 self.assertIn("Importer les données utilisateur", dom)
                 self.assertIn("Importer un scraping", dom)
                 self.assertIn("Vérifier les mises à jour", dom)
+                # La version courante, en pied de menu.
+                self.assertIn('class="theme-menu-version"', dom)
+                self.assertRegex(dom, r"Version \d+\.\d+\.\d+")
+
 
     def test_the_csv_export_is_temporarily_disabled(self):
         dom = self.dump("")

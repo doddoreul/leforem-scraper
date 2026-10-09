@@ -9,6 +9,23 @@ Set-Location $root
 Write-Host "==> Installation de PyInstaller"
 python -m pip install --quiet --upgrade pyinstaller
 
+Write-Host "==> Version injectee dans python/version.py"
+# Le serveur Python ne lit pas electron/package.json (absent de l'exe) :
+# on en recopie la version, source unique de verite.
+$version = (Get-Content "electron\package.json" -Raw | ConvertFrom-Json).version
+$versionFile = Join-Path $root "python\version.py"
+$contenu = @"
+"""La version de l'application.
+
+Reflet de ``electron/package.json``, regenere par scripts/build-backend.ps1 :
+l'executeur packagé n'embarque pas ce fichier. Ne pas editer a la main.
+"""
+
+VERSION = "$version"
+"@
+[System.IO.File]::WriteAllText($versionFile, $contenu, (New-Object System.Text.UTF8Encoding($false)))
+Write-Host "    version $version -> python/version.py"
+
 Write-Host "==> Build du backend (serveur.py)"
 # Chemins absolus : avec --specpath, PyInstaller résout les sources de
 # --add-data par rapport au dossier du spec. Sortie dans electron/build/
