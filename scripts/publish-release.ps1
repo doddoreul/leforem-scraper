@@ -1,6 +1,7 @@
-# Publie la release GitHub v1.0.0 avec l'installeur et le portable, lus à la
-# racine du projet. Reprend le brouillon existant s'il y en a un : le script
-# peut être relancé sans dupliquer ni la release ni les assets.
+# Publie la release GitHub (le tag vient de electron/package.json, donc
+# v1.1.1) avec l'installeur et le portable, lus à la racine du projet.
+# Reprend le brouillon existant s'il y en a un : le script peut être relancé
+# sans dupliquer ni la release ni les assets.
 # Le jeton vient du credential manager de Git (jamais affiché).
 $ErrorActionPreference = "Stop"
 
@@ -28,7 +29,7 @@ $headers = @{
 }
 $api = "https://api.github.com/repos/$owner/$repo"
 
-# --- Release : prend le brouillon v1.0.0 existant, sinon le crée ---
+# --- Release : prend le brouillon du tag courant s'il existe, sinon le crée ---
 $existing = Invoke-RestMethod -Uri "$api/releases?per_page=100" -Headers $headers |
     Where-Object { $_.tag_name -eq $tag } | Select-Object -First 1
 
@@ -86,7 +87,7 @@ foreach ($asset in $assets) {
     Write-Host "  -> asset $($uploaded.id) ($($uploaded.size) octets)"
 }
 
-# --- Publication (fin de brouillon ; crée aussi le tag v1.0.0) ---
+# --- Publication (fin de brouillon ; crée aussi le tag de la version) ---
 if ($release.draft) {
     $published = Invoke-RestMethod -Method Patch -Uri "$api/releases/$($release.id)" `
         -Headers $headers -ContentType "application/json" `
