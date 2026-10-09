@@ -75,7 +75,6 @@ foreach ($asset in $assets) {
         Write-Host "Asset déjà présent ($asset), suppression puis re-upload ..."
         Invoke-RestMethod -Method Delete -Uri "$api/releases/assets/$($oldAsset.id)" `
             -Headers $headers | Out-Null
-        $release.assets = @($release.assets | Where-Object { $_.id -ne $oldAsset.id })
     }
 
     Write-Host "Upload de $asset ..."
