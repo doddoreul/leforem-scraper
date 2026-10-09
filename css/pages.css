@@ -373,7 +373,6 @@
 .kpi-green { border-top-color: var(--dash-green); }
 .kpi-yellow { border-top-color: var(--dash-yellow); }
 .kpi-magenta { border-top-color: var(--dash-magenta); }
-.kpi-red { border-top-color: var(--dash-red); }
 
 .dash-kpi-label {
     color: var(--dash-muted);
