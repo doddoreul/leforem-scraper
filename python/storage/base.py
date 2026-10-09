@@ -106,6 +106,25 @@ class Storage(abc.ABC):
         ...
 
     @abc.abstractmethod
+    def get_tracking_bases(self) -> List[str]:
+        """Every base name that carries at least one tracked offer.
+
+        Tracking can survive under a base that is no longer a scrape (a stale
+        name): the migration tool relies on this to never drop those rows.
+        """
+        ...
+
+    @abc.abstractmethod
+    def get_details_bases(self) -> List[str]:
+        """Every base name that carries cached offer details."""
+        ...
+
+    @abc.abstractmethod
+    def get_history_offers_bases(self) -> List[str]:
+        """Every base name that carries a per-search offer history."""
+        ...
+
+    @abc.abstractmethod
     def exists(self, kind: str, **kwargs: Any) -> bool:
         ...
 

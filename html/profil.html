@@ -128,6 +128,29 @@
 
     </form>
 
+    <section class="profile-field">
+        <h2 class="dash-card-title">Sauvegarder ou restaurer</h2>
+        <p class="dash-note">
+            L'export copie <strong>toutes</strong> tes données dans un fichier
+            JSON : offres, détails, historiques, profil, entreprises,
+            liste noire et suivi (statuts, remarques, favoris, priorités).
+            L'import restaure ce fichier et <strong>remplace</strong> les
+            données actuellement sauvegardées sur cet ordinateur.
+        </p>
+        <div class="migration-actions">
+            <button type="button" class="btn-secondary" id="exportAllBtn">
+                Exporter toutes les données
+            </button>
+            <button type="button" class="btn-secondary" id="importAllBtn">
+                Importer une sauvegarde
+            </button>
+            <input type="file" id="importAllInput" hidden
+                   accept=".json,application/json">
+            <span class="profile-message" id="migrationMessage"
+                  role="status"></span>
+        </div>
+    </section>
+
 </main>
 
 <script type="module" src="/js/pages/profil.js"></script>

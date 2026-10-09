@@ -197,6 +197,38 @@ class JsonStorage(Storage):
             return record
         return None
 
+    def get_tracking_bases(self) -> List[str]:
+        bases: List[str] = []
+        for file_name in self.list_data_files():
+            if not (file_name.startswith("tracking_")
+                    and file_name.endswith(".json")):
+                continue
+            bases.append(file_name[len("tracking_"):-len(".json")])
+        return bases
+
+    def get_details_bases(self) -> List[str]:
+        bases: List[str] = []
+        for file_name in self.list_data_files():
+            if not (file_name.startswith(config.DETAILS_PREFIX)
+                    and file_name.endswith(config.JSON_SUFFIX)):
+                continue
+            bases.append(
+                file_name[len(config.DETAILS_PREFIX):-len(config.JSON_SUFFIX)]
+            )
+        return bases
+
+    def get_history_offers_bases(self) -> List[str]:
+        """Per-search history files, excluding the two shared histories."""
+        bases: List[str] = []
+        for file_name in self.list_data_files():
+            if file_name in (config.SCRAPES_FILE_NAME,
+                             config.MODIFICATIONS_FILE_NAME):
+                continue
+            base = config.history_base(file_name)
+            if base is not None:
+                bases.append(base)
+        return bases
+
     def read_profile(self) -> Dict[str, Any]:
         data = read_json(config.shared_file("profil.json"), None)
         return data if isinstance(data, dict) else {}

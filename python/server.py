@@ -34,6 +34,7 @@ from urllib.parse import urlparse
 import requests
 
 from python import config
+from python import migration
 from python import scraper
 from python.employers import refresh_index, summarize
 
@@ -91,6 +92,13 @@ SCRAPER_RUN_PATH = "/api/scraper/run"
 DELETE_SCRAPING_PATH = "/delete-scraping"
 COMPANIES_PATH = "/companies.json"
 PROFILE_PATH = "/api/profil"
+
+# Full backup/restore of every data area (see python/migration.py).
+EXPORT_PATH = "/api/export"
+IMPORT_PATH = "/api/import"
+# A dump embeds every detail payload, so the whole backup can be bigger than
+# the 8 MB edit limit: give the import its own, generous ceiling.
+IMPORT_MAX_BODY = 256 * 1024 * 1024
 
 # Synchronous scraping: the browser blocks on SCRAPER_RUN_PATH until the
 # scraper has finished writing its files.
@@ -276,6 +284,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(200, get_storage().read_profile())
             return
 
+        if path == EXPORT_PATH:
+            self._handle_export()
+            return
+
         self._serve_file(path)
 
     def do_POST(self) -> None:
@@ -288,6 +300,8 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_companies_save()
         elif path == PROFILE_PATH:
             self._handle_profile_save()
+        elif path == IMPORT_PATH:
+            self._handle_import()
         else:
             self.send_error(404)
 
@@ -372,6 +386,62 @@ class Handler(BaseHTTPRequestHandler):
 
         get_storage().write_profile(payload)
         self._send_json(200, {"ok": True})
+
+    def _handle_export(self) -> None:
+        """Download the full dump of every data area (see python.migration)."""
+        try:
+            document = migration.export_document(get_storage())
+        except Exception as exc:
+            self._send_json(500, {"error": str(exc)})
+            return
+        body = json.dumps(document, ensure_ascii=False).encode("utf-8")
+        file_name = "leforem-scraper-export-%s.json" % time.strftime("%Y-%m-%d")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header(
+            "Content-Disposition", 'attachment; filename="%s"' % file_name
+        )
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _handle_import(self) -> None:
+        """Restore every data area from an uploaded dump."""
+        if not self._origin_allowed():
+            self._send_json(403, {"error": "origin refused"})
+            return
+
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        if length <= 0:
+            self._send_json(400, {"error": "empty body"})
+            return
+        if length > IMPORT_MAX_BODY:
+            self._send_json(400, {"error": "invalid body size"})
+            return
+        raw = self.rfile.read(length)
+        try:
+            document = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            self._send_json(400, {"error": "invalid JSON"})
+            return
+        if not isinstance(document, dict):
+            self._send_json(400, {"error": "invalid JSON"})
+            return
+
+        try:
+            counts = migration.import_document(document, get_storage())
+        except ValueError as exc:
+            self._send_json(400, {"error": str(exc)})
+            return
+        except Exception as exc:
+            self._send_json(500, {"error": str(exc)})
+            return
+
+        self._send_json(200, {"ok": True, **counts})
 
     def _handle_companies_save(self) -> None:
         """Save the employer index as edited by hand on the Employers page."""

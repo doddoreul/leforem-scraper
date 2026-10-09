@@ -31,6 +31,38 @@ Deux formats au choix :
 - La désinstallation **conserve** les données (volontaire) ; la version portable
   partage les mêmes fichiers.
 
+## Sauvegarder ou migrer tes données
+
+Un **export complet** regroupe *toutes* tes données dans un seul fichier JSON :
+offres scrapées et leurs détails, historiques (scrapes, offres disparues,
+modifications), profil candidat, entreprises, liste noire, état du scraping et
+suivi (statuts, dates, remarques, favoris, priorités). L'**import inverse**
+restaure ce fichier et **remplace** les données de l'ordinateur sur lequel il
+est relancé — idéal pour changer de PC ou garder une sauvegarde.
+
+> L'export récupère aussi les statuts/remarques d'offres qui ne correspondent
+> plus à une recherche actuelle (anciens noms de recherche) : aucune donnée
+> n'est laissée de côté.
+
+### Depuis l'application (recommandé)
+
+Page **Profil** → section **Sauvegarder ou restaurer** :
+
+- **Exporter toutes les données** : télécharge `leforem-scraper-export-AAAA-MM-JJ.json` ;
+- **Importer une sauvegarde** : choisir le fichier, confirmer, tout est restauré.
+
+### En ligne de commande (développeurs)
+
+```powershell
+python -m python.migration export sauvegarde.json          # sauvegarde complète
+python -m python.migration import sauvegarde.json          # restauration
+python -m python.migration export sauvegarde.json `
+    --data-dir $env:APPDATA\LeForem Scraper\data --backend sqlite
+```
+
+`--data-dir` et `--backend json|sqlite` permettent de migrer d'un dossier ou
+d'un stockage à l'autre.
+
 ## Distribuer la version bureau
 
 - Les fichiers prêts à livrer sont générés à la **racine du projet** par

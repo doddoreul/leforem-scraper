@@ -429,6 +429,27 @@ class SqliteStorage(Storage):
                 return data
             return None
 
+    def get_tracking_bases(self) -> List[str]:
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT base_name FROM offer_tracking ORDER BY base_name"
+            ).fetchall()
+            return [r["base_name"] for r in rows]
+
+    def get_details_bases(self) -> List[str]:
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT base_name FROM offer_details ORDER BY base_name"
+            ).fetchall()
+            return [r["base_name"] for r in rows]
+
+    def get_history_offers_bases(self) -> List[str]:
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT base_name FROM history_offers ORDER BY base_name"
+            ).fetchall()
+            return [r["base_name"] for r in rows]
+
     def exists(self, kind: str, **kwargs: Any) -> bool:
         if kind == "scraping":
             name = kwargs.get("name", "")
