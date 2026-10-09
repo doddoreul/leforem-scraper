@@ -37,10 +37,14 @@ Un **export complet** regroupe *toutes* tes données dans un seul fichier JSON :
 offres scrapées et leurs détails, historiques (scrapes, offres disparues,
 modifications), profil candidat, entreprises, liste noire, état du scraping et
 suivi (statuts, dates, remarques, favoris, priorités). **Les annonces
-elles-mêmes sont dans le fichier** : un import sur une autre machine ou
-plateforme restitue chaque recherche telle quelle, sans re-scraper. L'**import
-inverse** restaure ce fichier et **remplace** les données de l'ordinateur sur
-lequel il est relancé — idéal pour changer de PC ou garder une sauvegarde.
+elles-mêmes sont dans le fichier** : chaque recherche porte une liste
+`annonces` où chaque annonce est **un seul objet complet et lisible**
+(`titre`, `description`, `entreprise`, `contrat`, `localisation`, dates, lien,
+salaire) accompagné de la liste détail brut et du suivi — pas seulement un
+numéro de référence. Un import sur une autre machine ou plateforme restitue
+chaque recherche telle quelle, **sans re-scraper**. L'**import inverse**
+restaure ce fichier et **remplace** les données de l'ordinateur sur lequel il
+est relancé — idéal pour changer de PC ou garder une sauvegarde.
 
 > L'export récupère aussi les statuts/remarques d'offres qui ne correspondent
 > plus à une recherche actuelle (anciens noms de recherche) : aucune donnée

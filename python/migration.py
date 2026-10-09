@@ -13,6 +13,12 @@ JSON :
 - le suivi de chaque offre : statut, date de statut, remarque, favori et
   priorité.
 
+Chaque recherche porte aussi une liste ``annonces`` : chaque annonce y est
+fusionnée en un seul objet autoportant (annonce + détail + suivi, avec des
+champs lisibles ``titre``, ``description``, ``entreprise``…). Les sections
+brutes (``payload``, ``details``, ``tracking``) restent pour une restauration
+à l'identique.
+
 Le fichier porte un en-tête versionné (``format`` + ``version``) ; il est
 lisible à la main et portable d'un poste à l'autre, quel que soit le stockage
 sous-jacent (fichiers JSON ou base SQLite). L'import restaure l'état exact de
@@ -46,6 +52,97 @@ SCHEMA_VERSION = 1
 TRACKING_KEYS = ("statut", "statut_date", "remarque", "favori", "priorite")
 
 
+def _annonce_id(offer: Dict[str, Any]) -> str:
+    """The stable identifier of one offer, whatever the field name."""
+    return str(
+        offer.get("number")
+        or offer.get("id")
+        or offer.get("idOffreEmploi")
+        or offer.get("numero")
+        or ""
+    )
+
+
+def _merge_annonces(
+    payload: Optional[Dict[str, Any]],
+    details: Dict[str, Any],
+    tracking: Dict[str, Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """One complete, self-contained annonce per offer.
+
+    The storage keeps the listing (payload), the cached detail payloads and
+    the follow-up apart; this folds them back together so a reader, a human
+    or another platform sees a full annonce directly, without hunting for
+    references. The raw pieces stay in the same entry for an exact rebuild.
+    """
+    annonces: List[Dict[str, Any]] = []
+    offers = payload.get("offers", []) if isinstance(payload, dict) else []
+    if not isinstance(offers, list):
+        return annonces
+    for offer in offers:
+        if not isinstance(offer, dict):
+            continue
+        offer_id = _annonce_id(offer)
+        detail = details.get(offer_id) if isinstance(details, dict) else None
+        detail = detail if isinstance(detail, dict) else None
+        suivi = tracking.get(offer_id) if isinstance(tracking, dict) else None
+        annonces.append(
+            {
+                "id": offer_id,
+                "titre": (
+                    offer.get("offer_title")
+                    or (detail or {}).get("titreOffre")
+                    or ""
+                ),
+                "description": (
+                    offer.get("description")
+                    or (detail or {}).get("descriptionJob")
+                    or ""
+                ),
+                "entreprise": (
+                    offer.get("company")
+                    or (detail or {}).get("nomEmployeur")
+                    or ""
+                ),
+                "localisation": offer.get("location") or "",
+                "contrat": (
+                    offer.get("contract_type")
+                    or (detail or {}).get("typeContrat")
+                    or ""
+                ),
+                "horaire": offer.get("schedule") or "",
+                "date_publication": (
+                    offer.get("date_publication")
+                    or (detail or {}).get("datePublication")
+                    or ""
+                ),
+                "date_fin_diffusion": (
+                    offer.get("date_fin_diffusion")
+                    or (detail or {}).get("dateFinDiffusion")
+                    or ""
+                ),
+                "lien": offer.get("url") or "",
+                "metier": (
+                    offer.get("metier")
+                    or (detail or {}).get("metier")
+                    or ""
+                ),
+                "salaire": {
+                    "kind": offer.get("salary_kind"),
+                    "min": offer.get("salary_min"),
+                    "max": offer.get("salary_max"),
+                    "brut": offer.get("salary_gross"),
+                    "estime_horaire": offer.get("salary_hourly_estimate"),
+                    "confiance": offer.get("salary_confidence"),
+                },
+                "annonce": offer,
+                "detail": detail,
+                "suivi": suivi,
+            }
+        )
+    return annonces
+
+
 def _all_bases(storage: Any) -> List[str]:
     """Every base name the storage knows about.
 
@@ -70,13 +167,19 @@ def export_document(storage: Any) -> Dict[str, Any]:
     """Build the complete, versioned dump of every stored data area."""
     searches: List[Dict[str, Any]] = []
     for name in _all_bases(storage):
+        details = storage.read_details(name)
+        tracking = storage.read_tracking(name)
+        payload = storage.read_scraping(name)
         searches.append(
             {
                 "name": name,
-                "payload": storage.read_scraping(name),
-                "details": storage.read_details(name),
+                "payload": payload,
+                "details": details,
                 "history_offers": storage.read_history_offers(name),
-                "tracking": storage.read_tracking(name),
+                "tracking": tracking,
+                # Chaque annonce complète en un seul objet (annonce + détail
+                # + suivi) : le contenu est là, pas seulement des numéros.
+                "annonces": _merge_annonces(payload, details, tracking),
             }
         )
     return {

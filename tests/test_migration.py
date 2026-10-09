@@ -157,6 +157,41 @@ class MigrationContract:
         )
         self.assertEqual(offres, 3)
 
+    def test_annonces_are_self_contained(self):
+        """Each annonce is one readable object, not a reference.
+
+        The listing offer, its detail payload and its follow-up are folded
+        into a single entry with clear fields, so the file alone describes
+        every annonce completely.
+        """
+        seed_all(self.store)
+        self.store.write_details(
+            "liege",
+            {
+                "1": {
+                    "numero": "1",
+                    "titreOffre": "Chat",
+                    "descriptionJob": "<p>Adopter, nourrir.</p>",
+                    "nomEmployeur": "Velours & Co",
+                    "typeContrat": "CDI",
+                }
+            },
+        )
+        document = migration.export_document(self.store)
+        liege = next(s for s in document["searches"]
+                     if s["name"] == "liege")
+        annonce = next(a for a in liege["annonces"] if a["id"] == "1")
+
+        self.assertEqual(len(liege["annonces"]), 2)  # one per offer
+        self.assertEqual(annonce["titre"], "Chat")
+        self.assertEqual(annonce["entreprise"], "Velours & Co")
+        self.assertEqual(annonce["contrat"], "CDI")
+        self.assertEqual(annonce["detail"]["descriptionJob"],
+                         "<p>Adopter, nourrir.</p>")
+        self.assertEqual(annonce["suivi"]["statut"], "en_cours")
+        # The raw pieces stay alongside for an exact rebuild.
+        self.assertEqual(annonce["annonce"], {"number": "1", "titre": "Chat"})
+
     def test_import_restores_everything_exactly(self):
         seed_all(self.store)
         before = full_reads(self.store)
