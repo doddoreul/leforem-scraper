@@ -18,7 +18,7 @@ $contenu = @"
 """La version de l'application.
 
 Reflet de ``electron/package.json``, regenere par scripts/build-backend.ps1 :
-l'executeur packagé n'embarque pas ce fichier. Ne pas editer a la main.
+l'executable packague ne l'embarque pas. Ne pas editer a la main.
 """
 
 VERSION = "$version"
