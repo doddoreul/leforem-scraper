@@ -21,8 +21,8 @@ Deux formats au choix :
 
 | Fichier | Usage |
 |---|---|
-| `LeForem-Scraper-1.1.0-Setup.exe` | **À installer** : double-clic → assistant → raccourcis bureau + menu Démarrer créés |
-| `LeForem-Scraper-1.1.0-Portable.exe` | **Portable** : à poser sur une clé USB ou un dossier ; double-clic, rien à installer |
+| `LeForem-Scraper-1.1.1-Setup.exe` | **À installer** : double-clic → assistant → raccourcis bureau + menu Démarrer créés |
+| `LeForem-Scraper-1.1.1-Portable.exe` | **Portable** : à poser sur une clé USB ou un dossier ; double-clic, rien à installer |
 
 ## Où sont mes données ?
 
