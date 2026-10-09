@@ -29,6 +29,30 @@ $headers = @{
 }
 $api = "https://api.github.com/repos/$owner/$repo"
 
+# --- Le tag d'abord, sinon GitHub attache la release a "untagged-<sha>" ---
+# (il ne cree le tag qu'a la publication, ce qui rend la reprise hasardeuse).
+$branch = "go-electron"
+$headSha = (git rev-parse "$branch") 2>$null
+if (-not $headSha) { $headSha = (git rev-parse HEAD) }
+$headSha = $headSha.Trim()
+
+$ref = Invoke-RestMethod -Uri "$api/git/ref/tags/$tag" -Headers $headers -ErrorAction SilentlyContinue
+if ($ref) {
+    Write-Host "Tag $tag deja present ($($ref.object.sha.Substring(0, 7)))"
+} else {
+    New-Item -ItemType Directory -Path (Join-Path $env:TEMP "leforem-tag") -Force | Out-Null
+    $t = Join-Path $env:TEMP "leforem-tag\tag.json"
+    @{ ref = "refs/tags/$tag"; sha = $headSha } |
+        ConvertTo-Json | Set-Content $t -Encoding utf8
+    try {
+        Invoke-RestMethod -Method Post -Uri "$api/git/refs" -Headers $headers `
+            -ContentType "application/json" -InFile $t | Out-Null
+        Write-Host "Tag $tag cree sur $($headSha.Substring(0, 7))"
+    } catch {
+        Write-Warning "Tag non cree (existant ?) : $($_.Exception.Message)"
+    }
+}
+
 # --- Release : prend le brouillon du tag courant s'il existe, sinon le crée ---
 $existing = Invoke-RestMethod -Uri "$api/releases?per_page=100" -Headers $headers |
     Where-Object { $_.tag_name -eq $tag } | Select-Object -First 1
