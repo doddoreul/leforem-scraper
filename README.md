@@ -6,22 +6,38 @@
 
 ---
 
-# La version bureau (Windows) — `go-electron`
+# La version bureau (Windows)
 
-Depuis la branche `go-electron`, le scraper est aussi distribué en **application
-Windows native** : un installeur `.exe` qui embarque tout (Python 3 + serveur +
-`Electron` pour la fenêtre). **Aucun prérequis** — pas de PowerShell, pas
-d'installation de Python, pas de navigateur à ouvrir.
+Le scraper est distribué en **application Windows native** : un installeur
+`.exe` qui embarque tout (Python 3 + serveur + `Electron` pour la fenêtre).
+**Aucun prérequis** — pas de PowerShell, pas d'installation de Python, pas de
+navigateur à ouvrir. C'est la façon la plus simple d'utiliser le logiciel.
 
-- À la racine du projet, deux fichiers prêts à distribuer :
-  - `LeForem-Scraper-1.0.0-Setup.exe` — **à installer** : double-clic, un
-    assistant crée les raccourcis (bureau, menu Démarrer) ;
-  - `LeForem-Scraper-1.0.0-Portable.exe` — **portable** : à poser sur une clé
-    USB ou un dossier, double-clic, aucune installation.
-- Tes données vont dans `%LOCALAPPDATA%\leforem-scraper\data` (le journal du
-  serveur est dans `...\logs\backend.log`).
-- Pour reconstruire les deux : `scripts\build-installer.ps1` (détails dans
+## Installation
+
+Télécharge depuis la page **Releases** : <https://github.com/doddoreul/leforem-scraper/releases>
+
+Deux formats au choix :
+
+| Fichier | Usage |
+|---|---|
+| `LeForem-Scraper-1.0.0-Setup.exe` | **À installer** : double-clic → assistant → raccourcis bureau + menu Démarrer créés |
+| `LeForem-Scraper-1.0.0-Portable.exe` | **Portable** : à poser sur une clé USB ou un dossier ; double-clic, rien à installer |
+
+## Où sont mes données ?
+
+- `%APPDATA%\LeForem Scraper\data` — scrapes, base SQLite, profil, suivis
+- `%APPDATA%\LeForem Scraper\logs\backend.log` — journal du serveur
+- La désinstallation **conserve** les données (volontaire) ; la version portable
+  partage les mêmes fichiers.
+
+## Distribuer la version bureau
+
+- Les fichiers prêts à livrer sont générés à la **racine du projet** par
+  `scripts\build-installer.ps1` (installeur + portable, détails dans
   `electron/README.md`).
+- Ils ne sont **pas** commités dans git (≈120 Mo chacun) : publie-les en
+  **GitHub Release** comme celle de la v1.0.0.
 
 ---
 

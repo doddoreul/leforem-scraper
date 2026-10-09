@@ -29,7 +29,7 @@ Le backend lit les variables posées par la coque — les mêmes conventions que
 | Variable | Rôle |
 |---|---|
 | `LEFOREM_PORT` | Port HTTP (libre, choisi par `main.js`) |
-| `LEFOREM_DATA_DIR` | Dossier des données → `%LOCALAPPDATA%\leforem-scraper\data` |
+| `LEFOREM_DATA_DIR` | Dossier des données → `%APPDATA%\LeForem Scraper\data` |
 | `LEFOREM_NO_BROWSER` | Ne pas ouvrir le navigateur (Electron s'en charge) |
 | `LEFOREM_REPORT_URL` | Imprimer `LEFOREM_URL=...` sur stdout |
 
