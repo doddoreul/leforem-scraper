@@ -603,6 +603,167 @@ log("FRESH-OK");
 </body></html>
 """
 
+# Alerte de scraping obsolète : Échap la ferme, « Plus tard » la maintient
+# fermée jusqu'au prochain scraping.
+STALE_ALERT_PROBE = """<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\\n"); }
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// Le scraping de la sonde est vieux : l'alerte doit s'ouvrir d'elle-même.
+localStorage.clear();
+
+function newPage() {
+    const frame = document.createElement("iframe");
+    frame.width = "1400";
+    frame.height = "900";
+    frame.src = "/index.html";
+    document.body.appendChild(frame);
+    return frame;
+}
+const visible = async frame => {
+    const doc = frame.contentDocument;
+    const modal = doc && doc.getElementById("staleModal");
+    return !!(modal && modal.classList.contains("visible"));
+};
+
+const page1 = newPage();
+let opened = false;
+for (let i = 0; i < 80; i += 1) {
+    await sleep(150);
+    if (await visible(page1)) { opened = true; break; }
+}
+log("alerteOuvete=" + opened);
+
+// Échap, pressé alors que le focus est resté sur la page.
+page1.contentDocument.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+);
+await sleep(400);
+log("apresEchap=" + (await visible(page1)));
+const marqueur = localStorage.getItem("forem_stale_alert_dismissed") || "";
+log("marqueurDate=" + (marqueur ? "present" : "absent"));
+
+// Rechargement : l'alerte ne doit PAS revenir pour le même scraping.
+const page2 = newPage();
+await sleep(2500);
+log("apresRechargement=" + (await visible(page2)));
+
+// Un nouveau scraping (date différente) : l'alerte peut revenir.
+localStorage.setItem("forem_stale_alert_dismissed", "2026-10-08T00:00:00");
+const page3 = newPage();
+let revenue = false;
+for (let i = 0; i < 80; i += 1) {
+    await sleep(150);
+    if (await visible(page3)) { revenue = true; break; }
+}
+log("nouveauScraping=" + revenue);
+log("STALE-OK");
+</script>
+</body></html>
+"""
+
+# Mesure la géométrie de l'en-tête et le contenu du menu engrenage, tels que
+# le navigateur les calcule.
+LAYOUT_PROBE = """<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<iframe id="frame" src="/index.html" width="1400" height="900"></iframe>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\\n"); }
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+const frame = document.getElementById("frame");
+frame.src = "/index.html";
+// Pas de sélection mémorisée : la page s'ouvre sur « Toutes les recherches ».
+localStorage.removeItem("forem_scraping_select");
+
+for (let i = 0; i < 60; i += 1) {
+    await sleep(150);
+    const doc = frame.contentDocument;
+    if (doc && doc.querySelector("select.status-select")) break;
+}
+
+function measure(label) {
+    const doc = frame.contentDocument;
+    const head = doc.querySelector(".page-head");
+    const titles = doc.querySelector(".page-head-titles");
+    const tools = doc.querySelector(".page-head-tools");
+    const select = doc.getElementById("scrapingSelect");
+    const box = function (el) {
+        if (!el) return "absent";
+        const r = el.getBoundingClientRect();
+        return Math.round(r.left) + "->" + Math.round(r.right) +
+            " (largeur " + Math.round(r.width) + ")";
+    };
+    log(label + " entete   : " + box(head));
+    log(label + " titres   : " + box(titles));
+    log(label + " outils   : " + box(tools));
+    log(label + " select   : " + box(select));
+    log(label + " valeur   : " + (select ? select.value : "-"));
+    const style = function (el) {
+        const s = getComputedStyle(el);
+        return "display=" + s.display + " flexWrap=" + s.flexWrap +
+            " marginLeft=" + s.marginLeft + " flex=" + s.flex +
+            " width=" + s.width;
+    };
+    log(label + " style entete : " + style(head));
+    log(label + " style titres : " + style(titles));
+    log(label + " style outils : " + style(tools));
+}
+
+measure("TOUT");
+
+// Le menu engrenage, dans cette même vue.
+const doc = frame.contentDocument;
+const gear = doc.getElementById("themeGear");
+if (gear) gear.click();
+await sleep(200);
+const menu = doc.getElementById("themeMenu");
+log("menu visible : " + (menu && !menu.hidden));
+const menuBox = menu ? menu.getBoundingClientRect() : null;
+log("menu boite : top=" + Math.round(menuBox.top) + " bottom=" +
+    Math.round(menuBox.bottom) + " hauteur=" + Math.round(menuBox.height));
+log("fenetre hauteur : " + frame.contentWindow.innerHeight);
+const del = doc.getElementById("deleteScrapingGearBtn");
+const delBox = del ? del.getBoundingClientRect() : null;
+log("bouton supprimer : top=" + Math.round(delBox.top) + " bottom=" +
+    Math.round(delBox.bottom) + " display=" + getComputedStyle(del).display);
+const actions = Array.prototype.slice.call(
+    doc.querySelectorAll(".theme-actions .theme-action, .theme-actions input[type=file]")
+).map(function (el) {
+    return el.id + (el.tagName === "LABEL" ? "(fichier)" : "") +
+        "=" + (el.offsetParent === null ? "caché" : "visible");
+});
+log("actions : " + actions.join(", "));
+
+// Puis sur une recherche précise.
+const select = doc.getElementById("scrapingSelect");
+const option = select.querySelector('option[value="data_metier_liege.json"]');
+if (option) {
+    select.value = option.value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+}
+await sleep(800);
+measure("RECHERCHE");
+const actions2 = Array.prototype.slice.call(
+    doc.querySelectorAll(".theme-actions .theme-action, .theme-actions input[type=file]")
+).map(function (el) {
+    return el.id + (el.tagName === "LABEL" ? "(fichier)" : "") +
+        "=" + (el.offsetParent === null ? "caché" : "visible");
+});
+log("actions2 : " + actions2.join(", "));
+log("LAYOUT-OK");
+</script>
+</body></html>
+"""
+
 # Restauration par les deux boutons d'import : chacun ne traite que son
 # propre type de fichier, et l'import modifie réellement le stockage.
 IMPORT_PROBE = """<!DOCTYPE html>
@@ -1742,6 +1903,8 @@ class ProbeHandler(server.Handler):
             "/import-probe.html": IMPORT_PROBE,
             "/import-dom-probe.html": IMPORT_DOM_PROBE,
             "/fresh-start-probe.html": FRESH_START_PROBE,
+            "/layout-probe.html": LAYOUT_PROBE,
+            "/stale-alert-probe.html": STALE_ALERT_PROBE,
             "/profile-probe.html": PROFILE_PROBE,
             "/remun-probe.html": REMUN_PROBE,
             "/keyword-probe.html": KEYWORD_PROBE,
@@ -1879,6 +2042,42 @@ class SqliteBrowserPagesTestCase(BrowserPagesTestCase):
         cls.thread.join(timeout=5)
         cls.profile.cleanup()
         cls.tmp.cleanup()
+
+    def test_the_header_keeps_the_selector_on_the_right(self):
+        """Le sélecteur de scraping doit rester à droite du titre.
+
+        Le bloc d'outils et le sélecteur lui-même finissent au bord droit de
+        l'en-tête : un ``display: block`` sur ``.page-head`` (règle perdue à
+        cause d'un commentaire CSS mal fermé) les empilait l'un sous l'autre.
+        """
+        report = self.report_of("/layout-probe.html", budget="20000")
+        self.assertIn("LAYOUT-OK", report, report)
+        self.assertIn("style entete : display=flex", report)
+        self.assertIn("style outils : display=flex", report)
+
+    def test_the_delete_button_stays_in_the_gear_menu(self):
+        """« Supprimer ce scraping » reste proposé, même sur « Toutes ».
+
+        En vue « Toutes les recherches » il n'y a rien à supprimer, mais
+        cacher le bouton le faisait disparaître sans expliquer pourquoi.
+        """
+        report = self.report_of("/layout-probe.html", budget="20000")
+        self.assertIn("LAYOUT-OK", report, report)
+        self.assertIn("deleteScrapingGearBtn=visible", report)
+
+    def test_the_stale_alert_closes_on_escape_and_stays_closed(self):
+        report = self.report_of("/stale-alert-probe.html", budget="40000")
+
+        self.assertIn("STALE-OK", report, report)
+        # Elle s'ouvre bien toute seule sur un scraping vieux.
+        self.assertIn("alerteOuvete=true", report)
+        # Échap la ferme, et le refus est mémorisé.
+        self.assertIn("apresEchap=false", report)
+        self.assertIn("marqueurDate=present", report)
+        # Au rechargement, elle ne revient pas pour le même scraping.
+        self.assertIn("apresRechargement=false", report)
+        # Mais un nouveau scraping (donc une nouvelle date) la ramène.
+        self.assertIn("nouveauScraping=true", report)
 
     def test_the_menu_import_buttons_work_on_sqlite(self):
         report = self.report_of("/import-dom-probe.html", budget="30000")
@@ -2279,8 +2478,7 @@ class TestPagesInBrowser(BrowserPagesTestCase):
             "le bouton Exporter CSV doit être désactivé (temporairement)",
         )
 
-    def test_each_import_button_does_its_own_job(self):
-        # La sonde enchaîne plusieurs imports ; le stockage JSON écrit chaque
+    def test_each_import_button_does_its_own_job(self):        # La sonde enchaîne plusieurs imports ; le stockage JSON écrit chaque
         # fichier avec fsync, ce qui peut dépasser le budget quand la machine
         # est chargée (lancement de toute la suite).
         report = self.report_of("/import-probe.html", budget="120000")

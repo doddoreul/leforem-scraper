@@ -751,6 +751,29 @@ let trackedAlertsExpanded = false;
 
 const TRACKED_ALERTS_DISMISS_KEY = "forem_tracked_alerts_dismissed";
 
+// « Plus tard » sur l'alerte de scraping obsolète. Le marqueur retient la
+// date du scraping masqué : l'alerte revient donc au prochain scraping,
+// et seulement si celui-ci est à son tour obsolète.
+const STALE_ALERT_DISMISS_KEY = "forem_stale_alert_dismissed";
+
+function staleAlertDismissedFor(scrapeDate) {
+    if (!scrapeDate) return false;
+    try {
+        return localStorage.getItem(STALE_ALERT_DISMISS_KEY) === scrapeDate;
+    } catch (error) {
+        return false;
+    }
+}
+
+function rememberStaleAlertDismissal() {
+    if (!lastScrapeDate) return;
+    try {
+        localStorage.setItem(STALE_ALERT_DISMISS_KEY, lastScrapeDate);
+    } catch (error) {
+        /* storage unavailable */
+    }
+}
+
 // "Masquer" keeps the panel hidden until a new scraping replaces the one
 // currently displayed: the marker remembers the scrape date it hid.
 function trackedAlertsHiddenForCurrentScrape() {
@@ -1633,16 +1656,9 @@ function selectCreatedScraping(name) {
 // sélection courante.
 
 
-function updateDeleteGearButtonVisibility() {
-    const btn = document.getElementById("deleteScrapingGearBtn");
-    if (!btn) return;
-    // Show only when a specific scrape is selected (not "all")
-    if (dataUrl && dataUrl !== "all" && activeBaseName) {
-        btn.style.display = "";
-    } else {
-        btn.style.display = "none";
-    }
-}
+// Le bouton reste présent dans le menu même en vue « Toutes les
+// recherches » : son clic explique alors qu'il faut d'abord choisir un
+// scraping précis. Le cacher le faisait simplement disparaître.
 
 
 // ============================================================
@@ -1715,7 +1731,6 @@ function setupScrapingSelector() {
             resetGroupFilter();
             resetSort();
             reloadTables();
-            updateDeleteGearButtonVisibility();
             refreshScraperButtonTarget();
         }
     }).then(function (result) {
@@ -1723,7 +1738,6 @@ function setupScrapingSelector() {
             // result.current est la recherche retenue : celle du profil, ou
             // « Toutes les recherches » si le profil n'en a aucune.
             applyScrapingSelection(result.current, result.scrapings);
-            updateDeleteGearButtonVisibility();
             refreshScraperButtonTarget();
             reloadStorageMaps();
             reloadTables();
@@ -2120,6 +2134,9 @@ function maybeShowStaleAlert(data, scrapeDate) {
     const tooOld =
         Date.now() - t > STALE_AFTER_HOURS * 3600 * 1000;
     if (!tooOld) return;
+    // « Plus tard » masque l'alerte pour CE scraping : elle reviendra avec
+    // le prochain, s'il est lui aussi obsolète.
+    if (staleAlertDismissedFor(scrapeDate)) return;
 
     staleAlertShown = true;
 
@@ -2146,15 +2163,20 @@ function maybeShowStaleAlert(data, scrapeDate) {
     if (modal) modal.classList.add("visible");
 }
 
-function closeStaleAlert() {
+function hideStaleAlert() {
     const modal = document.getElementById("staleModal");
     if (modal) modal.classList.remove("visible");
 }
 
+function dismissStaleAlert() {
+    hideStaleAlert();
+    rememberStaleAlertDismissal();
+}
+
 function refreshFromStaleAlert() {
-    // Same path as the « Actualiser » button next to the last scrape date:
-    // confirmation, then the scraping itself.
-    closeStaleAlert();
+    // Pas de masquage mémorisé : l'actualisation change la date du scraping,
+    // donc l'alerte peut revenir si les nouvelles données sont vieilles aussi.
+    hideStaleAlert();
     const button = document.getElementById("refreshScrapeBtn");
     if (button) button.click();
 }
@@ -2345,11 +2367,11 @@ async function init() {
 
     const closeStaleBtn = document.getElementById("closeStaleBtn");
     if (closeStaleBtn) {
-        closeStaleBtn.addEventListener("click", closeStaleAlert);
+        closeStaleBtn.addEventListener("click", dismissStaleAlert);
     }
     const closeStaleFooterBtn = document.getElementById("closeStaleFooterBtn");
     if (closeStaleFooterBtn) {
-        closeStaleFooterBtn.addEventListener("click", closeStaleAlert);
+        closeStaleFooterBtn.addEventListener("click", dismissStaleAlert);
     }
     const staleRefreshBtn = document.getElementById("staleRefreshBtn");
     if (staleRefreshBtn) {
@@ -2358,10 +2380,7 @@ async function init() {
     const staleModal = document.getElementById("staleModal");
     if (staleModal) {
         staleModal.querySelector(".modal-backdrop")
-            .addEventListener("click", closeStaleAlert);
-        staleModal.addEventListener("keydown", function (e) {
-            if (e.key === "Escape") closeStaleAlert();
-        });
+            .addEventListener("click", dismissStaleAlert);
     }
 
     // Delete confirmation modal
@@ -2394,10 +2413,22 @@ async function init() {
     if (deleteConfirmModal) {
         deleteConfirmModal.querySelector(".modal-backdrop")
             .addEventListener("click", closeDeleteConfirm);
-        deleteConfirmModal.addEventListener("keydown", function (e) {
-            if (e.key === "Escape") closeDeleteConfirm();
-        });
     }
+
+    // Échap ferme la modale ouverte. Le keydown posé sur la modale elle-même
+    // ne suffisait pas : le focus reste sur la page, donc la touche ne
+    // l'atteignait jamais.
+    document.addEventListener("keydown", function (event) {
+        if (event.key !== "Escape") return;
+        if (staleModal && staleModal.classList.contains("visible")) {
+            dismissStaleAlert();
+            return;
+        }
+        if (deleteConfirmModal
+                && deleteConfirmModal.classList.contains("visible")) {
+            closeDeleteConfirm();
+        }
+    });
 
     // Relancer le scraping depuis la date de dernière exécution.
     const statDateEl = document.getElementById("statDate");
