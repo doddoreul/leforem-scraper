@@ -7,7 +7,8 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-$version = "1.0.0"
+# La version vient de electron/package.json, source unique de vérité.
+$version = (Get-Content "electron\package.json" -Raw | ConvertFrom-Json).version
 $tag = "v$version"
 $owner = "doddoreul"
 $repo = "leforem-scraper"

@@ -1,7 +1,7 @@
 {
   "name": "leforem-scraper",
   "productName": "LeForem Scraper",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Le scraper des offres leforem.be, en application de bureau Windows.",
   "main": "main.js",
   "author": "doddoreul",
