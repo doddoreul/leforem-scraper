@@ -22,7 +22,7 @@ import {
     validateProfile,
     writeProfile,
 } from "../shared/profile.js";
-import { SUIVI_EVENT } from "../shared/suivi.js";
+import { SUIVI_EVENT, TRACKING_GEAR_ACTIONS, setupSuiviActions } from "../shared/suivi.js";
 
 const FORM_FIELDS = ["keywordsText", "excludedText", "hourlyRate", "maxDistanceKm"];
 
@@ -287,115 +287,9 @@ function warnOnLeave(event) {
     return "";
 }
 
-/* ============================================================
-   SAUVEGARDE / RESTAURATION — toutes les données, via
-   /api/export et /api/import (voir python.migration).
-   ============================================================ */
-
-function migrationMessage(text) {
-    const box = byId("migrationMessage");
-    if (!box) return;
-    box.textContent = text;
-    setTimeout(function () { box.textContent = ""; }, 9000);
-}
-
-function exportAllData() {
-    fetch("/api/export")
-        .then(function (response) {
-            if (!response.ok) throw new Error("HTTP " + response.status);
-            return response.blob();
-        })
-        .then(function (blob) {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            migrationMessage("Toutes les données exportées.");
-        })
-        .catch(function () {
-            migrationMessage("Export impossible : le serveur ne répond pas.");
-        });
-}
-
-function importAllData(file) {
-    if (!file) return;
-    if (!window.confirm(
-        "L'import remplace toutes les données actuelles (offres, détails, " +
-        "historiques, profil, entreprises, liste noire et suivi) par celles " +
-        "de la sauvegarde. Continuer ?"
-    )) return;
-
-    const reader = new FileReader();
-    reader.onload = function () {
-        let parsed;
-        try {
-            parsed = JSON.parse(reader.result);
-        } catch (error) {
-            migrationMessage("Fichier invalide : JSON illisible.");
-            return;
-        }
-        if (!parsed || parsed.format !== "leforem-scraper") {
-            migrationMessage("Ce fichier n'est pas une sauvegarde complète.");
-            return;
-        }
-        fetch("/api/import", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: reader.result
-        })
-            .then(function (response) {
-                return response.json().then(function (data) {
-                    return { ok: response.ok, data: data };
-                });
-            })
-            .then(function (result) {
-                const data = result.data || {};
-                if (result.ok && data.ok) {
-                    migrationMessage(
-                        "Import terminé : " + data.recherches + " recherche(s), " +
-                        data.offres + " offre(s), " + data.details + " détail(s), " +
-                        data.suivi + " offre(s) suivie(s)."
-                    );
-                } else {
-                    migrationMessage(
-                        "Import refusé : " + (data.error || "réponse inattendue.")
-                    );
-                }
-            })
-            .catch(function () {
-                migrationMessage("Import impossible : le serveur ne répond pas.");
-            });
-    };
-    reader.onerror = function () {
-        migrationMessage("Impossible de lire le fichier.");
-    };
-    reader.readAsText(file, "utf-8");
-}
-
-function setupMigration() {
-    const exportBtn = byId("exportAllBtn");
-    if (exportBtn) {
-        exportBtn.addEventListener("click", exportAllData);
-    }
-    const importBtn = byId("importAllBtn");
-    const importInput = byId("importAllInput");
-    if (importBtn && importInput) {
-        importBtn.addEventListener("click", function () {
-            importInput.click();
-        });
-        importInput.addEventListener("change", function () {
-            importAllData(this.files && this.files[0]);
-            this.value = "";
-        });
-    }
-}
-
 function setup() {
-    initTheme();
-    setupMigration();
+    initTheme(TRACKING_GEAR_ACTIONS);
+    setupSuiviActions();
 
     byId("profileForm").addEventListener("submit", save);
     byId("resetProfileBtn").addEventListener("click", reset);
@@ -420,24 +314,10 @@ function setup() {
 
     window.addEventListener("beforeunload", warnOnLeave);
 
-    // An imported tracking file carries the profile: pick it up and push it
-    // to the database, which is the source of truth.
-    document.addEventListener(SUIVI_EVENT, async function () {
-        let mirrored = emptyProfile();
-        try {
-            const raw = localStorage.getItem("forem_profil");
-            if (raw) mirrored = JSON.parse(raw);
-        } catch (error) {
-            return;
-        }
-        if (!mirrored || mirrored.version !== 1) return;
-        if (mirrored.updatedAt && mirrored.updatedAt !== saved.updatedAt) {
-            saved = mirrored;
-            fillForm(saved);
-            dirty = false;
-            await writeProfile(saved);
-            showMessage("Profil mis à jour depuis l'import.", "ok");
-        }
+    // Après un import (menu Données), le profil vient du serveur : on relit
+    // la base pour remplir le formulaire avec les données restaurées.
+    document.addEventListener(SUIVI_EVENT, function () {
+        load();
     });
 
     load();

@@ -287,6 +287,135 @@ class MigrationContract:
         with self.assertRaises(ValueError):
             migration.import_document(document, self.store)
 
+    def test_userdata_export_keeps_only_user_data(self):
+        seed_all(self.store)
+        document = migration.export_userdata_document(self.store)
+
+        self.assertEqual(document["kind"], "userdata")
+        self.assertNotIn("searches", document)
+        self.assertNotIn("history_scrapes", document)
+        self.assertEqual(document["profile"]["keywords"], ["x"])
+        self.assertEqual(document["companies"]["employers"],
+                         {"Accent Job": {"count": 2}})
+        self.assertEqual(document["blacklist"], {"words": ["stage"]})
+        self.assertEqual(document["tracking"]["liege"]["1"]["statut"],
+                         "en_cours")
+
+    def test_scraping_export_keeps_only_the_scraping(self):
+        seed_all(self.store)
+        document = migration.export_scraping_document(self.store)
+
+        self.assertEqual(document["kind"], "scraping")
+        self.assertNotIn("profile", document)
+        self.assertNotIn("companies", document)
+        self.assertNotIn("blacklist", document)
+        self.assertNotIn("tracking", document)
+        self.assertEqual(
+            {s["name"] for s in document["searches"]}, {"liege", "global"}
+        )
+        liege = next(s for s in document["searches"] if s["name"] == "liege")
+        self.assertEqual(liege["payload"]["offers"],
+                         [{"number": "1", "titre": "Chat"}] * 2)
+        self.assertEqual(len(liege["details"]), 1)
+        self.assertEqual(len(liege["annonces"]), 2)  # complete, still readable
+        for annonce in liege["annonces"]:
+            self.assertIsNone(annonce["suivi"])  # no tracking here
+        self.assertEqual(len(document["history_scrapes"]), 2)
+
+    def test_userdata_import_keeps_the_searches(self):
+        """Importer des données utilisateur ne touche pas au scraping."""
+        seed_all(self.store)
+        document = migration.export_userdata_document(self.store)
+        document["profile"]["keywordsText"] = "changed"
+
+        counts = migration.import_document(document, self.store)
+
+        self.assertEqual(counts["recherches"], 0)
+        self.assertEqual(counts["suivi"], 1)
+        self.assertEqual(self.store.read_profile()["keywordsText"], "changed")
+        # Le scraping et son suivi existant sont intacts.
+        self.assertEqual(set(self.store.get_scraping_names()),
+                         {"liege", "global"})
+        self.assertEqual(self.store.read_tracking("liege")["1"]["statut"],
+                         "en_cours")
+
+    def test_scraping_import_keeps_the_user_data(self):
+        """Importer un scraping ne touche ni au profil ni au suivi."""
+        seed_all(self.store)
+        before = {
+            "profile": self.store.read_profile(),
+            "companies": self.store.read_companies(),
+            "blacklist": self.store.read_blacklist(),
+            "tracking": self.store.read_tracking("liege"),
+        }
+        document = migration.export_scraping_document(self.store)
+        document["scrape_state"] = {"pending": False, "restart": True}
+
+        counts = migration.import_document(document, self.store)
+
+        self.assertEqual(counts["recherches"], 2)
+        self.assertEqual(counts["suivi"], 0)  # le scraping ne porte pas de suivi
+        self.assertEqual(self.store.read_profile(), before["profile"])
+        self.assertEqual(self.store.read_companies(), before["companies"])
+        self.assertEqual(self.store.read_blacklist(), before["blacklist"])
+        self.assertEqual(self.store.read_tracking("liege"), before["tracking"])
+        self.assertEqual(self.store.read_scraping("liege")["offers"],
+                         [{"number": "1", "titre": "Chat"}] * 2)
+        self.assertTrue(self.store.read_scrape_state()["restart"])
+
+    def test_partial_imports_combine_in_any_order(self):
+        """userdata + scraping = la sauvegarde complète, quel que soit l'ordre."""
+        seed_all(self.store)
+        user_doc = migration.export_userdata_document(self.store)
+        scraping_doc = migration.export_scraping_document(self.store)
+
+        def run_(order):
+            folder = tempfile.TemporaryDirectory()
+            saved = config.DATA_DIR
+            config.DATA_DIR = folder.name
+            try:
+                if isinstance(self.store, JsonStorage):
+                    target = JsonStorage()
+                else:
+                    target = SqliteStorage(
+                        os.path.join(folder.name, "leforem.db")
+                    )
+                for doc in order:
+                    migration.import_document(doc, target)
+                reads = full_reads(target)
+            finally:
+                config.DATA_DIR = saved
+                folder.cleanup()
+            return reads
+
+        first = run_([user_doc, scraping_doc])
+        second = run_([scraping_doc, user_doc])
+
+        self.assertEqual(first["profile"], second["profile"])
+        self.assertEqual(
+            {s["name"] for s in first["searches"]},
+            {s["name"] for s in second["searches"]},
+        )
+        by_name = {s["name"]: s for s in first["searches"]}
+        self.assertEqual(set(by_name), {"liege", "global"})
+        self.assertEqual(by_name["liege"]["tracking"]["1"]["statut"],
+                         "en_cours")
+        self.assertEqual(
+            first["history_scrapes"], second["history_scrapes"]
+        )
+
+    def test_import_rejects_a_file_without_any_section(self):
+        document = {"format": "leforem-scraper", "version": 1,
+                    "kind": "userdata"}
+        with self.assertRaises(ValueError):
+            migration.import_document(document, self.store)
+
+    def test_import_rejects_an_invalid_tracking_base(self):
+        document = migration.export_userdata_document(self.store)
+        document["tracking"] = {"../evil": {}}
+        with self.assertRaises(ValueError):
+            migration.import_document(document, self.store)
+
     def test_export_is_portable_as_json(self):
         seed_all(self.store)
         dump_path = os.path.join(self.tmp.name, "sauvegarde.json")
@@ -473,6 +602,37 @@ class MigrationRouteTestCase(unittest.TestCase):
             timeout=15,
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_export_userdata_route(self):
+        from python.storage import get_storage
+        seed_all(get_storage())
+
+        response = requests.get(self.url("/api/export/userdata"), timeout=15)
+        self.assertEqual(response.status_code, 200)
+        document = response.json()
+        self.assertEqual(document["kind"], "userdata")
+        self.assertNotIn("searches", document)
+        self.assertIn("donnees-utilisateur", response.headers.get(
+            "Content-Disposition", ""))
+        self.assertEqual(document["tracking"]["liege"]["1"]["statut"],
+                         "en_cours")
+
+    def test_export_scraping_route(self):
+        from python.storage import get_storage
+        seed_all(get_storage())
+
+        response = requests.get(self.url("/api/export/scraping"), timeout=15)
+        self.assertEqual(response.status_code, 200)
+        document = response.json()
+        self.assertEqual(document["kind"], "scraping")
+        self.assertIn("searches", document)
+        self.assertNotIn("tracking", document)
+        self.assertNotIn("profile", document)
+        self.assertIn("scraping", response.headers.get(
+            "Content-Disposition", ""))
+        self.assertEqual(
+            {s["name"] for s in document["searches"]}, {"liege", "global"}
+        )
 
 
 if __name__ == "__main__":

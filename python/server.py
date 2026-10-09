@@ -95,6 +95,8 @@ PROFILE_PATH = "/api/profil"
 
 # Full backup/restore of every data area (see python/migration.py).
 EXPORT_PATH = "/api/export"
+USERDATA_EXPORT_PATH = "/api/export/userdata"
+SCRAPING_EXPORT_PATH = "/api/export/scraping"
 IMPORT_PATH = "/api/import"
 # A dump embeds every detail payload, so the whole backup can be bigger than
 # the 8 MB edit limit: give the import its own, generous ceiling.
@@ -287,6 +289,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == EXPORT_PATH:
             self._handle_export()
             return
+        if path == USERDATA_EXPORT_PATH:
+            self._handle_export_userdata()
+            return
+        if path == SCRAPING_EXPORT_PATH:
+            self._handle_export_scraping()
+            return
 
         self._serve_file(path)
 
@@ -387,15 +395,13 @@ class Handler(BaseHTTPRequestHandler):
         get_storage().write_profile(payload)
         self._send_json(200, {"ok": True})
 
-    def _handle_export(self) -> None:
-        """Download the full dump of every data area (see python.migration)."""
+    def _download_document(self, document: Any, file_name: str) -> None:
+        """Serve a migration dump as a JSON file attachment."""
         try:
-            document = migration.export_document(get_storage())
-        except Exception as exc:
+            body = json.dumps(document, ensure_ascii=False).encode("utf-8")
+        except (TypeError, ValueError) as exc:
             self._send_json(500, {"error": str(exc)})
             return
-        body = json.dumps(document, ensure_ascii=False).encode("utf-8")
-        file_name = "leforem-scraper-export-%s.json" % time.strftime("%Y-%m-%d")
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header(
@@ -405,6 +411,41 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
+
+    def _handle_export(self) -> None:
+        """Download the full dump of every data area (see python.migration)."""
+        try:
+            document = migration.export_document(get_storage())
+        except Exception as exc:
+            self._send_json(500, {"error": str(exc)})
+            return
+        self._download_document(
+            document, "leforem-scraper-export-%s.json" % time.strftime("%Y-%m-%d")
+        )
+
+    def _handle_export_userdata(self) -> None:
+        """Download the user data only (profile, employers, blacklist, suivi)."""
+        try:
+            document = migration.export_userdata_document(get_storage())
+        except Exception as exc:
+            self._send_json(500, {"error": str(exc)})
+            return
+        self._download_document(
+            document,
+            "leforem-scraper-donnees-utilisateur-%s.json" % time.strftime("%Y-%m-%d"),
+        )
+
+    def _handle_export_scraping(self) -> None:
+        """Download the scraping only (offres, détails, historiques, état)."""
+        try:
+            document = migration.export_scraping_document(get_storage())
+        except Exception as exc:
+            self._send_json(500, {"error": str(exc)})
+            return
+        self._download_document(
+            document,
+            "leforem-scraper-scraping-%s.json" % time.strftime("%Y-%m-%d"),
+        )
 
     def _handle_import(self) -> None:
         """Restore every data area from an uploaded dump."""

@@ -2287,7 +2287,10 @@ async function init() {
     updateSortHeaders();
     const exportBtn = document.getElementById("exportCsvBtn");
     if (exportBtn) {
-        exportBtn.addEventListener("click", exportCsv);
+        // Désactivé temporairement : l'export CSV des annonces reviendra
+        // dans une prochaine version, aligné sur les nouveaux exports JSON.
+        exportBtn.disabled = true;
+        exportBtn.title = "Export CSV désactivé temporairement";
     }
     const deleteScrapingGearBtn = document.getElementById("deleteScrapingGearBtn");
     if (deleteScrapingGearBtn) {

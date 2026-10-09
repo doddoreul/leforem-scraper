@@ -33,29 +33,39 @@ Deux formats au choix :
 
 ## Sauvegarder ou migrer tes données
 
-Un **export complet** regroupe *toutes* tes données dans un seul fichier JSON :
-offres scrapées et leurs détails, historiques (scrapes, offres disparues,
-modifications), profil candidat, entreprises, liste noire, état du scraping et
-suivi (statuts, dates, remarques, favoris, priorités). **Les annonces
-elles-mêmes sont dans le fichier** : chaque recherche porte une liste
-`annonces` où chaque annonce est **un seul objet complet et lisible**
-(`titre`, `description`, `entreprise`, `contrat`, `localisation`, dates, lien,
-salaire) accompagné de la liste détail brut et du suivi — pas seulement un
-numéro de référence. Un import sur une autre machine ou plateforme restitue
-chaque recherche telle quelle, **sans re-scraper**. L'**import inverse**
-restaure ce fichier et **remplace** les données de l'ordinateur sur lequel il
-est relancé — idéal pour changer de PC ou garder une sauvegarde.
+L'application distingue deux familles de données, exportables dans des
+fichiers JSON séparés :
+
+- **données utilisateur** : profil candidat, entreprises, liste noire et
+  suivi (statuts, dates, remarques, favoris, priorités) ;
+- **le scraping** : les recherches, leur liste d'annonces et leurs détails
+  (chaque annonce est un objet complet et lisible : `titre`, `description`,
+  `entreprise`, `contrat`, `localisation`, dates, lien, salaire… pas
+  seulement un numéro), les historiques (scrapes, offres disparues,
+  modifications) et l'état du scraping en cours.
+
+### Depuis l'application (recommandé)
+
+Menu **engrenage ⚙️** (en haut à droite, présent sur toutes les pages) →
+section **Données** :
+
+- **Exporter les données utilisateur** → `leforem-scraper-donnees-utilisateur-AAAA-MM-JJ.json` ;
+- **Exporter le scraping** → `leforem-scraper-scraping-AAAA-MM-JJ.json` ;
+- **Importer des données** → choisir l'un des fichiers ci-dessus (ou une
+  sauvegarde complète) : les données correspondantes sont **remplacées** sur
+  cet ordinateur, sans toucher au reste. L'ordre d'import des deux fichiers
+  n'a pas d'importance.
+
+> Un export complet (les deux fichiers) permet de migrer sur une autre
+> machine ou une autre plateforme **sans re-scraper** : les annonces
+> elles-mêmes sont dans le fichier de scraping. L'import sur le nouveau poste
+> restaure l'ensemble.
 
 > L'export récupère aussi les statuts/remarques d'offres qui ne correspondent
 > plus à une recherche actuelle (anciens noms de recherche) : aucune donnée
 > n'est laissée de côté.
 
-### Depuis l'application (recommandé)
-
-Page **Profil** → section **Sauvegarder ou restaurer** :
-
-- **Exporter toutes les données** : télécharge `leforem-scraper-export-AAAA-MM-JJ.json` ;
-- **Importer une sauvegarde** : choisir le fichier, confirmer, tout est restauré.
+> L'export CSV des annonces visibles est temporairement désactivé.
 
 ### En ligne de commande (développeurs)
 

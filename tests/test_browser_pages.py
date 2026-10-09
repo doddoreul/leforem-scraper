@@ -1837,7 +1837,17 @@ class TestPagesInBrowser(BrowserPagesTestCase):
             with self.subTest(page=page):
                 dom = self.dump(page)
                 self.assertIn('id="themeGear"', dom)
-                self.assertIn("Exporter le suivi", dom)
+                self.assertIn("Exporter les données utilisateur", dom)
+                self.assertIn("Exporter le scraping", dom)
+                self.assertIn("Importer des données", dom)
+
+    def test_the_csv_export_is_temporarily_disabled(self):
+        dom = self.dump("")
+        self.assertRegex(
+            dom,
+            r'id="exportCsvBtn"[^>]*\bdisabled\b',
+            "le bouton Exporter CSV doit être désactivé (temporairement)",
+        )
 
     def test_the_offers_table_fills_on_open(self):
         self.assertDrawn("", [

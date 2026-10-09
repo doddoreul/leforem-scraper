@@ -23,6 +23,17 @@ Le fichier porte un en-tête versionné (``format`` + ``version``) ; il est
 lisible à la main et portable d'un poste à l'autre, quel que soit le stockage
 sous-jacent (fichiers JSON ou base SQLite). L'import restaure l'état exact de
 la sauvegarde : il remplace les recherches, profils et suivis déjà présents.
+Seules les sections présentes dans le fichier sont remplacées, ce qui permet
+de distinguer trois exports (l'attribut ``kind`` le précise) :
+
+- ``complet`` — toutes les données ci-dessus ;
+- ``userdata`` — profil, entreprises, liste noire et suivi seuls ;
+- ``scraping`` — recherches, offres, détails, historiques et état du
+  scraping seuls.
+
+Les deux exports partiels se cumulent : ensemble, ils valent l'export
+complet, et l'import restaure ce qui est présent dans le fichier sans toucher
+au reste.
 
 Usage en ligne de commande, depuis la racine du projet ::
 
@@ -163,33 +174,84 @@ def _all_bases(storage: Any) -> List[str]:
     return sorted(names)
 
 
-def export_document(storage: Any) -> Dict[str, Any]:
-    """Build the complete, versioned dump of every stored data area."""
-    searches: List[Dict[str, Any]] = []
+def _search_entries(
+    storage: Any, with_tracking: bool
+) -> List[Dict[str, Any]]:
+    """One entry per base the storage knows about."""
+    entries: List[Dict[str, Any]] = []
     for name in _all_bases(storage):
         details = storage.read_details(name)
-        tracking = storage.read_tracking(name)
+        tracking = storage.read_tracking(name) if with_tracking else {}
         payload = storage.read_scraping(name)
-        searches.append(
-            {
-                "name": name,
-                "payload": payload,
-                "details": details,
-                "history_offers": storage.read_history_offers(name),
-                "tracking": tracking,
-                # Chaque annonce complète en un seul objet (annonce + détail
-                # + suivi) : le contenu est là, pas seulement des numéros.
-                "annonces": _merge_annonces(payload, details, tracking),
-            }
-        )
+        entry = {
+            "name": name,
+            "payload": payload,
+            "details": details,
+            "history_offers": storage.read_history_offers(name),
+            # Chaque annonce complète en un seul objet (annonce + détail
+            # + suivi éventuel) : le contenu est là, pas seulement des
+            # numéros.
+            "annonces": _merge_annonces(payload, details, tracking),
+        }
+        if with_tracking:
+            entry["tracking"] = tracking
+        entries.append(entry)
+    return entries
+
+
+def export_document(storage: Any) -> Dict[str, Any]:
+    """Build the complete, versioned dump of every stored data area."""
     return {
         "format": FORMAT,
         "version": SCHEMA_VERSION,
+        "kind": "complet",
         "exported_at": jsonio.now_iso_timestamp(),
-        "searches": searches,
+        "searches": _search_entries(storage, with_tracking=True),
         "profile": storage.read_profile(),
         "companies": storage.read_companies(),
         "blacklist": storage.read_blacklist(),
+        "history_scrapes": storage.read_history_scrapes(),
+        "history_modifications": storage.read_history_modifications(),
+        "scrape_state": storage.read_scrape_state(),
+    }
+
+
+def export_userdata_document(storage: Any) -> Dict[str, Any]:
+    """Données utilisateur seules : profil, entreprises, liste noire, suivi.
+
+    Aucune donnée de scraping (offres, détails, historiques) : c'est le
+    compagnon de :func:`export_scraping_document`. Les deux fichiers réunis
+    équivalent à :func:`export_document`.
+    """
+    tracking: Dict[str, Any] = {}
+    for base_name in storage.get_tracking_bases():
+        entries = storage.read_tracking(base_name)
+        if entries:
+            tracking[base_name] = entries
+    return {
+        "format": FORMAT,
+        "version": SCHEMA_VERSION,
+        "kind": "userdata",
+        "exported_at": jsonio.now_iso_timestamp(),
+        "profile": storage.read_profile(),
+        "companies": storage.read_companies(),
+        "blacklist": storage.read_blacklist(),
+        "tracking": tracking,
+    }
+
+
+def export_scraping_document(storage: Any) -> Dict[str, Any]:
+    """Données du scraping seules : offres, détails, historiques, état.
+
+    Aucune donnée utilisateur (profil, suivi…) : c'est le compagnon de
+    :func:`export_userdata_document`.
+    """
+    return {
+        "format": FORMAT,
+        "version": SCHEMA_VERSION,
+        "kind": "scraping",
+        "exported_at": jsonio.now_iso_timestamp(),
+        "searches": _search_entries(storage, with_tracking=False),
         "history_scrapes": storage.read_history_scrapes(),
         "history_modifications": storage.read_history_modifications(),
         "scrape_state": storage.read_scrape_state(),
@@ -227,18 +289,27 @@ def read_export(path: str) -> Dict[str, Any]:
 
 
 def import_document(document: Dict[str, Any], storage: Any) -> Dict[str, Any]:
-    """Restore every data area from a dump.
+    """Restore every data area present in a dump.
 
-    The searches come from ``document["searches"]``; the searches already
-    present in ``storage`` are replaced, as are the profile, the employers,
-    the blacklist and the histories. Returns a count map, in French keys, so
-    the web UI can show them as-is.
+    An export can be complete (``kind`` ``complet``), carry only the user
+    data (``userdata``) or only the scraping (``scraping``). Only the
+    sections present in the file are replaced, the others are left alone :
+
+    - ``searches`` (présent dans ``complet`` et ``scraping``) : remplace les
+      recherches — scrapings, détails, historiques — et le suivi qui leur est
+      attaché ;
+    - ``tracking`` (présent dans ``userdata``) : remplace tout le suivi,
+      y compris sous d'anciennes bases ;
+    - ``profile``, ``companies``, ``blacklist``, ``history_scrapes``,
+      ``history_modifications``, ``scrape_state`` : remplacés s'ils sont
+      présents.
+
+    Returns a count map, in French keys, so the web UI can show them as-is.
     """
     errors = _validate(document)
     if errors:
         raise ValueError(errors)
 
-    searches = document.get("searches", [])
     counts: Dict[str, Any] = {
         "recherches": 0,
         "offres": 0,
@@ -246,43 +317,69 @@ def import_document(document: Dict[str, Any], storage: Any) -> Dict[str, Any]:
         "suivi": 0,
     }
 
-    # 1. Nettoie le périmètre : l'import restaure l'état exact de la
-    #    sauvegarde, donc les recherches ET les zones orphelines (suivi,
-    #    détails, historiques sous d'anciens noms de base) sont remplacés.
-    for name in _all_bases(storage):
-        storage.delete_scraping(name)
-        for offer_id in list(storage.read_tracking(name)):
-            storage.delete_tracking(name, offer_id)
+    # 1. Périmètre scraping : nettoie les recherches ET les zones orphelines
+    #    (détails, historiques sous d'anciens noms de base), puis réécrit
+    #    chaque base de la sauvegarde. Une base peut n'exister que pour son
+    #    suivi (plus de scraping sous ce nom) : son payload est alors absent.
+    #    Le suivi attaché n'est remplacé que si la sauvegarde le porte lui-
+    #    même (export "complet") : un export "scraping", lui, ne le contient
+    #    pas, donc il n'y touche pas — on peut importer les deux fichiers dans
+    #    n'importe quel ordre sans rien perdre.
+    if "searches" in document:
+        searches = document["searches"]
+        carries_search_tracking = any(
+            isinstance(search, dict) and "tracking" in search
+            for search in searches
+        )
+        for name in _all_bases(storage):
+            storage.delete_scraping(name)
+            if carries_search_tracking:
+                for offer_id in list(storage.read_tracking(name)):
+                    storage.delete_tracking(name, offer_id)
 
-    # 2. Réécrit chaque base de la sauvegarde. Une base peut n'exister que
-    #    pour son suivi (plus de scraping sous ce nom) : seul son payload est
-    #    alors absent.
-    for search in searches:
-        name = search["name"]
-        payload = search.get("payload")
-        if isinstance(payload, dict):
-            storage.write_scraping(name, payload)
-            counts["recherches"] += 1
+        for search in searches:
+            name = search["name"]
+            payload = search.get("payload")
+            if isinstance(payload, dict):
+                storage.write_scraping(name, payload)
+                counts["recherches"] += 1
 
-            offers = payload.get("offers", [])
-            counts["offres"] += len(offers) if isinstance(offers, list) else 0
+                offers = payload.get("offers", [])
+                counts["offres"] += len(offers) if isinstance(offers, list) else 0
 
-        details = search.get("details")
-        if isinstance(details, dict) and details:
-            storage.write_details(name, details)
-            counts["details"] += len(details)
+            details = search.get("details")
+            if isinstance(details, dict) and details:
+                storage.write_details(name, details)
+                counts["details"] += len(details)
 
-        history = search.get("history_offers")
-        if isinstance(history, dict) and history:
-            storage.write_history_offers(name, history)
+            history = search.get("history_offers")
+            if isinstance(history, dict) and history:
+                storage.write_history_offers(name, history)
 
-        tracking = search.get("tracking")
-        if isinstance(tracking, dict):
-            for offer_id, fields in tracking.items():
+            tracking = search.get("tracking")
+            if isinstance(tracking, dict):
+                for offer_id, fields in tracking.items():
+                    if not isinstance(fields, dict):
+                        continue
+                    complete = {key: fields.get(key) for key in TRACKING_KEYS}
+                    storage.write_tracking(name, str(offer_id), complete)
+                    counts["suivi"] += 1
+
+    # 2. Suivi autonome (export "données utilisateur") : restaure l'état
+    #    exact du suivi, donc toutes les lignes déjà présentes sont
+    #    remplacées, y compris sous d'anciennes bases.
+    if "tracking" in document:
+        for name in _all_bases(storage):
+            for offer_id in list(storage.read_tracking(name)):
+                storage.delete_tracking(name, offer_id)
+        for base, entries in document["tracking"].items():
+            if not isinstance(entries, dict):
+                continue
+            for offer_id, fields in entries.items():
                 if not isinstance(fields, dict):
                     continue
                 complete = {key: fields.get(key) for key in TRACKING_KEYS}
-                storage.write_tracking(name, str(offer_id), complete)
+                storage.write_tracking(base, str(offer_id), complete)
                 counts["suivi"] += 1
 
     # 3. Les zones partagées. Les clés absentes d'une sauvegarde plus
@@ -308,6 +405,20 @@ def import_document(document: Dict[str, Any], storage: Any) -> Dict[str, Any]:
 
 def _validate(document: Any) -> Optional[str]:
     """First-pass validation, before anything is written (fail fast)."""
+
+    # Every data area the import can restore. A file with none of them is
+    # not a backup of ours (a partial export still carries at least one).
+    AREAS = (
+        "searches",
+        "profile",
+        "companies",
+        "blacklist",
+        "tracking",
+        "history_scrapes",
+        "history_modifications",
+        "scrape_state",
+    )
+
     if not isinstance(document, dict):
         return "Sauvegarde illisible : le contenu n'est pas un objet JSON."
     if document.get("format") != FORMAT:
@@ -317,20 +428,35 @@ def _validate(document: Any) -> Optional[str]:
             "Version de sauvegarde non prise en charge : %r."
             % document.get("version")
         )
+    if not any(key in document for key in AREAS):
+        return "Sauvegarde illisible : aucune donnée à importer dans ce fichier."
+
     searches = document.get("searches")
-    if not isinstance(searches, list):
-        return "Sauvegarde illisible : la section 'searches' est absente."
-    for search in searches:
-        if not isinstance(search, dict):
-            return "Sauvegarde illisible : une recherche n'est pas un objet."
-        name = search.get("name", "")
-        if not config.valid_search_name(name):
-            return "Nom de recherche invalide dans la sauvegarde : %r." % name
-        if not isinstance(search.get("payload"), dict):
-            # A base may only carry tracking under a stale name: its payload
-            # is legitimately absent.
-            if search.get("payload") is not None:
-                return "Recherche %r sans contenu (payload) valide." % name
+    if searches is not None:
+        if not isinstance(searches, list):
+            return "Sauvegarde illisible : la section 'searches' n'est pas une liste."
+        for search in searches:
+            if not isinstance(search, dict):
+                return "Sauvegarde illisible : une recherche n'est pas un objet."
+            name = search.get("name", "")
+            if not config.valid_search_name(name):
+                return "Nom de recherche invalide dans la sauvegarde : %r." % name
+            if not isinstance(search.get("payload"), dict):
+                # A base may only carry tracking under a stale name: its payload
+                # is legitimately absent.
+                if search.get("payload") is not None:
+                    return "Recherche %r sans contenu (payload) valide." % name
+
+    if "tracking" in document:
+        tracking = document["tracking"]
+        if not isinstance(tracking, dict):
+            return "Sauvegarde illisible : la section 'tracking' n'est pas un objet."
+        for base, entries in tracking.items():
+            if not config.valid_search_name(base):
+                return "Nom de recherche invalide dans le suivi : %r." % base
+            if not isinstance(entries, dict):
+                return "Sauvegarde illisible : le suivi de %r est invalide." % base
+
     return None
 
 
