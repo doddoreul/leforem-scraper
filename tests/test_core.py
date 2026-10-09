@@ -216,25 +216,9 @@ class TestSalaryAnalysis(unittest.TestCase):
             core.extract_hourly_values("2400 eur par mois"), []
         )
 
-    def test_analyze_salaries(self):
-        offers = [
-            make_offer("1", salary="18 eur de l'heure"),
-            make_offer("2", pay="20,5 eur de l'heure"),
-            make_offer("3", salary=""),
-            "not-a-dict",
-        ]
-        result = core.analyze_salaries(offers)
-        self.assertEqual(result["total"], 3)
-        self.assertEqual(result["renseignees"], 2)
-        self.assertIn(18.0, result["hourly"])
-        self.assertIn(20.5, result["hourly"])
-
-    def test_mean_median(self):
+    def test_mean(self):
         self.assertEqual(core.mean([2, 4]), 3)
-        self.assertEqual(core.median([1, 3, 9]), 3)
-        self.assertEqual(core.median([1, 3, 9, 27]), 6)
         self.assertIsNone(core.mean([]))
-        self.assertIsNone(core.median([]))
 
 
 class TestBlacklistPolicy(unittest.TestCase):

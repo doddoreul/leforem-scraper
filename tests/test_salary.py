@@ -229,52 +229,6 @@ class TestMagnitudeOnly(unittest.TestCase):
                                places=4)
 
 
-class TestAnalyzeSalariesRegressions(unittest.TestCase):
-    """core.analyze_salaries keeps working unchanged on every kind.
-
-    The derived fields are additive: analyze_salaries reads the ``salary`` and
-    ``pay`` text, so a new ``kind`` must not change its result.
-    """
-
-    def analyze(self, offer):
-        return core.analyze_salaries([offer])
-
-    def test_each_kind_gives_the_same_answer(self):
-        text = "Salaire brut de 2 500 € par mois"
-        parsed = parse_remuneration(text)
-        base = {"number": "1", "salary": text, "pay": ""}
-
-        for kind in ("hourly", "monthly", "annual", "unknown"):
-            with self.subTest(kind=kind):
-                offer = dict(base, salary_kind=kind)
-                got = self.analyze(offer)
-                self.assertEqual(got["total"], 1)
-                self.assertEqual(got["renseignees"], 1)
-                # A monthly wage yields no hourly value, as before.
-                self.assertEqual(got["hourly"], [])
-
-    def test_an_hourly_wage_is_still_reported(self):
-        offer = {"number": "1", "salary": "18 €/h", "pay": "",
-                 "salary_kind": "hourly"}
-        got = self.analyze(offer)
-        self.assertIn(18.0, got["hourly"])
-        self.assertEqual(got["renseignees"], 1)
-
-    def test_the_derived_fields_do_not_create_an_hourly_value(self):
-        # salary_hourly_estimate exists but analyze_salaries must not suddenly
-        # count it: it keeps reading the text only.
-        offer = {"number": "1", "salary": "2 500 € par mois", "pay": "",
-                 "salary_kind": "monthly",
-                 "salary_hourly_estimate": 15.18}
-        got = self.analyze(offer)
-        self.assertEqual(got["hourly"], [])
-        self.assertAlmostEqual(parse_remuneration(offer["salary"])["min"], 2500.0)
-
-    def test_no_offer(self):
-        got = core.analyze_salaries([])
-        self.assertEqual(got, {"renseignees": 0, "total": 0, "hourly": []})
-
-
 class TestSeveralFields(unittest.TestCase):
     """parse_remuneration takes several texts, as build_offer does."""
 

@@ -36,11 +36,6 @@ class TestFileNames(unittest.TestCase):
         self.assertEqual(config.data_file_name(""), "data_.json")
         self.assertEqual(config.history_file_name(""), "historique_.json")
 
-    def test_paths_live_in_the_data_folder(self):
-        for path in config.delete_scrape_files("liege"):
-            self.assertEqual(os.path.dirname(path), config.DATA_DIR)
-            self.assertTrue(path.endswith(".json"))
-
     def test_scrape_files_returns_offers_and_history(self):
         data, history = config.scrape_files("liege")
         self.assertEqual(data, config.data_file("liege"))

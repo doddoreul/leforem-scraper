@@ -247,12 +247,6 @@ HOURLY_HINT_PATTERN = re.compile(
 AMOUNT_PATTERN = re.compile(r"\d{1,3}(?:[.,]\d{1,2})?")
 
 
-def has_salary(offer):
-    """True when some remuneration info is present."""
-    text = norm_text(offer.get("salary") or offer.get("pay"))
-    return bool(text)
-
-
 def extract_hourly_values(text):
     """Return numeric €/hour values when the text is clearly hourly.
 
@@ -276,45 +270,10 @@ def extract_hourly_values(text):
     return sorted(set(amounts))
 
 
-def analyze_salaries(offers):
-    """Aggregate remuneration facts across offers.
-
-    Returns:
-      {"renseignees": n, "total": n,
-       "hourly": [values...]} with hourly values only when the offers
-       are expressed per hour (comparable unit).
-    """
-    total = 0
-    renseignees = 0
-    hourly = []
-    for offer in offers:
-        if not isinstance(offer, dict):
-            continue
-        total += 1
-        if has_salary(offer):
-            renseignees += 1
-        hourly.extend(extract_hourly_values(offer.get("salary") or offer.get("pay")))
-    return {
-        "renseignees": renseignees,
-        "total": total,
-        "hourly": sorted(set(hourly)),
-    }
-
-
 def mean(values):
     if not values:
         return None
     return sum(values) / len(values)
-
-
-def median(values):
-    if not values:
-        return None
-    ordered = sorted(values)
-    size = len(ordered)
-    if size % 2 == 1:
-        return ordered[size // 2]
-    return (ordered[size // 2 - 1] + ordered[size // 2]) / 2
 
 
 # ============================================================

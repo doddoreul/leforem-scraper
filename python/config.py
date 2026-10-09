@@ -182,12 +182,3 @@ def details_file(base_name: str) -> str:
 def scrape_files(base_name: str) -> tuple[str, str]:
     """(offers, history) paths of one search."""
     return data_file(base_name), history_file(base_name)
-
-
-def delete_scrape_files(base_name: str) -> tuple[str, str, str]:
-    """(data, history, details) paths of one search, in that order."""
-    return (
-        data_file(base_name),
-        history_file(base_name),
-        details_file(base_name),
-    )
