@@ -225,6 +225,35 @@ function basesInLocalStorage() {
 }
 
 /**
+ * One follow-up map merged across every search.
+ *
+ * The "all" view of the offers page has no search of its own, yet its rows
+ * come from all of them: reading a single search's map there would show no
+ * status at all. The signature matches :func:`readTrackedMap` (the prefix is
+ * ignored) so the caller can use either reader interchangeably.
+ * @param {string} [prefix] ignored, kept for signature symmetry
+ * @param {string} suffix one of TRACKED_SUFFIXES
+ * @returns {Object}
+ */
+export function readMergedTrackedMap(prefix, suffix) {
+    const names = {};
+    Object.keys(_cache).forEach(function (base) {
+        if (base) names[base] = true;
+    });
+    basesInLocalStorage().forEach(function (base) {
+        if (base) names[base] = true;
+    });
+    const out = {};
+    Object.keys(names).forEach(function (base) {
+        const map = readTrackedMap("forem_" + base + "_", suffix);
+        Object.keys(map).forEach(function (offerId) {
+            out[offerId] = map[offerId];
+        });
+    });
+    return out;
+}
+
+/**
  * Load every follow-up the server holds, not just the ones this browser
  * has seen.
  *
@@ -299,41 +328,60 @@ export async function writeOfferField(baseName, offerId, field, value) {
 
 /**
  * Write a JSON map under <prefix><suffix>, backend first.
+ *
+ * ``basesByOffer`` maps an offer id to the search it belongs to: the "all"
+ * view merges offers from several searches, and each one's follow-up must
+ * stay with its own search instead of landing on a phantom base.
  * @param {string} prefix
  * @param {string} suffix
  * @param {*} value
+ * @param {Object} [basesByOffer] { offerId: baseName }
  * @returns {Promise<void>}
  */
-export async function writeTrackedMap(prefix, suffix, value) {
-    const baseName = baseNameForPrefix(prefix);
+export async function writeTrackedMap(prefix, suffix, value, basesByOffer) {
+    const defaultBase = baseNameForPrefix(prefix);
     const field = SUFFIX_FIELD[suffix];
     const map = value && typeof value === "object" ? value : {};
 
+    // Le miroir localStorage garde la vue telle que la page la détient.
     try {
         localStorage.setItem(prefix + suffix, JSON.stringify(map));
     } catch (error) {
         console.error("Unable to write localStorage", error);
     }
 
-    if (!baseName || !field) return;
+    if (!field) return;
 
-    const known = Object.prototype.hasOwnProperty.call(_cache, baseName)
-        ? suffixFromCache(_cache[baseName], suffix)
-        : {};
+    const baseOf = function (offerId) {
+        return (basesByOffer && basesByOffer[offerId]) || defaultBase;
+    };
 
-    // Only the offers that actually changed are sent: the callers pass the
-    // whole map after editing a single entry.
-    const ids = Object.keys(map);
-    for (const offerId of ids) {
-        if (map[offerId] !== known[offerId]) {
-            await writeOfferField(baseName, offerId, field, map[offerId]);
+    const bases = {};
+    Object.keys(map).forEach(function (offerId) {
+        bases[baseOf(offerId)] = true;
+    });
+    Object.keys(basesByOffer || {}).forEach(function (offerId) {
+        bases[basesByOffer[offerId]] = true;
+    });
+
+    await Promise.all(Object.keys(bases).map(async function (base) {
+        if (!base) return;
+        const known = readTrackedMap("forem_" + base + "_", suffix);
+        const writes = [];
+        Object.keys(known).forEach(function (offerId) {
+            // Une offre absente de la carte a perdu son suivi.
+            if (!(offerId in map)) writes.push([offerId, null]);
+        });
+        Object.keys(map).forEach(function (offerId) {
+            if (baseOf(offerId) !== base) return;
+            if (map[offerId] !== known[offerId]) {
+                writes.push([offerId, map[offerId]]);
+            }
+        });
+        for (const pair of writes) {
+            await writeOfferField(base, pair[0], field, pair[1]);
         }
-    }
-    for (const offerId of Object.keys(known)) {
-        if (!(offerId in map)) {
-            await writeOfferField(baseName, offerId, field, null);
-        }
-    }
+    }));
 }
 
 // -- migration ----------------------------------------------------

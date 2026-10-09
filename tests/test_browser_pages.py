@@ -15,6 +15,7 @@ Run from the repository root:
 """
 
 import copy
+import glob
 import json
 import os
 import subprocess
@@ -512,6 +513,92 @@ await fetch("/api/tracking/" + BASE + "/9001", { method: "DELETE" });
 await fetch("/api/tracking/" + BASE + "/9002", { method: "DELETE" });
 localStorage.removeItem("forem_tracking_synced");
 log("PERSIST-OK");
+</script>
+</body></html>
+"""
+
+# Page des annonces chargée sur une machine neuve : le suivi vient du
+# serveur, pas de localStorage, et la table doit finir par l'afficher.
+FRESH_START_PROBE = """<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\\n"); }
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+// Une machine neuve, ou un profil tout juste vidé : aucune clé.
+localStorage.clear();
+
+// Le suivi existe sur le serveur, comme après un import de données
+// utilisateur : c'est lui que la page doit finir par afficher.
+await fetch("/api/tracking/metier_liege/1902", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ statut: "postule" })
+});
+
+const frame = document.createElement("iframe");
+frame.width = "1200";
+frame.height = "900";
+frame.src = "/index.html";
+document.body.appendChild(frame);
+
+// La première passe dessine la table sans statut (le suivi n'est pas encore
+// arrivé) : la page doit se redessiner quand il arrive du serveur.
+let statut = "";
+let rows = 0;
+let mirrorBefore = "";
+for (let i = 0; i < 100; i += 1) {
+    await sleep(120);
+    try {
+        const doc = frame.contentDocument;
+        const select = doc && doc.querySelector(
+            'select.status-select[data-number="1902"]'
+        );
+        rows = doc ? doc.querySelectorAll("tbody tr").length : 0;
+        if (select) {
+            statut = select.value;
+            if (statut) break;
+        }
+    } catch (error) {
+        // iframe pas encore prête.
+    }
+    if (i === 0) {
+        mirrorBefore = localStorage.getItem("forem_metier_liege_statuts") || "absent";
+    }
+}
+log("mirrorAfterLoad=" + mirrorBefore);
+log("rows=" + rows);
+log("freshLoadStatus=" + statut)
+
+// Un statut changé dans la vue « Toutes les recherches » doit atterrir sur
+// sa propre recherche, pas sur une base qui n'existe pas.
+const doc = frame.contentDocument;
+const select = doc.querySelector('select.status-select[data-number="1902"]');
+let editError = "";
+if (select) {
+    select.value = "refuse";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+} else {
+    editError = "pas de sélecteur";
+}
+
+let stored = "";
+for (let i = 0; i < 60; i += 1) {
+    await sleep(120);
+    const data = await fetch("/api/tracking/metier_liege").then(r => r.json());
+    if ((data["1902"] || {}).statut === "refuse") { stored = "refuse"; break; }
+}
+const bases = await fetch("/api/tracking/bases").then(r => r.json());
+log("editLanded=" + (stored || editError));
+log("phantomBase=" + (bases.indexOf("electromecanicien") !== -1));
+const ls = frame.contentWindow.localStorage;
+log("lsMetier=" + (ls.getItem("forem_metier_liege_statuts") || "absent"));
+log("lsElectro=" + (ls.getItem("forem_electromecanicien_statuts") || "absent"));
+log("lsSelect=" + (ls.getItem("forem_scraping_select") || "absent"));
+log("FRESH-OK");
 </script>
 </body></html>
 """
@@ -1262,6 +1349,42 @@ def find_browser():
     for candidate in candidates:
         if candidate and os.path.isfile(candidate):
             return candidate
+    return _search_windows_browser()
+
+
+def _search_windows_browser():
+    """Find a Chromium-based browser whose installer moved it.
+
+    Windows updaters relocate the executable into versioned folders
+    (``Microsoft\\EdgeCore\\154.0.…``, ``Google\\Chrome\\Application\\<version>``),
+    so a fixed path goes stale after every update. ``glob`` only looks at the
+    shapes installers actually use, which stays fast.
+    """
+    if os.name != "nt":
+        return None
+    roots = [
+        os.environ.get("ProgramFiles", ""),
+        os.environ.get("ProgramFiles(x86)", ""),
+        os.environ.get("LOCALAPPDATA", ""),
+    ]
+    shapes = [
+        ("Microsoft", "EdgeCore", "*", "msedge.exe"),
+        ("Microsoft", "Edge", "Application", "msedge.exe"),
+        ("Microsoft", "EdgeWebView", "Application", "*", "msedge.exe"),
+        ("Google", "Chrome", "Application", "chrome.exe"),
+        ("Chromium", "Application", "chrome.exe"),
+        ("BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+    ]
+    found = []
+    for root in roots:
+        if not root:
+            continue
+        for shape in shapes:
+            pattern = os.path.join(root, *shape)
+            found.extend(glob.glob(pattern))
+    for candidate in sorted(found):
+        if os.path.isfile(candidate):
+            return candidate
     return None
 
 
@@ -1618,6 +1741,7 @@ class ProbeHandler(server.Handler):
             "/persist-probe.html": PERSIST_PROBE,
             "/import-probe.html": IMPORT_PROBE,
             "/import-dom-probe.html": IMPORT_DOM_PROBE,
+            "/fresh-start-probe.html": FRESH_START_PROBE,
             "/profile-probe.html": PROFILE_PROBE,
             "/remun-probe.html": REMUN_PROBE,
             "/keyword-probe.html": KEYWORD_PROBE,
@@ -1772,6 +1896,21 @@ class SqliteBrowserPagesTestCase(BrowserPagesTestCase):
         self.assertIn("refusedUserdata=refuse", report)
         self.assertIn("refusalMessage=true", report)
         self.assertIn("reloadAsked=1", report)
+
+    def test_the_table_shows_the_follow_up_on_a_fresh_machine(self):
+        """LocalStorage vide, suivi sur le serveur : la table doit l'afficher.
+
+        The first render reads the (empty) mirror, and the follow-up loaded
+        from the server arrives afterwards: the table has to redraw itself,
+        otherwise the restored statuses only appear when the search changes.
+        """
+        report = self.report_of("/fresh-start-probe.html", budget="30000")
+
+        self.assertIn("FRESH-OK", report, report)
+        self.assertIn("freshLoadStatus=postule", report)
+        # Un statut modifié dans la vue fusionnée reste sur SA recherche.
+        self.assertIn("editLanded=refuse", report)
+        self.assertIn("phantomBase=false", report)
 
 
 def seed_sqlite(folder):

@@ -25,7 +25,9 @@ import {
 } from "../shared/statuses.js";
 import {
     TRACKED_SUFFIXES,
+    TRACKING_LOADED_EVENT,
     migrateLegacyStorage,
+    readMergedTrackedMap,
     readTrackedMap,
     storagePrefixFor,
     writeTrackedMap,
@@ -51,6 +53,10 @@ const GEAR_ACTIONS = [
     { id: "deleteScrapingGearBtn", label: "Supprimer ce scraping", title: "Supprimer le scraping actuellement sélectionné (déplace les fichiers vers data/trash/)" }
 ];
 
+// La recherche de chaque offre affichée, quand la vue en mélange plusieurs
+// (« Toutes les recherches ») : son suivi et sa fiche restent les siens.
+let offerBases = {};
+
 // Base URLs for the active scraping; populated by setupScrapingSelector()
 let dataUrl = "";
 let historyUrl = "";
@@ -72,7 +78,6 @@ const STATUS_OPTIONS = CANONICAL_STATUS_OPTIONS.map(option =>
 
 // Run migration immediately so it's done before any UI uses the keys.
 migrateLegacyStorage();
-
 initTheme(GEAR_ACTIONS);
 
 // The profile keywords drive the highlighting. Each rendered row asks for it,
@@ -133,8 +138,9 @@ function setStatus(number, value) {
         delete statuses[number];
         delete statutDates[number];
     }
-    writeTrackedMap(storagePrefix, "statuts", statuses);
-    writeTrackedMap(storagePrefix, "statut_dates", statutDates);
+    const owned = basesByOffer();
+    writeTrackedMap(storagePrefix, "statuts", statuses, owned);
+    writeTrackedMap(storagePrefix, "statut_dates", statutDates, owned);
     refreshFollowUps();
     renderTrackedAlerts();
 }
@@ -149,7 +155,7 @@ function setStatutDate(number, value) {
     } else {
         delete statutDates[number];
     }
-    writeTrackedMap(storagePrefix, "statut_dates", statutDates);
+    writeTrackedMap(storagePrefix, "statut_dates", statutDates, basesByOffer());
 }
 
 // First visit after this feature: treat existing statuses as fresh
@@ -164,7 +170,7 @@ function backfillStatutDates() {
         }
     });
     if (changed) {
-        writeTrackedMap(storagePrefix, "statut_dates", statutDates);
+        writeTrackedMap(storagePrefix, "statut_dates", statutDates, basesByOffer());
     }
 }
 
@@ -178,7 +184,7 @@ function setRemark(number, value) {
     } else {
         delete remarks[number];
     }
-    writeTrackedMap(storagePrefix, "remarques", remarks);
+    writeTrackedMap(storagePrefix, "remarques", remarks, basesByOffer());
 }
 
 function isFavorite(number) {
@@ -191,7 +197,7 @@ function setFavorite(number, active) {
     } else {
         delete favorites[number];
     }
-    writeTrackedMap(storagePrefix, "favoris", favorites);
+    writeTrackedMap(storagePrefix, "favoris", favorites, basesByOffer());
 }
 
 function getPriority(number) {
@@ -204,18 +210,32 @@ function setPriority(number, value) {
     } else {
         delete priorities[String(number)];
     }
-    writeTrackedMap(storagePrefix, "priorites", priorities);
+    writeTrackedMap(storagePrefix, "priorites", priorities, basesByOffer());
 }
 
-// Re-reads the in-memory maps from localStorage. Needed when the
+// Re-reads the in-memory maps localStorage. Needed when the
 // active scraping changes, after an import, or when another tab
 // (detail.html) wrote one of the shared keys.
 function reloadStorageMaps() {
-    statuses = readTrackedMap(storagePrefix, "statuts");
-    remarks = readTrackedMap(storagePrefix, "remarques");
-    favorites = readTrackedMap(storagePrefix, "favoris");
-    statutDates = readTrackedMap(storagePrefix, "statut_dates");
-    priorities = readTrackedMap(storagePrefix, "priorites");
+    // La vue « Toutes les recherches » n'a pas de recherche à elle : ses
+    // lignes viennent de toutes, donc le suivi est la fusion de chacune.
+    // Sinon aucun statut ne s'afficherait dans cette vue.
+    const reader = activeBaseName ? readTrackedMap : readMergedTrackedMap;
+    statuses = reader(storagePrefix, "statuts");
+    remarks = reader(storagePrefix, "remarques");
+    favorites = reader(storagePrefix, "favoris");
+    statutDates = reader(storagePrefix, "statut_dates");
+    priorities = reader(storagePrefix, "priorites");
+}
+
+/**
+ * La recherche à laquelle appartient chaque offre affichée.
+ * La vue « Toutes les recherches » mélange les recherches : sans ça, un
+ * statut modifié là serait enregistré sur une base qui n'existe pas.
+ * @returns {Object} { numero: nom de recherche }
+ */
+function basesByOffer() {
+    return offerBases;
 }
 
 
@@ -313,7 +333,10 @@ function getOfferState(offer) {
 
 function createOfferLink(offer) {
     const link = document.createElement("a");
-    link.href = detailHref(offer.number, activeBaseName);
+    // Une offre conserve sa recherche même dans la vue fusionnée.
+    link.href = detailHref(
+        offer.number, offerBases[String(offer.number)] || activeBaseName
+    );
     link.target = "_blank";
     link.rel = "noopener noreferrer";
     link.dataset.number = String(offer.number);
@@ -2179,6 +2202,11 @@ async function loadJsonWithFallback(url, tbody, failureMessage, colSpan) {
 async function reloadTables() {
     const tbodyCurrent = document.getElementById("currentRows");
 
+    // Le suivi est relu à chaque rendu : au premier chargement il arrive du
+    // serveur (une machine neuve n'a aucune clé localStorage) et peut donc
+    // être plus récent que ce que la page détient.
+    reloadStorageMaps();
+
     if (!dataUrl && dataUrl !== "all") {
         tbodyCurrent.innerHTML = "<tr><td colspan='9' class='no-scraping'>Aucun scraping sélectionné. Choisissez-en un dans le menu.</td></tr>";
         return;
@@ -2187,6 +2215,9 @@ async function reloadTables() {
     let offers = [];
     let scrapeDate = "";
     let data = null;
+    // La recherche de chaque offre, pour la vue « Toutes les recherches » :
+    // son suivi et son lien doivent rester ceux de SA recherche.
+    offerBases = {};
 
     if (dataUrl === "all") {
         // Fetch all scrapes and merge
@@ -2194,11 +2225,14 @@ async function reloadTables() {
         if (scrapings && scrapings.length) {
             const allData = await Promise.all(scrapings.map(async s => {
                 const d = await fetchJson(s.file);
-                return { data: d, timestamp: s.scrape_timestamp, label: s.label };
+                return { data: d, timestamp: s.scrape_timestamp, label: s.label, name: s.name };
             }));
-            allData.forEach(({ data: d, timestamp }) => {
+            allData.forEach(({ data: d, timestamp, name }) => {
                 if (d) {
-                    offers.push(...extractOffers(d));
+                    extractOffers(d).forEach(function (offer) {
+                        offerBases[String(offer.number)] = name;
+                        offers.push(offer);
+                    });
                     if (timestamp && (!scrapeDate || timestamp > scrapeDate)) scrapeDate = timestamp;
                 }
             });
@@ -2221,6 +2255,10 @@ async function reloadTables() {
 
     currentOffers = offers;
     lastScrapeDate = scrapeDate;
+    // Les offres viennent d'arriver : le suivi a pu être relu entre-temps
+    // (au premier chargement, il vient du serveur), on le relit donc ici,
+    // juste avant de dessiner la table.
+    reloadStorageMaps();
     // The menu lists the places of this scrape, so it follows the selection.
     fillLocationFilter(offers);
     // Store metadata needed for stale alert command generation
@@ -2477,6 +2515,16 @@ async function init() {
 document.addEventListener(SUIVI_EVENT, function () {
     reloadStorageMaps();
     backfillStatutDates();
+    rerenderTables();
+});
+
+// Au premier chargement, le suivi est relu depuis le serveur (une machine
+// neuve n'a aucune clé localStorage) et arrive après le rendu initial : la
+// table doit être redessinée, sinon les statuts importés n'apparaissent
+// qu'au changement de recherche. rerenderTables ne fait rien tant que les
+// offres ne sont pas chargées, donc l'ordre des deux n'importe pas.
+document.addEventListener(TRACKING_LOADED_EVENT, function () {
+    reloadStorageMaps();
     rerenderTables();
 });
 
