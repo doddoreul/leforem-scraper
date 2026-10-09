@@ -203,6 +203,15 @@ export async function loadTracking(baseName) {
  * @returns {Promise<void>}
  */
 export async function loadAllTracking() {
+    const bases = basesInLocalStorage();
+    await Promise.all(bases.map(loadTracking));
+}
+
+/**
+ * The search names that have a follow-up, from the localStorage mirror.
+ * @returns {Array<string>}
+ */
+function basesInLocalStorage() {
     const bases = {};
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
@@ -212,7 +221,33 @@ export async function loadAllTracking() {
         );
         if (match) bases[match[1]] = true;
     }
-    await Promise.all(Object.keys(bases).map(loadTracking));
+    return Object.keys(bases);
+}
+
+/**
+ * Load every follow-up the server holds, not just the ones this browser
+ * has seen.
+ *
+ * Reading the list from the server is the point: a browser that never
+ * rendered a search has no localStorage key for it, so a scan of
+ * localStorage alone would leave its follow-up unloaded — and a restored
+ * backup would look like it changed nothing. Falls back to the
+ * localStorage scan when the server cannot answer.
+ * @returns {Promise<void>}
+ */
+export async function loadAllTrackingFromServer() {
+    let bases = null;
+    try {
+        const response = await fetch("/api/tracking/bases");
+        if (response.ok) {
+            const data = await response.json();
+            if (Array.isArray(data)) bases = data;
+        }
+    } catch (error) {
+        bases = null;
+    }
+    if (bases === null) return loadAllTracking();
+    await Promise.all(bases.map(loadTracking));
 }
 
 /**
@@ -434,7 +469,7 @@ export async function migrateLegacyStorage() {
         // Fall through to the plain load.
     }
 
-    await loadAllTracking();
+    await loadAllTrackingFromServer();
 
     // The pages render before this resolves, so tell them the follow-up is
     // now the backend's: the renders that happened on the localStorage

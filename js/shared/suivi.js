@@ -10,7 +10,7 @@
    reste. Voir python/migration.py.
    ============================================================ */
 
-import { loadAllTracking } from "./storage.js";
+import { loadAllTrackingFromServer } from "./storage.js";
 
 export const SUIVI_EVENT = "foremsuiviimported";
 
@@ -225,8 +225,10 @@ function importKind(file, kind) {
                             message: data.error || "réponse inattendue."
                         };
                     }
-                    // Le serveur fait référence : on relit le suivi depuis lui.
-                    return loadAllTracking().then(function () {
+                    // Le serveur fait référence : on relit le suivi depuis lui,
+                    // toutes bases confondues (un navigateur neuf n'a aucune
+                    // clé localStorage pour les recherches importées).
+                    return loadAllTrackingFromServer().then(function () {
                         return data;
                     });
                 });

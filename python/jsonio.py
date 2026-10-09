@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from datetime import datetime
 from typing import Any
 
@@ -35,18 +36,33 @@ def read_json(path: str, default: Any = None) -> Any:
 
 
 def write_json_atomically(path: str, content: Any) -> None:
-    """Write ``content`` as JSON, replacing ``path`` in one step."""
+    """Write ``content`` as JSON, replacing ``path`` in one step.
+
+    The temporary file carries the process and thread id: the server is
+    threaded, so two requests writing the same file would otherwise fight
+    over one ``.tmp`` path and one of them would fail (Windows refuses to
+    move a file that is still open elsewhere).
+    """
     directory = os.path.dirname(path)
     if directory:
         os.makedirs(directory, exist_ok=True)
 
-    tmp_path = f"{path}.tmp"
-    with open(tmp_path, "w", encoding="utf-8") as handle:
-        json.dump(content, handle, ensure_ascii=False, indent=2)
-        handle.write("\n")
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(tmp_path, path)
+    tmp_path = "%s.%d.%d.tmp" % (path, os.getpid(), threading.get_ident())
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as handle:
+            json.dump(content, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_path, path)
+    finally:
+        # os.replace consumed it; this only matters when the write failed
+        # halfway (disk full, deleted folder…), so no stale .tmp is left.
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
 
 
 def read_details(path: str) -> dict[str, Any]:

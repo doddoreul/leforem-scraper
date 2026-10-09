@@ -603,6 +603,28 @@ class MigrationRouteTestCase(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_tracking_bases_lists_every_base(self):
+        """The bases that carry a follow-up, tracking-only ones included.
+
+        A browser that never rendered a search has no localStorage key for
+        it: without this list it could not reload the follow-up restored by
+        an import, and the restore would look like it did nothing.
+        """
+        from python.storage import get_storage
+        seed_all(get_storage())
+        get_storage().write_tracking("ancienne-recherche", "77", {"statut": "postule"})
+
+        response = requests.get(self.url("/api/tracking/bases"), timeout=15)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            sorted(response.json()), ["ancienne-recherche", "liege"]
+        )
+        # La route ne doit pas être confondue avec le suivi d'une base.
+        tracking = requests.get(
+            self.url("/api/tracking/liege"), timeout=15
+        ).json()
+        self.assertEqual(tracking["1"]["statut"], "en_cours")
+
     def test_export_userdata_route(self):
         from python.storage import get_storage
         seed_all(get_storage())

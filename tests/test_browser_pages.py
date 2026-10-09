@@ -599,6 +599,127 @@ log("IMPORT-OK");
 </body></html>
 """
 
+# Le vrai chemin des boutons du menu : le fichier est déposé dans l'entrée
+# du menu (comme un clic utilisateur), pas passé directement à la fonction.
+IMPORT_DOM_PROBE = """<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\\n"); }
+const realSetTimeout = window.setTimeout.bind(window);
+const sleep = ms => new Promise(resolve => realSetTimeout(resolve, ms));
+const scheduledDelays = [];
+window.setTimeout = function (fn, ms) {
+    scheduledDelays.push(ms);
+    return 0;
+};
+
+import { initTheme } from "/js/shared/theme.js";
+import { TRACKING_GEAR_ACTIONS, setupSuiviActions } from "/js/shared/suivi.js";
+import { readTrackedMap } from "/js/shared/storage.js";
+
+try {
+// Le menu réel, rendu puis câblé exactement comme sur une page de l'app.
+initTheme(TRACKING_GEAR_ACTIONS);
+setupSuiviActions();
+window.confirm = function () { return true; };
+
+const menuInputs = Array.prototype.slice.call(
+    document.querySelectorAll(".theme-actions input[type=file]")
+).map(function (input) { return input.id; });
+log("menuInputs=" + menuInputs.join(","));
+
+const base = "/api/tracking/metier_liege";
+const putStatut = async statut => {
+    const response = await fetch(base + "/1902", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ statut: statut })
+    });
+    log("put_" + statut + "=" + response.status);
+    log("statut_apres_put=" + (await statutOf()));
+};
+const statutOf = async () => {
+    const data = await fetch(base).then(r => r.json());
+    return (data["1902"] || {}).statut || "";
+};
+const toast = () => {
+    const box = document.getElementById("suiviToast");
+    return box ? box.textContent : "";
+};
+
+/** Dépose un fichier dans l'entrée du menu, comme le ferait l'utilisateur. */
+function pickFile(inputId, name, text) {
+    const input = document.getElementById(inputId);
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([text], name, { type: "application/json" }));
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+async function waitStatut(expected, tries) {
+    for (let i = 0; i < tries; i += 1) {
+        if ((await statutOf()) === expected) return true;
+        await sleep(100);
+    }
+    return false;
+}
+
+async function waitToast(pattern, tries) {
+    for (let i = 0; i < tries; i += 1) {
+        if (pattern.test(toast())) return true;
+        await sleep(100);
+    }
+    return false;
+}
+
+// 1. Un suivi local, puis les deux exports.
+await putStatut("postule");
+const userDoc = await fetch("/api/export/userdata").then(r => r.text());
+const scrapingDoc = await fetch("/api/export/scraping").then(r => r.text());
+
+// 2. Le bouton utilisateur du menu restaure le suivi de son fichier.
+await putStatut("refuse");
+pickFile("importUserdataInput", "user.json", userDoc);
+log("userdataViaMenu=" + (await waitStatut("postule", 40)));
+
+// 2bis. Navigateur neuf : aucune clé localStorage, le cas d'une migration
+//        vers un autre PC. L'import doit rester visible par la page.
+localStorage.clear();
+await putStatut("refuse");
+pickFile("importUserdataInput", "user.json", userDoc);
+await waitStatut("postule", 60);
+const visible = readTrackedMap("forem_metier_liege_", "statuts");
+log("freshBrowserVisible=" + (visible["1902"] === "postule"));
+
+// 3. Le bouton utilisateur refuse un fichier de scraping.
+await putStatut("refuse");
+pickFile("importUserdataInput", "scraping.json", scrapingDoc);
+log("refusalShown=" + (await waitToast(/autre bouton/, 40)));
+log("refusedScraping=" + (await statutOf()));
+log("refusalMessage=" + /autre bouton/.test(toast()));
+
+// 4. Le bouton scraping refuse un fichier de données utilisateur.
+pickFile("importScrapingInput", "user.json", userDoc);
+await waitToast(/autre bouton/, 40);
+log("refusedUserdata=" + (await statutOf()));
+
+// 5. Le bouton scraping restaure son fichier et programme le rechargement.
+pickFile("importScrapingInput", "scraping.json", scrapingDoc);
+log("scrapingDone=" + (await waitToast(/Import terminé/, 60)));
+log("scrapingViaMenu=" + (await fetch("/api/scrapings").then(r => r.json())).length);
+log("reloadAsked=" + scheduledDelays.filter(ms => ms === 3000).length);
+
+await fetch(base + "/1902", { method: "DELETE" });
+log("IMPORT-DOM-OK");
+} catch (error) {
+    log("ERROR=" + (error && error.stack ? error.stack : String(error)));
+}
+</script>
+</body></html>
+"""
+
 # Reads the rendered offer sheet and reports the remuneration lines, so a
 # --dump-dom run shows what the user actually gets.
 REMUN_PROBE = r"""<!DOCTYPE html>
@@ -1496,6 +1617,7 @@ class ProbeHandler(server.Handler):
             "/dismiss-probe.html": DISMISS_PROBE,
             "/persist-probe.html": PERSIST_PROBE,
             "/import-probe.html": IMPORT_PROBE,
+            "/import-dom-probe.html": IMPORT_DOM_PROBE,
             "/profile-probe.html": PROFILE_PROBE,
             "/remun-probe.html": REMUN_PROBE,
             "/keyword-probe.html": KEYWORD_PROBE,
@@ -1593,6 +1715,90 @@ def seed(folder):
     write("historique_scrapes.json", {"scrapes": []})
     write("historique_modifications.json", {"modifications": []})
     write("companies.json", COMPANIES)
+
+
+# Le vrai chemin des boutons du menu, sur SQLite comme dans l'app.
+class SqliteBrowserPagesTestCase(BrowserPagesTestCase):
+    """Le vrai chemin des boutons, sur SQLite comme dans l'application."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.profile = tempfile.TemporaryDirectory()
+
+        cls._saved_dir = config.DATA_DIR
+        cls._saved_storage = os.environ.get("LEFOREM_STORAGE")
+        config.DATA_DIR = cls.tmp.name
+        os.environ["LEFOREM_STORAGE"] = "sqlite"
+        from python.storage import reset_storage
+        reset_storage()
+
+        seed_sqlite(cls.tmp.name)
+
+        cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), ProbeHandler)
+        cls.port = cls.httpd.server_address[1]
+        cls.thread = threading.Thread(target=cls.httpd.serve_forever)
+        cls.thread.daemon = True
+        cls.thread.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        from python.storage import reset_storage
+        reset_storage()
+        config.DATA_DIR = cls._saved_dir
+        if cls._saved_storage is None:
+            os.environ.pop("LEFOREM_STORAGE", None)
+        else:
+            os.environ["LEFOREM_STORAGE"] = cls._saved_storage
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+        cls.thread.join(timeout=5)
+        cls.profile.cleanup()
+        cls.tmp.cleanup()
+
+    def test_the_menu_import_buttons_work_on_sqlite(self):
+        report = self.report_of("/import-dom-probe.html", budget="30000")
+
+        self.assertIn("IMPORT-DOM-OK", report, report)
+        self.assertIn("menuInputs=importUserdataInput,importScrapingInput", report)
+        # Un clic réel sur le bouton du menu restaure les données fichier.
+        self.assertIn("userdataViaMenu=true", report)
+        self.assertIn("freshBrowserVisible=true", report)
+        self.assertIn("scrapingViaMenu=1", report)
+        self.assertIn("scrapingDone=true", report)
+        # Le mauvais type de fichier est refusé, avec un message qui le dit.
+        self.assertIn("refusalShown=true", report)
+        self.assertIn("refusedScraping=refuse", report)
+        self.assertIn("refusedUserdata=refuse", report)
+        self.assertIn("refusalMessage=true", report)
+        self.assertIn("reloadAsked=1", report)
+
+
+def seed_sqlite(folder):
+    """Une base SQLite avec deux recherches et un suivi orphelin."""
+    from python.storage.sqlite_store import SqliteStorage
+
+    store = SqliteStorage(os.path.join(folder, "leforem.db"))
+    store.write_scraping(
+        "metier_liege",
+        {
+            "label": "Metier / Liege",
+            "scrape_timestamp": "2026-09-26T08:15:00",
+            "occupation_guid": "occ-guid",
+            "location_guid": "loc-guid",
+            "offers": OFFERS,
+        },
+    )
+    store.write_details("metier_liege", {"1902": DETAIL})
+    store.write_history_offers("metier_liege", HISTORY)
+    store.write_tracking("metier_liege", "1902", {"statut": "postule"})
+    # Un suivi sous une base qui n'est plus une recherche, comme les vraies
+    # données de l'utilisateur.
+    store.write_tracking(
+        "fb3c1045-38215355", "999",
+        {"statut": "pas_interesse", "remarque": "garder l'oeil"},
+    )
+    return store
 
 
 class TestModulesInBrowser(BrowserPagesTestCase):
@@ -1935,7 +2141,10 @@ class TestPagesInBrowser(BrowserPagesTestCase):
         )
 
     def test_each_import_button_does_its_own_job(self):
-        report = self.report_of("/import-probe.html")
+        # La sonde enchaîne plusieurs imports ; le stockage JSON écrit chaque
+        # fichier avec fsync, ce qui peut dépasser le budget quand la machine
+        # est chargée (lancement de toute la suite).
+        report = self.report_of("/import-probe.html", budget="120000")
 
         self.assertIn("IMPORT-OK", report, report)
         self.assertIn("exportsOk=true", report)

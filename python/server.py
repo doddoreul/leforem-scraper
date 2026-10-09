@@ -93,6 +93,10 @@ DELETE_SCRAPING_PATH = "/delete-scraping"
 COMPANIES_PATH = "/companies.json"
 PROFILE_PATH = "/api/profil"
 
+# The bases that carry a follow-up (tracking), for the browser to reload
+# from the server rather than from its own, possibly empty, localStorage.
+TRACKING_BASES_PATH = "/api/tracking/bases"
+
 # Full backup/restore of every data area (see python/migration.py).
 EXPORT_PATH = "/api/export"
 USERDATA_EXPORT_PATH = "/api/export/userdata"
@@ -276,12 +280,18 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_occupations(q)
             return
 
+        if path == TRACKING_BASES_PATH:
+            # Les bases qui portent un suivi : un navigateur neuf n'a aucune
+            # clé localStorage pour elles, et sans cette liste un import
+            # restaurerait les données sans que la page puisse les relire.
+            self._send_json(200, get_storage().get_tracking_bases())
+            return
+
         if path.startswith("/api/tracking/"):
             base = path[len("/api/tracking/"):]
             if base:
                 self._handle_tracking_get(base)
                 return
-
         if path == PROFILE_PATH:
             self._send_json(200, get_storage().read_profile())
             return
