@@ -764,6 +764,91 @@ log("LAYOUT-OK");
 </body></html>
 """
 
+UPDATER_PROBE = """<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"></head><body>
+<pre id="out">pending</pre>
+<script type="module">
+const out = document.getElementById("out");
+const lines = [];
+function log(line) { lines.push(line); out.textContent = lines.join("\\n"); }
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+localStorage.clear();
+
+// 1. Sans le pont Electron, le module ne pose rien du tout.
+const module = await import("/js/shared/updater.js");
+await module.initUpdater();
+log("sansPont=" + (document.getElementById("updaterBanner") === null));
+
+// 2. Le pont, comme le fournit electron/preload.js.
+let statusCallback = null;
+let progressCallback = null;
+const calls = { check: 0, install: 0 };
+window.leforemUpdater = {
+    onStatus: function (callback) { statusCallback = callback; },
+    onProgress: function (callback) { progressCallback = callback; },
+    check: function () {
+        calls.check += 1;
+        return Promise.resolve();
+    },
+    install: function () {
+        calls.install += 1;
+        return Promise.resolve({ ok: true });
+    }
+};
+
+const offer = {
+    state: "available",
+    available: true,
+    current: "1.1.6",
+    latest: "v1.1.7",
+    assetName: "LeForem-Scraper-1.1.7-Portable.exe",
+    assetSize: 124000000
+};
+
+await module.initUpdater();
+statusCallback(offer);
+await sleep(100);
+const banner = document.getElementById("updaterBanner");
+log("propose=" + !banner.hidden);
+log("bouton=" + !document.getElementById("updaterInstallBtn").hidden);
+log("texteContientVersion=" + (
+    banner.querySelector(".updater-text").textContent.indexOf("1.1.7") !== -1));
+
+// 3. Plus tard masque, et la meme version ne revient pas.
+document.getElementById("updaterLaterBtn").click();
+await sleep(100);
+log("apresPlusTard=" + banner.hidden);
+statusCallback(offer);
+await sleep(100);
+log("memeVersion=" + banner.hidden);
+
+// 4. Une version suivante est proposee a nouveau.
+statusCallback(Object.assign({}, offer, { latest: "v1.2.0" }));
+await sleep(100);
+log("nouvelleVersion=" + !banner.hidden);
+
+// 5. Mettre a jour passe par le pont.
+document.getElementById("updaterInstallBtn").click();
+await sleep(150);
+log("installAppele=" + calls.install);
+
+// 6. Le telechargement affiche sa progression.
+statusCallback({ state: "downloading", latest: "v1.2.0" });
+progressCallback({ received: 62000000, total: 124000000 });
+await sleep(150);
+log("progression=" + (
+    banner.querySelector(".updater-text").textContent.indexOf("50%") !== -1));
+
+// 7. Rien a proposer : pas de bandeau.
+statusCallback({ state: "checked", available: false, current: "1.1.6" });
+await sleep(100);
+log("aJour=" + banner.hidden);
+log("UPDATER-OK");
+</script>
+</body></html>
+"""
+
 # Restauration par les deux boutons d'import : chacun ne traite que son
 # propre type de fichier, et l'import modifie réellement le stockage.
 IMPORT_PROBE = """<!DOCTYPE html>
@@ -1905,6 +1990,7 @@ class ProbeHandler(server.Handler):
             "/fresh-start-probe.html": FRESH_START_PROBE,
             "/layout-probe.html": LAYOUT_PROBE,
             "/stale-alert-probe.html": STALE_ALERT_PROBE,
+            "/updater-probe.html": UPDATER_PROBE,
             "/profile-probe.html": PROFILE_PROBE,
             "/remun-probe.html": REMUN_PROBE,
             "/keyword-probe.html": KEYWORD_PROBE,
@@ -2469,6 +2555,7 @@ class TestPagesInBrowser(BrowserPagesTestCase):
                 self.assertIn("Exporter le scraping", dom)
                 self.assertIn("Importer les données utilisateur", dom)
                 self.assertIn("Importer un scraping", dom)
+                self.assertIn("Vérifier les mises à jour", dom)
 
     def test_the_csv_export_is_temporarily_disabled(self):
         dom = self.dump("")
@@ -2478,9 +2565,30 @@ class TestPagesInBrowser(BrowserPagesTestCase):
             "le bouton Exporter CSV doit être désactivé (temporairement)",
         )
 
-    def test_each_import_button_does_its_own_job(self):        # La sonde enchaîne plusieurs imports ; le stockage JSON écrit chaque
-        # fichier avec fsync, ce qui peut dépasser le budget quand la machine
-        # est chargée (lancement de toute la suite).
+    def test_the_update_banner_offers_one_version_at_a_time(self):
+        report = self.report_of("/updater-probe.html", budget="20000")
+
+        self.assertIn("UPDATER-OK", report, report)
+        # Sans l'application de bureau (pas de pont), rien n'apparait.
+        self.assertIn("sansPont=true", report)
+        # Une version plus recente est proposee, avec son bouton.
+        self.assertIn("propose=true", report)
+        self.assertIn("bouton=true", report)
+        self.assertIn("texteContientVersion=true", report)
+        # Plus tard masque, et la meme version ne revient pas.
+        self.assertIn("apresPlusTard=true", report)
+        self.assertIn("memeVersion=true", report)
+        # Une version suivante re-propose ; Mettre a jour passe le pont.
+        self.assertIn("nouvelleVersion=true", report)
+        self.assertIn("installAppele=1", report)
+        # Le telechargement annonce sa progression, et a jour plus rien.
+        self.assertIn("progression=true", report)
+        self.assertIn("aJour=true", report)
+
+    def test_each_import_button_does_its_own_job(self):
+        # La sonde enchaine plusieurs imports ; le stockage JSON ecrit chaque
+        # fichier avec fsync, ce qui peut depasser le budget quand la machine
+        # est chargee (lancement de toute la suite).
         report = self.report_of("/import-probe.html", budget="120000")
 
         self.assertIn("IMPORT-OK", report, report)

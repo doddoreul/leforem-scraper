@@ -2,6 +2,8 @@
    NAVBAR — injects navbar_include.html and marks the active link
    ============================================================ */
 
+import { initUpdater } from "./updater.js";
+
 export async function loadNavbar() {
     const container = document.getElementById("navbar-placeholder");
     if (!container) return;
@@ -29,4 +31,14 @@ if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", loadNavbar);
 } else {
     loadNavbar();
+}
+
+// Les mises à jour concernent l'application de bureau : sans le pont
+// injecté par Electron, ce module ne fait rien.
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () {
+        initUpdater();
+    });
+} else {
+    initUpdater();
 }

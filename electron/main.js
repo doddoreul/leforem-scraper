@@ -24,12 +24,22 @@ if (!gotLock) {
 } else {
   let mainWindow = null;
   let backend = null;
+  // Dernière release connue : { available, current, latest, releaseUrl… }
+  let latestRelease = null;
+  let updateTimer = null;
 
   app.on("second-instance", () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
     }
+  });
+
+  // Commandes venues de la page (bouton « Mettre à jour », vérification).
+  app.whenReady().then(() => {
+    const { ipcMain } = require("electron");
+    ipcMain.handle("updater:check", () => checkForUpdates());
+    ipcMain.handle("updater:install", () => installUpdate());
   });
 
   // --- Utilitaires ---------------------------------------------------------
@@ -163,6 +173,7 @@ if (!gotLock) {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
+        preload: path.join(__dirname, "preload.js"),
       },
     });
     mainWindow.setMenuBarVisibility(false);
@@ -183,6 +194,138 @@ if (!gotLock) {
     );
   }
 
+  // --- Mises à jour ---------------------------------------------------------
+
+  const { net, shell } = require("electron");
+  const updater = require("./update-check");
+
+  // La version portable se met à jour avec le .exe portable, l'installeur avec
+  // le Setup : l'un se relance, l'autre s'installe.
+  function isPortable() {
+    return Boolean(process.env.PORTABLE_EXECUTABLE_DIR);
+  }
+
+  function currentStatus() {
+    return (
+      latestRelease || { available: false, current: app.getVersion() }
+    );
+  }
+
+  function tellRenderer(payload) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("updater:status", payload);
+    }
+  }
+
+  function fetchLatestRelease() {
+    return new Promise((resolve, reject) => {
+      const request = net.request(updater.API_URL);
+      request.setHeader("Accept", "application/vnd.github+json");
+      request.setHeader("User-Agent", "leforem-scraper");
+      request.on("response", (response) => {
+        if (response.statusCode !== 200) {
+          reject(new Error("HTTP " + response.statusCode));
+          response.resume();
+          return;
+        }
+        let body = "";
+        response.on("data", (chunk) => {
+          body += chunk;
+        });
+        response.on("end", () => {
+          try {
+            resolve(JSON.parse(body));
+          } catch (error) {
+            reject(error);
+          }
+        });
+      });
+      request.on("error", reject);
+      request.end();
+    });
+  }
+
+  /** Interroge GitHub. Ne renvoie jamais d'exception : l'app doit démarrer. */
+  async function checkForUpdates() {
+    tellRenderer({ state: "checking", ...currentStatus() });
+    try {
+      const release = await fetchLatestRelease();
+      latestRelease = updater.releaseStatus(
+        release,
+        app.getVersion(),
+        isPortable()
+      );
+    } catch (error) {
+      latestRelease = {
+        available: false,
+        current: app.getVersion(),
+        error: String((error && error.message) || error),
+      };
+    }
+    tellRenderer({
+      state: latestRelease.available ? "available" : "checked",
+      ...latestRelease,
+    });
+    return latestRelease;
+  }
+
+  /** Télécharge la nouvelle version, puis la lance et ferme l'application. */
+  async function installUpdate() {
+    const status = currentStatus();
+    if (!status.available || !status.assetUrl) {
+      // Rien de prêt : on ouvre la page de la release.
+      if (status.releaseUrl) shell.openExternal(status.releaseUrl);
+      return { ok: false };
+    }
+
+    const target = path.join(
+      app.getPath("temp"),
+      status.assetName || "leforem-update.exe"
+    );
+
+    tellRenderer({ state: "downloading", ...status });
+    await new Promise((resolve, reject) => {
+      const request = net.request(status.assetUrl);
+      request.setHeader("User-Agent", "leforem-scraper");
+      request.on("response", (response) => {
+        if (response.statusCode !== 200) {
+          reject(new Error("HTTP " + response.statusCode));
+          response.resume();
+          return;
+        }
+        const out = fs.createWriteStream(target);
+        let received = 0;
+        const total = Number(response.headers["content-length"] || 0);
+        response.on("data", (chunk) => {
+          received += chunk.length;
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send("updater:progress", {
+              received,
+              total: total || status.assetSize || 0,
+            });
+          }
+        });
+        response.pipe(out);
+        out.on("finish", () => out.close(resolve));
+        out.on("error", reject);
+      });
+      request.on("error", reject);
+      request.end();
+    }).catch((error) => {
+      tellRenderer({ state: "error", ...status, error: String(error) });
+      throw error;
+    });
+
+    // On ferme d'abord, puis on lance : la nouvelle version doit pouvoir
+    // démarrer seule (une seule instance par verrou, sinon elle se contente
+    // de rendre la main à celle qui tourne encore).
+    setTimeout(() => {
+      shell.openPath(target).catch(() => {});
+    }, 500);
+    app.quit();
+    return { ok: true };
+  }
+
   // --- Cycle de vie ---------------------------------------------------------
 
   app.whenReady().then(async () => {
@@ -195,6 +338,11 @@ if (!gotLock) {
       const ready = await waitForServer(url.toString(), START_TIMEOUT_MS);
       if (ready) {
         createWindow(url.toString());
+        scheduleUpdateCheck();
+        // Premier contrôle un peu après l'ouverture, pour ne pas la retarder.
+        setTimeout(() => {
+          checkForUpdates().catch(() => {});
+        }, 20_000);
       } else {
         dialog.showErrorBox(
           "LeForem Scraper",
@@ -209,6 +357,14 @@ if (!gotLock) {
       app.quit();
     }
   });
+
+  // Un point toutes les 4 heures ; la page se charge de ne pas radoter.
+  function scheduleUpdateCheck() {
+    if (updateTimer) clearInterval(updateTimer);
+    updateTimer = setInterval(() => {
+      checkForUpdates().catch(() => {});
+    }, 4 * 3600 * 1000);
+  }
 
   app.on("window-all-closed", () => {
     app.quit();

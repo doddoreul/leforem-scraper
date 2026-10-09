@@ -31,8 +31,22 @@ Deux formats au choix :
 - La désinstallation **conserve** les données (volontaire) ; la version portable
   partage les mêmes fichiers.
 
-## Sauvegarder ou migrer tes données
+## Mises à jour
 
+L'application regarde toute seule si une nouvelle version est publiée sur
+GitHub (au démarrage, puis toutes les 4 heures ; l'entrée **Vérifier les
+mises à jour** du menu ⚙️ force le contrôle).
+
+Quand une version plus récente existe, un bandeau le propose en haut de la
+fenêtre : **Mettre à jour** télécharge la variante qui correspond à ton
+installation (le *Portable* si tu utilises le portable, l'*installeur* sinon),
+puis la lance et ferme l'application. **Plus tard** ferme le bandeau, et la
+même version n'est pas reproposée.
+
+Rien n'est envoyé à GitHub en retour : l'application ne demande que la
+dernière release publiée (API publique, anonyme).
+
+## Sauvegarder ou migrer tes données
 L'application distingue deux familles de données, exportables dans des
 fichiers JSON séparés :
 

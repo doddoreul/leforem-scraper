@@ -43,6 +43,11 @@ export const TRACKING_GEAR_ACTIONS = [
         title: "Restaurer un export de scraping (recherches, offres, détails, historiques)",
         type: "file",
         accept: ".json,application/json"
+    },
+    {
+        id: "checkUpdatesBtn",
+        label: "Vérifier les mises à jour",
+        title: "Demander à GitHub si une nouvelle version est publiée"
     }
 ];
 
@@ -300,6 +305,19 @@ export function setupSuiviActions() {
         scrapingInput.addEventListener("change", function () {
             importScrapingFile(this.files && this.files[0]);
             this.value = "";
+        });
+    }
+    const checkUpdatesBtn = document.getElementById("checkUpdatesBtn");
+    if (checkUpdatesBtn) {
+        checkUpdatesBtn.addEventListener("click", function () {
+            if (!window.leforemUpdater) {
+                // Le pont n'existe que dans l'application de bureau.
+                showSuiviToast(
+                    "Les mises à jour se vérifient dans l'application."
+                );
+                return;
+            }
+            document.dispatchEvent(new CustomEvent("forem:checkupdates"));
         });
     }
 }

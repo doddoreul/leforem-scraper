@@ -1744,3 +1744,64 @@ th.col-forem-id {
 .theme-action--danger:focus-visible {
     box-shadow: 0 0 0 3px var(--danger);
 }
+
+/* ============================================================
+   BANDEAU DE MISE À JOUR (application de bureau uniquement)
+   ============================================================ */
+
+.updater-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-4);
+    background: var(--accent);
+    color: var(--bg-page);
+    font-size: var(--font-md);
+    box-shadow: var(--shadow-card);
+}
+
+.updater-text {
+    min-width: 0;
+}
+
+.updater-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex: none;
+}
+
+.updater-btn {
+    padding: 6px var(--space-3);
+    border: 1px solid var(--bg-page);
+    background: var(--bg-page);
+    color: var(--accent);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.updater-btn:hover {
+    background: var(--bg-surface);
+}
+
+.updater-later {
+    padding: 6px var(--space-2);
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+/* Le bandeau ne doit pas masquer le haut de page. */
+body:has(.updater-banner:not([hidden])) {
+    padding-top: 56px;
+}
