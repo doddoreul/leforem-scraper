@@ -17,8 +17,8 @@
 //     forem_<search>_priorites     { offerId: 2 }
 // ============================================================
 
-export const LEGACY_STORAGE_PREFIX = "forem_electromecanicien_";
-export const DEFAULT_SCRAPING_PREFIX = "forem_fb3c1045-38215355_";
+const LEGACY_STORAGE_PREFIX = "forem_electromecanicien_";
+const DEFAULT_SCRAPING_PREFIX = "forem_fb3c1045-38215355_";
 
 /** The suffixes that make up a follow-up, in the order they are read. */
 export const TRACKED_SUFFIXES = [
@@ -33,7 +33,7 @@ export const TRACKED_SUFFIXES = [
 export const TRACKING_LOADED_EVENT = "foremtrackingloaded";
 
 /** localStorage suffix -> field name used by the tracking API. */
-export const SUFFIX_FIELD = {
+const SUFFIX_FIELD = {
     statuts: "statut",
     statut_dates: "statut_date",
     remarques: "remarque",
@@ -41,11 +41,6 @@ export const SUFFIX_FIELD = {
     priorites: "priorite",
 };
 
-// forem_profil is the candidate profile: it is one whole document rather than
-// a map of offers, so it travels with the tracking export but is NOT pushed
-// to /api/tracking (the import/migration paths only match the per-offer keys).
-const TRACKED_PLAIN_KEYS = ["forem_scraping_select", "forem_profil"];
-const TRACKED_KEY_PATTERN = /^forem_.+_(statuts|remarques|favoris|statut_dates|priorites)$/;
 const MIGRATION_FLAG = "forem_migration_v2_done";
 const SYNCED_FLAG = "forem_tracking_synced";
 
@@ -63,19 +58,9 @@ export function storagePrefixFor(baseName) {
  * @param {string} prefix
  * @returns {string}
  */
-export function baseNameForPrefix(prefix) {
+function baseNameForPrefix(prefix) {
     if (!prefix || prefix.length < 7) return "";
     return prefix.slice("forem_".length, -1);
-}
-
-/**
- * Is this key part of a follow-up (and therefore worth exporting)?
- * @param {string} key
- * @returns {boolean}
- */
-export function isTrackedStorageKey(key) {
-    return TRACKED_KEY_PATTERN.test(key) ||
-        TRACKED_PLAIN_KEYS.indexOf(key) !== -1;
 }
 
 /** Searches whose data is already cached: { baseName: { offerId: fields } } */
@@ -134,7 +119,7 @@ function apiPath(baseName, offerId) {
  * @param {string} baseName
  * @returns {Promise<Object>} {} when the backend is unreachable
  */
-export async function fetchTracking(baseName) {
+async function fetchTracking(baseName) {
     try {
         const response = await fetch(apiPath(baseName));
         if (!response.ok) return {};
@@ -152,7 +137,7 @@ export async function fetchTracking(baseName) {
  * @param {*} value
  * @returns {Promise<boolean>}
  */
-export async function pushTracking(baseName, offerId, field, value) {
+async function pushTracking(baseName, offerId, field, value) {
     const payload = {};
     payload[field] = value === undefined ? null : value;
     try {
@@ -168,28 +153,11 @@ export async function pushTracking(baseName, offerId, field, value) {
 }
 
 /**
- * Delete the follow-up of one offer.
- * @param {string} baseName
- * @param {string} offerId
- * @returns {Promise<boolean>}
- */
-export async function deleteOfferTracking(baseName, offerId) {
-    try {
-        const response = await fetch(apiPath(baseName, offerId), {
-            method: "DELETE",
-        });
-        return response.ok;
-    } catch (error) {
-        return false;
-    }
-}
-
-/**
  * Load one search into the cache and mirror it to localStorage.
  * @param {string} baseName
  * @returns {Promise<Object>}
  */
-export async function loadTracking(baseName) {
+async function loadTracking(baseName) {
     const data = await fetchTracking(baseName);
     // An empty answer is still authoritative: it means "no follow-up yet"
     // and must stop the reads from falling back to a stale localStorage.
@@ -306,7 +274,7 @@ function mirrorToLocalStorage(baseName, entries) {
  * @param {*} value
  * @returns {Promise<void>}
  */
-export async function writeOfferField(baseName, offerId, field, value) {
+async function writeOfferField(baseName, offerId, field, value) {
     // The cache and the mirror are updated first, without waiting for the
     // network: the callers render right after, so a deferred cache update
     // would show the previous value.
@@ -390,7 +358,7 @@ export async function writeTrackedMap(prefix, suffix, value, basesByOffer) {
  * Push an existing localStorage follow-up to the backend, once.
  * @returns {Promise<number>} the number of offers mirrored
  */
-export async function migrateLocalStorageToBackend() {
+async function migrateLocalStorageToBackend() {
     const bases = {};
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
@@ -438,56 +406,6 @@ export async function migrateLocalStorageToBackend() {
 }
 
 /**
- * Import an exported follow-up into the backend.
- *
- * The data goes straight to the backend rather than through localStorage:
- * writing to localStorage would be ignored by the reads (they serve the
- * cache) and migrateLocalStorageToBackend would then push the *stale* cache
- * over the import. The cache is reloaded from the backend afterwards, which
- * is authoritative, and localStorage follows as a mirror.
- * @param {Object} data { "forem_<base>_<suffix>": { offerId: value } }
- * @returns {Promise<number>} the number of offers imported
- */
-export async function importTrackedData(data) {
-    if (!data || typeof data !== "object") return 0;
-
-    // Group by search and offer, so one offer is sent in a single request.
-    const byBase = {};
-    let imported = 0;
-
-    Object.keys(data).forEach(function (key) {
-        if (!isTrackedStorageKey(key)) return;
-        const match = key.match(
-            /^forem_(.+)_(statuts|remarques|favoris|statut_dates|priorites)$/
-        );
-        if (!match) return;
-        const field = SUFFIX_FIELD[match[2]];
-        const values = data[key];
-        if (!field || !values || typeof values !== "object") return;
-        if (!byBase[match[1]]) byBase[match[1]] = {};
-        Object.keys(values).forEach(function (offerId) {
-            if (!byBase[match[1]][offerId]) byBase[match[1]][offerId] = {};
-            byBase[match[1]][offerId][field] = values[offerId];
-        });
-    });
-
-    for (const baseName of Object.keys(byBase)) {
-        const offers = byBase[baseName];
-        for (const offerId of Object.keys(offers)) {
-            const fields = offers[offerId];
-            for (const field of Object.keys(fields)) {
-                await pushTracking(baseName, offerId, field, fields[field]);
-            }
-            imported++;
-        }
-    }
-
-    // The backend now holds the import: refresh the cache from it.
-    await loadAllTracking();
-    return imported;
-}
-
-/**
  * Startup path: move the legacy keys, seed the backend once, then load
  * the cache. Safe to call on every page load.
  * @returns {Promise<void>}
@@ -527,12 +445,3 @@ export async function migrateLegacyStorage() {
     );
 }
 
-/**
- * Load one search's follow-up into the cache.
- * Called when the user switches search.
- * @param {string} baseName
- * @returns {Promise<void>}
- */
-export async function refreshTracking(baseName) {
-    await loadTracking(baseName);
-}

@@ -92,8 +92,6 @@ loadWantedTypes().then(function (types) {
     if (currentOffers.length) renderCurrent(currentOffers, lastScrapeDate);
 });
 
-
-
 // ============================================================
 // LOCAL STORAGE — the follow-up of the selected search: statuses,
 // status dates, remarks, favourites and personal priorities. The
@@ -204,15 +202,6 @@ function getPriority(number) {
     return priorities[String(number)] || "";
 }
 
-function setPriority(number, value) {
-    if (value) {
-        priorities[String(number)] = value;
-    } else {
-        delete priorities[String(number)];
-    }
-    writeTrackedMap(storagePrefix, "priorites", priorities, basesByOffer());
-}
-
 // Re-reads the in-memory maps localStorage. Needed when the
 // active scraping changes, after an import, or when another tab
 // (detail.html) wrote one of the shared keys.
@@ -237,7 +226,6 @@ function reloadStorageMaps() {
 function basesByOffer() {
     return offerBases;
 }
-
 
 // detail.html writes the same keys from its own tab. The `storage`
 // event only reaches the other tabs, so it is the only way to see
@@ -297,7 +285,6 @@ function setupStorageSync() {
         if (!document.hidden) scheduleStorageSync();
     });
 }
-
 
 // ============================================================
 // RENDERING
@@ -738,7 +725,6 @@ function rerenderTables() {
     renderTrackedAlerts();
 }
 
-
 // ============================================================
 // TRACKING LOSS ALERTS
 // Warns (discretely) when a favorite / active application ends up
@@ -883,11 +869,9 @@ function updateTrackedAlertToggle(total) {
     }
 }
 
-
 // ============================================================
 // DISPLAY HELPERS
 // ============================================================
-
 
 // ============================================================
 // RELANCES (FOLLOW-UPS)
@@ -1006,7 +990,6 @@ function markAllFollowedUp() {
     saveStatutDates();
     refreshFollowUps();
 }
-
 
 // ============================================================
 // FILTERS (STATUS + SEARCH)
@@ -1362,7 +1345,6 @@ function resetGroupFilter() {
     groupFilterZones.forEach(zone => zone.classList.remove("active"));
 }
 
-
 // ============================================================
 // TABS
 // ============================================================
@@ -1382,7 +1364,6 @@ function setupTabs() {
         });
     });
 }
-
 
 // ============================================================
 // NEW SEARCH
@@ -1655,11 +1636,9 @@ function selectCreatedScraping(name) {
 // Recharge la liste des recherches sans perdre l'écouteur du <select> ni la
 // sélection courante.
 
-
 // Le bouton reste présent dans le menu même en vue « Toutes les
 // recherches » : son clic explique alors qu'il faut d'abord choisir un
 // scraping précis. Le cacher le faisait simplement disparaître.
-
 
 // ============================================================
 // BOUTON « ACTUALISER » (scraping manuel, synchrone)
@@ -1768,7 +1747,6 @@ function updateTitle(data) {
     document.title = fullTitle;
 }
 
-
 // ============================================================
 // SHARED STATE
 // ============================================================
@@ -1781,7 +1759,6 @@ let staleAlertShown = false;
 let sortTable = null;
 let sortKey = null;
 let sortDir = 0; // 0 none, 1 ascending, -1 descending
-
 
 // ============================================================
 // TABLE SORTING
@@ -1884,7 +1861,6 @@ function resetSort() {
     sortDir = 0;
     updateSortHeaders();
 }
-
 
 // ============================================================
 // CSV EXPORT
@@ -2076,38 +2052,10 @@ function downloadCsv(filename, content) {
     URL.revokeObjectURL(url);
 }
 
-
 // ============================================================
 // SUIVI — l'export / import du suivi est défini dans shared/suivi.js
 // (partagé avec le dashboard et la fiche offre)
 // ============================================================
-
-function exportCsv() {
-    const offers = getOffersForExport();
-    const message = document.getElementById("exportMessage");
-
-    const select = document.getElementById("scrapingSelect");
-    const option = select && select.selectedOptions[0];
-    const base = (option && option.dataset.base) || "annonces";
-    const filename = "annonces_" + base + "_" +
-        localDateString(new Date()) + ".csv";
-
-    if (!offers.length) {
-        if (message) {
-            message.textContent = "Aucune annonce à exporter.";
-            setTimeout(function () { message.textContent = ""; }, 4000);
-        }
-        return;
-    }
-
-    downloadCsv(filename, buildCsv(offers));
-    if (message) {
-        message.textContent = offers.length +
-            " annonce(s) exportée(s) : " + filename;
-        setTimeout(function () { message.textContent = ""; }, 4000);
-    }
-}
-
 
 // ============================================================
 // STALE SCRAPE ALERT
@@ -2180,7 +2128,6 @@ function refreshFromStaleAlert() {
     const button = document.getElementById("refreshScrapeBtn");
     if (button) button.click();
 }
-
 
 // ============================================================
 // INITIALIZATION

@@ -8,7 +8,7 @@
  * Applied after the lowercase step, so the keys are lowercase only.
  * @type {Object<string, string>}
  */
-export const LIGATURES = {
+const LIGATURES = {
     "œ": "oe", // œ
     "æ": "ae", // æ
     "ø": "o",  // ø

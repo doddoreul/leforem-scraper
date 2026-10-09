@@ -11,9 +11,9 @@
 // throwing, so the page always renders.
 // ============================================================
 
-export const PROFILE_KEY = "forem_profil";
-export const PROFILE_URL = "/api/profil";
-export const PROFILE_VERSION = 1;
+const PROFILE_KEY = "forem_profil";
+const PROFILE_URL = "/api/profil";
+const PROFILE_VERSION = 1;
 
 /** Contract types offered when no offer data is available yet. */
 export const FALLBACK_CONTRACT_TYPES = [

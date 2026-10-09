@@ -64,7 +64,7 @@ function foldChar(ch) {
  * @param {string} text
  * @returns {{folded: string, map: number[]}}
  */
-export function foldWithMap(text) {
+function foldWithMap(text) {
     let folded = "";
     const map = [];
     for (let i = 0; i < text.length; i += 1) {
@@ -297,29 +297,9 @@ export function highlightIn(root, words, className) {
     nodes.forEach(function (node) { highlightTextNode(node, groups); });
 }
 
-/**
- * Highlight the keywords of a plain string, for a textContent slot.
- * @param {string} text
- * @returns {DocumentFragment}
- */
-export function highlightFragment(text) {
-    return buildFragment(
-        String(text || ""), groupRanges(String(text || ""), activeGroups()));
-}
-
 /** The folded keywords currently in use. */
-export function currentKeywords() {
+function currentKeywords() {
     return keywords.slice();
-}
-
-/** The folded excluded keywords currently in use. */
-export function currentExcluded() {
-    return excluded.slice();
-}
-
-/** Whether any keyword is set. */
-export function hasKeywords() {
-    return keywords.length > 0 || excluded.length > 0;
 }
 
 /**

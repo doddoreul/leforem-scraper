@@ -2,7 +2,7 @@
    THÈME — cogwheel + réglages (mode sombre, données)
    ============================================================ */
 
-export const THEME_KEY = "forem_theme";
+const THEME_KEY = "forem_theme";
 export const THEME_EVENT = "foremthemechange";
 
 const GEAR_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" ' +
@@ -30,7 +30,7 @@ function systemTheme() {
         ? "dark" : "light";
 }
 
-export function currentTheme() {
+function currentTheme() {
     return storedTheme() || systemTheme();
 }
 
@@ -67,7 +67,7 @@ function gearActionMarkup(action) {
  * @param {Array<{id: string, label: string, title?: string,
  *                type?: string, accept?: string}>} actions
  */
-export function renderGearActions(actions) {
+function renderGearActions(actions) {
     const menu = document.getElementById("themeMenu");
     if (!menu) return;
     const list = Array.isArray(actions) ? actions : [];

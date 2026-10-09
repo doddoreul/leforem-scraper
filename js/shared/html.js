@@ -182,7 +182,7 @@ function pruneEmpty(node) {
  * @param {boolean} keepPresentation true to keep colours, fonts and classes
  * @returns {string}
  */
-export function sanitizeHtml(html, keepPresentation) {
+function sanitizeHtml(html, keepPresentation) {
     // DOMParser et non innerHTML : le document produit est inerte, donc
     // une <img onerror> ne se d├®clenche pas pendant l'analyse. Avec
     // innerHTML, le filtre arriverait apr├¿s coup, trop tard.
@@ -206,13 +206,3 @@ export function htmlToText(html) {
     return (holder.textContent || "").replace(/\s+/g, " ").trim();
 }
 
-/**
- * The HTML an employer pasted, minus anything executable. Used when the
- * reader asks to see the original layout: styles, fonts and classes come
- * back, a `javascript:` link or a handler never does.
- * @param {string} html
- * @returns {string}
- */
-export function presentationHtml(html) {
-    return sanitizeHtml(html, true);
-}

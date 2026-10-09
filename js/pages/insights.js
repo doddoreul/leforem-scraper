@@ -52,14 +52,6 @@ function readScopeFile() {
     return "all";
 }
 
-function readScope() {
-    // Backward compatibility: returns name for prefix
-    const file = readScopeFile();
-    if (file === "all") return "all";
-    const found = getScrapingByKey(scrapings, file);
-    return found ? found.name : "all";
-}
-
 function populateScopeSelect() {
     const select = document.getElementById("scrapingSelect");
     if (!select) return Promise.resolve();

@@ -112,10 +112,6 @@ function formatDate(value) {
     return date ? formatSlashDay(date) : String(value);
 }
 
-function telHref(value) {
-    return "tel:" + String(value).replace(/[^\d+]/g, "");
-}
-
 function clone(value) {
     return JSON.parse(JSON.stringify(value));
 }
@@ -136,16 +132,6 @@ function storePref(key, value) {
     } catch (e) {
         // ignore
     }
-}
-
-function externalLink(href, text) {
-    const link = el("a", "company-contact-value", text);
-    link.href = href;
-    if (/^https?:/i.test(href)) {
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-    }
-    return link;
 }
 
 // ============================================================

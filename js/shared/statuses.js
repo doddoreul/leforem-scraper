@@ -21,8 +21,6 @@ export const PRIORITY_OPTIONS = [
     { value: "faible", label: "Faible" },
 ];
 
-export const STATUS_VALUES = STATUS_OPTIONS.map(option => option.value);
-
 /**
  * @param {string} value
  * @returns {string} the label, or the value itself when unknown

@@ -91,7 +91,7 @@ export function showSuiviToast(text) {
     }, 6000);
 }
 
-export function showTrackingMessage(text) {
+function showTrackingMessage(text) {
     const message = document.getElementById("trackingMessage");
     if (!message) {
         showSuiviToast(text);
@@ -123,7 +123,7 @@ function downloadExport(path, filename, okMessage) {
 }
 
 /** Export the profile, employers, blacklist and follow-up only. */
-export function exportUserdata() {
+function exportUserdata() {
     downloadExport(
         "/api/export/userdata",
         "leforem-scraper-donnees-utilisateur-" + localDateString() + ".json",
@@ -132,7 +132,7 @@ export function exportUserdata() {
 }
 
 /** Export the scraped offers, details, histories and scraping state only. */
-export function exportScraping() {
+function exportScraping() {
     downloadExport(
         "/api/export/scraping",
         "leforem-scraper-scraping-" + localDateString() + ".json",
