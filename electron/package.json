@@ -9,8 +9,7 @@
   "scripts": {
     "start": "electron .",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder --win",
-    "dist:portable": "electron-builder --win portable"
+    "dist": "electron-builder --win"
   },
   "build": {
     "appId": "be.leforem.scraper",
@@ -35,9 +34,14 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
         }
-      ],
-      "artifactName": "LeForem-Scraper-${version}-Setup.${ext}"
+      ]
     },
     "nsis": {
       "oneClick": false,
@@ -46,7 +50,11 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "LeForem Scraper",
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "LeForem-Scraper-${version}-Setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "LeForem-Scraper-${version}-Portable.${ext}"
     }
   },
   "devDependencies": {

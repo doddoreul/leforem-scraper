@@ -42,8 +42,10 @@ Le backend lit les variables posées par la coque — les mêmes conventions que
 # Ou pièce par pièce
 ..\scripts\build-backend.ps1   # emballage Python
 npm run pack                   # dossier portable electron/dist/win-unpacked
-npm run dist                   # installeur electron/dist/*.exe
-npm run dist:portable          # exe portable sans installation
+npm run dist                   # installeur + portable (electron/dist/*.exe)
+
+Les deux fichiers ``Setup`` et ``Portable`` sont ensuite copiés à la **racine
+du projet** par le script de build, pour que l'utilisateur choisisse sa forme.
 ```
 
 ## Développer sans rebuild

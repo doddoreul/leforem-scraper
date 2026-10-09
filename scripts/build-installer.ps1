@@ -1,5 +1,5 @@
-# Build l'installeur Windows complet (backend Python + app Electron).
-# Sortie : electron/dist/LeForem-Scraper-<version>-Setup.exe
+# Build l'installeur Windows et la version portable.
+# Sortie : LeForem-Scraper-<version>-Setup.exe et -Portable.exe à la racine.
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
@@ -14,11 +14,15 @@ Set-Location (Join-Path $root "electron")
 npm install
 if ($LASTEXITCODE -ne 0) { throw "npm install a échoué" }
 
-Write-Host "==> [3/3] Installeur NSIS"
+Write-Host "==> [3/3] Installeur NSIS + version portable"
 npm run dist
 if ($LASTEXITCODE -ne 0) { throw "electron-builder a échoué" }
 
 Set-Location $root
-Get-ChildItem "electron\dist\*.exe" | ForEach-Object {
-    Write-Host "==> Installeur : electron\dist\$($_.Name) ($([math]::Round($_.Length / 1MB, 1)) Mo)"
+
+# Les deux versions à la racine du projet, pour que l'utilisateur choisisse.
+$artifacts = Get-ChildItem "electron\dist\LeForem-Scraper-*.exe"
+foreach ($artifact in $artifacts) {
+    Copy-Item $artifact.FullName -Destination (Join-Path $root $artifact.Name) -Force
+    Write-Host "==> $($artifact.Name) ($([math]::Round($artifact.Length / 1MB, 1)) Mo) -> racine du projet"
 }

@@ -16,3 +16,7 @@ node_modules/
 electron/dist/
 electron/build/
 build/
+
+# Artefacts de distribution : trop lourds pour git, à publier via GitHub Releases
+LeForem-Scraper-*-Setup.exe
+LeForem-Scraper-*-Portable.exe

@@ -13,12 +13,14 @@ Windows native** : un installeur `.exe` qui embarque tout (Python 3 + serveur +
 `Electron` pour la fenêtre). **Aucun prérequis** — pas de PowerShell, pas
 d'installation de Python, pas de navigateur à ouvrir.
 
-- Télécharge `LeForem-Scraper-1.0.0-Setup.exe`, double-clic, c'est installé.
-- Une icône **LeForem Scraper** est créée (bureau et menu Démarrer) : elle ouvre
-  l'application dans sa propre fenêtre.
+- À la racine du projet, deux fichiers prêts à distribuer :
+  - `LeForem-Scraper-1.0.0-Setup.exe` — **à installer** : double-clic, un
+    assistant crée les raccourcis (bureau, menu Démarrer) ;
+  - `LeForem-Scraper-1.0.0-Portable.exe` — **portable** : à poser sur une clé
+    USB ou un dossier, double-clic, aucune installation.
 - Tes données vont dans `%LOCALAPPDATA%\leforem-scraper\data` (le journal du
   serveur est dans `...\logs\backend.log`).
-- Pour reconstruire l'installeur : `scripts\build-installer.ps1` (détails dans
+- Pour reconstruire les deux : `scripts\build-installer.ps1` (détails dans
   `electron/README.md`).
 
 ---
