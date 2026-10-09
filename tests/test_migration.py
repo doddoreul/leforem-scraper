@@ -135,6 +135,28 @@ class MigrationContract:
         self.assertEqual(len(document["history_scrapes"]), 2)
         self.assertIsNotNone(document["scrape_state"])
 
+    def test_export_carries_the_offers_themselves(self):
+        """The dump embeds the full offer list of every search.
+
+        This is the point of the backup: a migration restores every scrape
+        as-is, so no fresh scraping is needed on the destination machine.
+        """
+        seed_all(self.store)
+        document = migration.export_document(self.store)
+        liege = next(s for s in document["searches"]
+                     if s["name"] == "liege")
+
+        self.assertEqual(
+            liege["payload"]["offers"],
+            [{"number": "1", "titre": "Chat"}] * 2,
+        )
+        offres = sum(
+            len(s["payload"].get("offers") or [])
+            for s in document["searches"]
+            if isinstance(s.get("payload"), dict)
+        )
+        self.assertEqual(offres, 3)
+
     def test_import_restores_everything_exactly(self):
         seed_all(self.store)
         before = full_reads(self.store)
