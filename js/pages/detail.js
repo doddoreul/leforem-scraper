@@ -8,11 +8,11 @@ import { fetchJsonOrNull } from "../shared/api.js";
 import { formatLongDate, parseForemDate } from "../shared/dates.js";
 import { el } from "../shared/dom.js";
 import { highlightIn, loadKeywords } from "../shared/highlight.js";
-import { loadWantedTypes } from "../shared/profile.js";
+import { emptyProfile, loadWantedTypes, readProfile } from "../shared/profile.js";
 import { wantedTick } from "../shared/wanted-tick.js";
 import { offerUrl } from "../shared/links.js";
 import { PRIORITY_OPTIONS, STATUS_OPTIONS } from "../shared/statuses.js";
-import { readTrackedMap, storagePrefixFor, writeTrackedMap } from "../shared/storage.js";
+import { TRACKED_SUFFIXES, readTrackedMap, storagePrefixFor, writeTrackedMap } from "../shared/storage.js";
 import { SUIVI_EVENT, TRACKING_GEAR_ACTIONS, setupSuiviActions } from "../shared/suivi.js";
 import { initTheme } from "../shared/theme.js";
 import "../shared/navbar.js";
@@ -22,6 +22,19 @@ const numberStr = (params.get("number") || "").trim();
 const baseName = (params.get("base") || "").trim();
 
 const storagePrefix = storagePrefixFor(baseName);
+
+/** Re-reads the follow-up controls; replaced once the card is built. */
+let refreshTracking = function () {};
+
+// The offers page edits the same follow-up in its own tab. There is no
+// event without one, so the card has to follow the mirror itself.
+window.addEventListener("storage", function (event) {
+    if (event.key === null || TRACKED_SUFFIXES.some(
+        suffix => event.key === storagePrefix + suffix
+    )) {
+        refreshTracking();
+    }
+});
 
 initTheme(TRACKING_GEAR_ACTIONS);
 
@@ -364,6 +377,11 @@ function renderNotAvailable(root, message) {
 function renderFiche(root, payload, offer) {
     root.innerHTML = "";
 
+    // The rendered sheet and the raw JSON are the two tabs; everything below
+    // is appended to the sheet panel so the tab can hide it in one go.
+    const fiche = el("div", "tab-content");
+    root.appendChild(fiche);
+
     const number = str(payload.numero || payload.idOffreEmploi || numberStr);
     const title = str(payload.titreOffre) || "(Sans titre)";
     const employer = str(payload.nomEmployeur);
@@ -387,7 +405,7 @@ function renderFiche(root, payload, offer) {
 
     // --- HERO -------------------------------------------------
     const hero = el("div", "detail-hero");
-    root.appendChild(hero);
+    fiche.appendChild(hero);
 
     const logo = buildLogo(payload, employer);
     hero.appendChild(logo);
@@ -462,7 +480,7 @@ function renderFiche(root, payload, offer) {
 
     // --- LAYOUT -----------------------------------------------
     const layout = el("div", "detail-layout");
-    root.appendChild(layout);
+    fiche.appendChild(layout);
 
     const mainCol = el("div", "detail-main");
     layout.appendChild(mainCol);
@@ -537,7 +555,163 @@ function renderFiche(root, payload, offer) {
     // Les mots-clés du profil sont surlignés en dernier, une fois toute la
     // fiche en place : le parcours ne touche ni les champs de saisie ni les
     // balises déjà surlignées.
-    highlightIn(root);
+    highlightIn(fiche);
+
+    buildTabs(root, fiche, payload);
+}
+
+// ============================================================
+// TABS
+// ============================================================
+
+/**
+ * Add the tab bar: the rendered sheet, and the full offer JSON to copy.
+ * @param {HTMLElement} root
+ * @param {HTMLElement} fiche the rendered sheet panel
+ * @param {Object} payload the stored Forem offer, verbatim
+ */
+function buildTabs(root, fiche, payload) {
+    const tabs = el("div", "tabs");
+    tabs.setAttribute("role", "tablist");
+    const ficheBtn = el("button", "tab-btn active", "Fiche");
+    const rawBtn = el("button", "tab-btn", "JSON brut");
+    const promptBtn = el("button", "tab-btn", "Préparer un prompt");
+    [ficheBtn, rawBtn, promptBtn].forEach(function (button) {
+        button.type = "button";
+        button.setAttribute("role", "tab");
+        tabs.appendChild(button);
+    });
+
+    const raw = el("div", "tab-content hidden");
+    raw.setAttribute("role", "tabpanel");
+    fiche.setAttribute("role", "tabpanel");
+    const pre = el("pre", "detail-json", JSON.stringify(payload, null, 2));
+    pre.tabIndex = 0;
+    raw.appendChild(pre);
+
+    const promptPanel = el("div", "tab-content hidden");
+    promptPanel.setAttribute("role", "tabpanel");
+    const promptWrap = el("div", "detail-prompt-wrap");
+    const copyBtn = el("button", "btn btn-outline detail-copy-btn", "Copier");
+    copyBtn.type = "button";
+    const promptPre = el("pre", "detail-prompt", "Chargement du profil…");
+    promptPre.tabIndex = 0;
+    promptWrap.appendChild(copyBtn);
+    promptWrap.appendChild(promptPre);
+    promptPanel.appendChild(promptWrap);
+
+    const panels = [fiche, raw, promptPanel];
+    const buttons = [ficheBtn, rawBtn, promptBtn];
+    const select = function (index) {
+        buttons.forEach(function (button, i) {
+            const active = i === index;
+            button.classList.toggle("active", active);
+            button.setAttribute("aria-selected", active ? "true" : "false");
+        });
+        panels.forEach(function (panel, i) {
+            panel.classList.toggle("hidden", i !== index);
+        });
+    };
+    buttons.forEach(function (button, i) {
+        button.addEventListener("click", function () { select(i); });
+    });
+    ficheBtn.setAttribute("aria-selected", "true");
+    rawBtn.setAttribute("aria-selected", "false");
+    promptBtn.setAttribute("aria-selected", "false");
+
+    root.insertBefore(tabs, fiche);
+    root.appendChild(raw);
+    root.appendChild(promptPanel);
+
+    const fillPrompt = function (profile) {
+        const text = buildPrompt(payload, profile);
+        promptPre.textContent = text;
+        copyBtn.onclick = function () {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(function () {
+                    copyBtn.textContent = "Copié";
+                    setTimeout(function () { copyBtn.textContent = "Copier"; }, 1200);
+                }).catch(function () {
+                    const range = document.createRange();
+                    range.selectNodeContents(promptPre);
+                    const sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                });
+            } else {
+                const range = document.createRange();
+                range.selectNodeContents(promptPre);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+            }
+        };
+    };
+    readProfile().then(fillPrompt).catch(function () {
+        fillPrompt(emptyProfile());
+    });
+}
+
+/**
+ * Turn the stored offer and the candidate profile into a ready-to-paste
+ * prompt for an AI agent.
+ * @param {Object} payload the stored Forem offer
+ * @param {Object} profile the candidate profile
+ * @returns {string}
+ */
+function buildPrompt(payload, profile) {
+    const out = [];
+    const push = function (line) { out.push(line); };
+    const text = function (value) { return str(value); };
+
+    push("# Prompt — générer un mail et une lettre de motivation");
+    push("");
+    push("Tu es un assistant de rédaction. Rédige, en français professionnel, d'abord un mail de candidature (objet + corps court) puis une lettre de motivation (une page maximum), pour l'offre ci-dessous, en t'appuyant sur le profil du candidat. N'invente aucune information : utilise uniquement ce qui est fourni ; si une donnée manque, indique-la entre crochets plutôt que de la fabriquer.");
+    push("");
+
+    push("## Offre");
+    push("Titre : " + (text(payload.titreOffre) || "(non précisé)"));
+    push("Employeur : " + (text(payload.nomEmployeur) || "(non précisé)"));
+    const locations = listOf(payload.lieuxTravail).map(itemLabel).filter(Boolean);
+    if (locations.length) push("Lieu(x) de travail : " + locations.join(", "));
+    if (text(payload.typeContrat)) push("Contrat : " + text(payload.typeContrat));
+    if (str(payload.descriptionJob)) {
+        push("");
+        push("Description de la fonction :");
+        push(stripHtml(payload.descriptionJob));
+    }
+    if (text(payload.howToApply)) push("Contact / comment postuler : " + text(payload.howToApply));
+    push("");
+
+    push("## Candidat");
+    const fullName = [text(profile.prenom), text(profile.nom)].filter(Boolean).join(" ").trim();
+    if (fullName) push("Nom : " + fullName);
+    if (profile.age !== null && profile.age !== undefined && profile.age !== "") push("Âge : " + profile.age);
+    if (text(profile.metier)) push("Métier : " + text(profile.metier));
+    if (text(profile.email)) push("E-mail : " + text(profile.email));
+    if (text(profile.telephone)) push("Téléphone : " + text(profile.telephone));
+    if (text(profile.adresse)) push("Adresse : " + text(profile.adresse));
+    if (text(profile.parcours)) {
+        push("Description de parcours :");
+        push(text(profile.parcours));
+    }
+    push("");
+
+    push("## Consignes de rédaction");
+    push("- Adapte le ton au secteur et à l'employeur.");
+    push("- Mets en avant les compétences du candidat qui répondent aux exigences de l'offre.");
+    push("- Reste concis et professionnel ; une page maximum pour la lettre.");
+    push("- Termine par une formule de politesse et une signature avec les coordonnées disponibles.");
+    push("- Si une information manque, indique-la entre crochets plutôt que de l'inventer.");
+
+    return out.join("\n");
+}
+
+function stripHtml(html) {
+    return String(html || "")
+        .replace(/<[^>]*>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
 }
 
 // ============================================================
@@ -1020,8 +1194,9 @@ function buildTracking(number) {
         star.setAttribute("aria-pressed", active ? "true" : "false");
     });
     starLine.appendChild(star);
-    starLine.appendChild(el("span", "detail-track-star-text",
-        isFav ? "Dans vos favoris" : "Ajouter aux favoris"));
+    const starText = el("span", "detail-track-star-text",
+        isFav ? "Dans vos favoris" : "Ajouter aux favoris");
+    starLine.appendChild(starText);
     card.appendChild(starLine);
 
     const statusField = makeField(
@@ -1074,6 +1249,31 @@ function buildTracking(number) {
     remarkLabel.appendChild(el("span", "field-label", "Remarque"));
     remarkLabel.appendChild(remarkArea);
     card.appendChild(remarkLabel);
+
+    // The maps above are the state every handler writes back, so they are
+    // re-read here: a later edit must not replay what this tab saw at load.
+    refreshTracking = function () {
+        statuses = statusesValue();
+        remarks = remarksValue();
+        favorites = favoritesValue();
+        priorities = prioritiesValue();
+        statutDates = statutDatesValue();
+
+        const fav = Boolean(favorites[number]);
+        star.textContent = fav ? "★" : "☆";
+        star.title = "Marquer comme favori";
+        star.setAttribute("aria-pressed", fav ? "true" : "false");
+        star.classList.toggle("active", fav);
+        starText.textContent = fav
+            ? "Dans vos favoris" : "Ajouter aux favoris";
+
+        statusField.querySelector("select").value = statuses[number] || "";
+        priorityField.querySelector("select").value = priorities[number] || "";
+        // Ne pas écraser une remarque en cours de frappe.
+        if (document.activeElement !== remarkArea) {
+            remarkArea.value = remarks[number] || "";
+        }
+    };
 
     return card;
 }

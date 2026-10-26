@@ -38,6 +38,55 @@
     <form class="profile-form" id="profileForm" novalidate>
 
         <section class="profile-field">
+            <h2 class="dash-card-title">Identité</h2>
+            <p class="dash-note">
+                Ces informations servent à rédiger mails et lettres de motivation.
+                Tous les champs sont facultatifs.
+            </p>
+            <label class="filter" for="prenom">
+                <span>Prénom :</span>
+                <input type="text" id="prenom" name="prenom"
+                       placeholder="Jean">
+            </label>
+            <label class="filter" for="nom">
+                <span>Nom :</span>
+                <input type="text" id="nom" name="nom"
+                       placeholder="Dupont">
+            </label>
+            <label class="filter" for="age">
+                <span>Âge :</span>
+                <input type="text" id="age" name="age" inputmode="numeric"
+                       placeholder="30">
+            </label>
+            <label class="filter" for="metier">
+                <span>Métier :</span>
+                <input type="text" id="metier" name="metier"
+                       placeholder="Électromécanicien">
+            </label>
+            <label class="filter" for="email">
+                <span>Adresse e-mail :</span>
+                <input type="email" id="email" name="email"
+                       placeholder="prenom.nom@example.be">
+            </label>
+            <label class="filter" for="telephone">
+                <span>Téléphone :</span>
+                <input type="tel" id="telephone" name="telephone"
+                       placeholder="+32 470 12 34 56">
+            </label>
+            <label class="filter" for="adresse">
+                <span>Adresse postale :</span>
+                <input type="text" id="adresse" name="adresse"
+                       placeholder="Rue, numéro, code postal, ville">
+            </label>
+            <label class="filter" for="parcours">
+                <span>Description de parcours :</span>
+                <textarea id="parcours" name="parcours" rows="4"
+                          placeholder="Expérience, formations, points forts…"></textarea>
+            </label>
+            <p class="field-error" id="ageError" role="alert" hidden></p>
+        </section>
+
+        <section class="profile-field">
             <h2 class="dash-card-title">Mots-clés</h2>
             <p class="dash-note">
                 Séparés par des virgules ou des retours à la ligne.

@@ -237,6 +237,14 @@ const DISTANCE_MAX = 500;
 export function emptyProfile() {
     return {
         version: PROFILE_VERSION,
+        nom: "",
+        prenom: "",
+        age: null,
+        metier: "",
+        email: "",
+        telephone: "",
+        adresse: "",
+        parcours: "",
         keywordsText: "",
         keywords: [],
         excludedText: "",
@@ -307,6 +315,20 @@ export function normaliseProfile(raw) {
 
     return {
         version: PROFILE_VERSION,
+        nom: typeof raw.nom === "string" ? raw.nom : "",
+        prenom: typeof raw.prenom === "string" ? raw.prenom : "",
+        age: (function () {
+            if (typeof raw.age === "number" && isFinite(raw.age)) return raw.age;
+            if (typeof raw.age === "string" && /^\d+$/.test(raw.age.trim())) {
+                return Number(raw.age.trim());
+            }
+            return null;
+        })(),
+        metier: typeof raw.metier === "string" ? raw.metier : "",
+        email: typeof raw.email === "string" ? raw.email : "",
+        telephone: typeof raw.telephone === "string" ? raw.telephone : "",
+        adresse: typeof raw.adresse === "string" ? raw.adresse : "",
+        parcours: typeof raw.parcours === "string" ? raw.parcours : "",
         keywordsText: typeof raw.keywordsText === "string" ? raw.keywordsText : "",
         keywords: keywords,
         excludedText: typeof raw.excludedText === "string" ? raw.excludedText : "",
@@ -407,6 +429,38 @@ export function validateProfile(raw) {
         }
     }
 
+    // 6b. Email, phone, postal address: free text, light email check.
+    const emailRaw = String(input.email === null || input.email === undefined
+        ? ""
+        : input.email).trim();
+    if (emailRaw !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw)) {
+        errors.email = "L'adresse e-mail semble invalide.";
+    }
+    const telephoneRaw = String(input.telephone === null || input.telephone === undefined
+        ? ""
+        : input.telephone).trim();
+    const adresseRaw = String(input.adresse === null || input.adresse === undefined
+        ? ""
+        : input.adresse).trim();
+
+    // 7. Age: optional whole number between 0 and 120.
+    const ageRaw = String(input.age === null || input.age === undefined
+        ? ""
+        : input.age).trim();
+    let age = null;
+    if (ageRaw !== "") {
+        if (!/^\d+$/.test(ageRaw)) {
+            errors.age = "L'âge doit être un nombre entier.";
+        } else {
+            const value = Number(ageRaw);
+            if (value < 0 || value > 120) {
+                errors.age = "L'âge doit être compris entre 0 et 120.";
+            } else {
+                age = value;
+            }
+        }
+    }
+
     const ok = Object.keys(errors).length === 0;
 
     return {
@@ -414,6 +468,14 @@ export function validateProfile(raw) {
         errors: errors,
         value: ok ? {
             version: PROFILE_VERSION,
+            nom: String(input.nom === null || input.nom === undefined ? "" : input.nom).trim(),
+            prenom: String(input.prenom === null || input.prenom === undefined ? "" : input.prenom).trim(),
+            age: age,
+            metier: String(input.metier === null || input.metier === undefined ? "" : input.metier).trim(),
+            email: emailRaw,
+            telephone: telephoneRaw,
+            adresse: adresseRaw,
+            parcours: String(input.parcours === null || input.parcours === undefined ? "" : input.parcours).trim(),
             keywordsText: keywordsText,
             keywords: keywords,
             excludedText: excludedText,

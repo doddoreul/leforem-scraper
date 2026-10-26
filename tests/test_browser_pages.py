@@ -509,8 +509,25 @@ const after = await fetch("/api/tracking/" + BASE).then(r => r.json());
 log("backendUpdated=" + ((after["9001"] || {}).statut || ""));
 log("backendSecond=" + ((after["9002"] || {}).statut || ""));
 
+// 4. The offer sheet writes without ever loading the cache. The mirror must
+//    be read before it is overwritten, otherwise the diff is always empty and
+//    the edit never reaches the backend (and disappears at the next reload).
+const SHEET = "fiche";
+const SHEET_PREFIX = "forem_" + SHEET + "_";
+localStorage.setItem(SHEET_PREFIX + "remarques",
+    JSON.stringify({ "9101": "avant", "9102": "garder" }));
+await writeTrackedMap(SHEET_PREFIX, "remarques",
+    { "9101": "depuis la fiche", "9102": "garder" });
+await new Promise(resolve => setTimeout(resolve, 400));
+const sheet = await fetch("/api/tracking/" + SHEET).then(r => r.json());
+log("sheetRemarque=" + ((sheet["9101"] || {}).remarque || ""));
+log("sheetMirrorKept=" + (JSON.parse(
+    localStorage.getItem(SHEET_PREFIX + "remarques"))["9102"] || ""));
+
 await fetch("/api/tracking/" + BASE + "/9001", { method: "DELETE" });
 await fetch("/api/tracking/" + BASE + "/9002", { method: "DELETE" });
+await fetch("/api/tracking/" + SHEET + "/9101", { method: "DELETE" });
+await fetch("/api/tracking/" + SHEET + "/9102", { method: "DELETE" });
 localStorage.removeItem("forem_tracking_synced");
 log("PERSIST-OK");
 </script>
@@ -2530,6 +2547,10 @@ class TestModulesInBrowser(BrowserPagesTestCase):
         self.assertIn("immediateRead=contacte", report)
         self.assertIn("backendUpdated=contacte", report)
         self.assertIn("backendSecond=refuse", report)
+        # The offer sheet writes without a loaded cache: the edit still has
+        # to reach the backend, and the other offers stay in the mirror.
+        self.assertIn("sheetRemarque=depuis la fiche", report)
+        self.assertIn("sheetMirrorKept=garder", report)
 
 
 class TestPagesInBrowser(BrowserPagesTestCase):
@@ -2710,6 +2731,21 @@ class TestPagesInBrowser(BrowserPagesTestCase):
             "Intéressé",
             "Voir l'offre sur Le Forem",
         ])
+
+    def test_the_offer_sheet_exposes_the_raw_json(self):
+        dom = self.dump("/detail.html?number=1902&base=metier_liege")
+        self.assertIn('role="tablist"', dom)
+        self.assertIn(">JSON brut<", dom)
+        # The whole stored offer, not only the fields the sheet displays.
+        self.assertIn("descriptionJob", dom)
+        self.assertIn("idOffreEmploi", dom)
+
+    def test_the_offer_sheet_prepares_a_prompt(self):
+        dom = self.dump("/detail.html?number=1902&base=metier_liege")
+        self.assertIn(">Préparer un prompt<", dom)
+        self.assertIn("detail-prompt", dom)
+        self.assertIn("## Offre", dom)
+        self.assertIn("## Candidat", dom)
 
     def test_the_diff_is_hidden_until_asked(self):
         dom = self.dump("/detail.html?number=1902&base=metier_liege")

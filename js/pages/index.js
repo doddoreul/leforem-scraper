@@ -120,7 +120,7 @@ function cleanTrackedMap(map, suffix, keepNumbers) {
         }
     });
     if (changed) {
-        writeTrackedMap(storagePrefix, suffix, map);
+        writeTrackedMap(storagePrefix, suffix, map, basesByOffer());
     }
 }
 
@@ -235,6 +235,13 @@ function basesByOffer() {
 let storageSyncTimer = null;
 
 function isSyncedStorageKey(key) {
+    // La vue « Toutes les recherches » n'a pas de préfixe à elle : la fiche
+    // écrit sous la recherche de l'offre, donc toute clé de suivi compte.
+    if (!activeBaseName) {
+        return TRACKED_SUFFIXES.some(function (suffix) {
+            return key.indexOf("forem_") === 0 && key.endsWith("_" + suffix);
+        });
+    }
     return TRACKED_SUFFIXES.some(function (suffix) {
         return key === storagePrefix + suffix;
     });

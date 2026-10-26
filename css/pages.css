@@ -321,6 +321,48 @@
     color: var(--text-secondary);
 }
 
+/* ----- JSON BRUT ----- */
+
+.detail-json {
+    margin: 0;
+    max-height: 70vh;
+    overflow: auto;
+    padding: var(--space-5);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-card);
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: var(--font-sm);
+    line-height: 1.5;
+    white-space: pre;
+}
+
+.detail-prompt {
+    margin: 0;
+    max-height: 70vh;
+    overflow: auto;
+    padding: var(--space-5);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-card);
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: var(--font-sm);
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.detail-prompt-wrap {
+    position: relative;
+}
+
+.detail-copy-btn {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    z-index: 1;
+}
+
 @media (max-width: 960px) {
     .detail-layout {
         grid-template-columns: 1fr;

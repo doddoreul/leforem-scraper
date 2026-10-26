@@ -63,8 +63,74 @@ function baseNameForPrefix(prefix) {
     return prefix.slice("forem_".length, -1);
 }
 
+// The prefix of the old single-search storage is not a search anymore: its
+// data is migrated, and the merged view must not read it as a real base.
+const LEGACY_BASE_NAME = baseNameForPrefix(LEGACY_STORAGE_PREFIX);
+
 /** Searches whose data is already cached: { baseName: { offerId: fields } } */
 const _cache = {};
+
+/**
+ * Seed the cache of one search from the localStorage mirror when the page
+ * never loaded it from the backend (the offer sheet writes without reading).
+ * Without this, the write path would diff against a one-offer cache and
+ * mirror that partial view over every other followed offer.
+ * @param {string} baseName
+ */
+function ensureCached(baseName) {
+    if (Object.prototype.hasOwnProperty.call(_cache, baseName)) return;
+    const prefix = "forem_" + baseName + "_";
+    const entries = {};
+    TRACKED_SUFFIXES.forEach(function (suffix) {
+        const field = SUFFIX_FIELD[suffix];
+        let mirror = {};
+        try {
+            mirror = JSON.parse(localStorage.getItem(prefix + suffix) || "{}");
+        } catch (error) {
+            mirror = {};
+        }
+        Object.keys(mirror).forEach(function (offerId) {
+            if (!entries[offerId]) entries[offerId] = {};
+            entries[offerId][field] = mirror[offerId];
+        });
+    });
+    _cache[baseName] = entries;
+}
+
+/**
+ * Follow a mirror key another tab just wrote (the offer sheet edits the same
+ * follow-up as the offers page). Without it the cache would keep serving the
+ * value loaded at startup and the page would ignore the change.
+ * @param {string|null} key the localStorage key of the storage event
+ */
+function absorbMirrorKey(key) {
+    const match = key && key.match(
+        /^forem_(.+)_(statuts|remarques|favoris|statut_dates|priorites)$/
+    );
+    if (!match) return;
+    const baseName = match[1];
+    const suffix = match[2];
+    const field = SUFFIX_FIELD[suffix];
+    let mirror = {};
+    try {
+        mirror = JSON.parse(localStorage.getItem(key) || "{}");
+    } catch (error) {
+        return;
+    }
+    ensureCached(baseName);
+    const entries = _cache[baseName];
+    Object.keys(entries).forEach(function (offerId) {
+        if (!(offerId in mirror)) delete entries[offerId][field];
+    });
+    Object.keys(mirror).forEach(function (offerId) {
+        if (!entries[offerId]) entries[offerId] = {};
+        entries[offerId][field] = mirror[offerId];
+    });
+}
+
+window.addEventListener("storage", function (event) {
+    absorbMirrorKey(event.key);
+});
 
 /**
  * Read a JSON map stored under <prefix><suffix>.
@@ -189,6 +255,7 @@ function basesInLocalStorage() {
         );
         if (match) bases[match[1]] = true;
     }
+    delete bases[LEGACY_BASE_NAME];
     return Object.keys(bases);
 }
 
@@ -211,6 +278,7 @@ export function readMergedTrackedMap(prefix, suffix) {
     basesInLocalStorage().forEach(function (base) {
         if (base) names[base] = true;
     });
+    delete names[LEGACY_BASE_NAME];
     const out = {};
     Object.keys(names).forEach(function (base) {
         const map = readTrackedMap("forem_" + base + "_", suffix);
@@ -311,18 +379,28 @@ export async function writeTrackedMap(prefix, suffix, value, basesByOffer) {
     const field = SUFFIX_FIELD[suffix];
     const map = value && typeof value === "object" ? value : {};
 
-    // Le miroir localStorage garde la vue telle que la page la détient.
-    try {
-        localStorage.setItem(prefix + suffix, JSON.stringify(map));
-    } catch (error) {
-        console.error("Unable to write localStorage", error);
-    }
+    const mirror = function () {
+        // Le miroir localStorage garde la vue telle que la page la détient.
+        try {
+            localStorage.setItem(prefix + suffix, JSON.stringify(map));
+        } catch (error) {
+            console.error("Unable to write localStorage", error);
+        }
+    };
 
-    if (!field) return;
+    if (!field) {
+        mirror();
+        return;
+    }
 
     const baseOf = function (offerId) {
         return (basesByOffer && basesByOffer[offerId]) || defaultBase;
     };
+
+    // La vue fusionnée route chaque offre vers sa recherche : le préfixe de
+    // la page ne correspond alors à aucune base et ne doit pas recevoir le
+    // miroir (il créerait une base fantôme que la fusion relirait ensuite).
+    const merged = Boolean(basesByOffer && Object.keys(basesByOffer).length);
 
     const bases = {};
     Object.keys(map).forEach(function (offerId) {
@@ -331,10 +409,25 @@ export async function writeTrackedMap(prefix, suffix, value, basesByOffer) {
     Object.keys(basesByOffer || {}).forEach(function (offerId) {
         bases[basesByOffer[offerId]] = true;
     });
+    // Hors vue fusionnée, la base de la page reste la sienne même quand la
+    // carte devient vide (dernier suivi effacé) : il faut pouvoir le pousser.
+    if (!merged && defaultBase) bases[defaultBase] = true;
+
+    // Photographier l'état avant d'écraser le miroir : la fiche lit le
+    // miroir quand son cache est vide, et comparer la nouvelle carte à
+    // elle-même ne pousserait rien vers le serveur.
+    const knownByBase = {};
+    Object.keys(bases).forEach(function (base) {
+        if (!base) return;
+        ensureCached(base);
+        knownByBase[base] = readTrackedMap("forem_" + base + "_", suffix);
+    });
+
+    if (!merged) mirror();
 
     await Promise.all(Object.keys(bases).map(async function (base) {
         if (!base) return;
-        const known = readTrackedMap("forem_" + base + "_", suffix);
+        const known = knownByBase[base];
         const writes = [];
         Object.keys(known).forEach(function (offerId) {
             // Une offre absente de la carte a perdu son suivi.

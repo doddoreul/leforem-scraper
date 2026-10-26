@@ -24,7 +24,8 @@ import {
 } from "../shared/profile.js";
 import { SUIVI_EVENT, TRACKING_GEAR_ACTIONS, setupSuiviActions } from "../shared/suivi.js";
 
-const FORM_FIELDS = ["keywordsText", "excludedText", "hourlyRate", "maxDistanceKm"];
+const FORM_FIELDS = ["keywordsText", "excludedText", "hourlyRate", "maxDistanceKm",
+    "nom", "prenom", "age", "metier", "email", "telephone", "adresse", "parcours"];
 
 let saved = emptyProfile();
 let dirty = false;
@@ -84,6 +85,14 @@ function showMessage(text, kind) {
 
 function currentFormValue() {
     return {
+        nom: byId("nom").value,
+        prenom: byId("prenom").value,
+        age: byId("age").value,
+        metier: byId("metier").value,
+        email: byId("email").value,
+        telephone: byId("telephone").value,
+        adresse: byId("adresse").value,
+        parcours: byId("parcours").value,
         keywordsText: byId("keywordsText").value,
         excludedText: byId("excludedText").value,
         hourlyRate: byId("hourlyRate").value,
@@ -157,6 +166,17 @@ function selectedIn(listId, options) {
 }
 
 function fillForm(profile) {
+    byId("nom").value = profile.nom || "";
+    byId("prenom").value = profile.prenom || "";
+    byId("age").value = profile.age === null || profile.age === undefined
+        ? ""
+        : String(profile.age);
+    byId("metier").value = profile.metier || "";
+    byId("email").value = profile.email || "";
+    byId("telephone").value = profile.telephone || "";
+    byId("adresse").value = profile.adresse || "";
+    byId("parcours").value = profile.parcours || "";
+
     byId("keywordsText").value = profile.keywordsText || "";
     byId("excludedText").value = profile.excludedText || "";
     byId("hourlyRate").value = profile.hourlyRate === null || profile.hourlyRate === undefined

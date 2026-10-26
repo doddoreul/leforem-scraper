@@ -1337,6 +1337,8 @@ th.col-forem-id {
 /* Les champs texte et la zone de texte rejoignent la famille des selects :
    même hauteur, même bordure, même anneau de focus. */
 .profile-field input[type="text"],
+.profile-field input[type="email"],
+.profile-field input[type="tel"],
 .profile-field textarea {
     padding: 0 var(--space-3);
     border: 1px solid var(--border);
@@ -1348,7 +1350,9 @@ th.col-forem-id {
 }
 
 /* Les champs courts gardent la largeur des filtres de l'index. */
-.profile-field input[type="text"] {
+.profile-field input[type="text"],
+.profile-field input[type="email"],
+.profile-field input[type="tel"] {
     flex: 0 1 260px;
     min-width: 180px;
     max-width: 320px;
@@ -1362,16 +1366,22 @@ th.col-forem-id {
     resize: vertical;
 }
 
-.profile-field input[type="text"] {
+.profile-field input[type="text"],
+.profile-field input[type="email"],
+.profile-field input[type="tel"] {
     height: var(--control-h);
 }
 
 .profile-field input[type="text"]:hover,
+.profile-field input[type="email"]:hover,
+.profile-field input[type="tel"]:hover,
 .profile-field textarea:hover {
     border-color: var(--accent);
 }
 
 .profile-field input[type="text"]:focus,
+.profile-field input[type="email"]:focus,
+.profile-field input[type="tel"]:focus,
 .profile-field textarea:focus {
     outline: none;
     border-color: var(--accent);
